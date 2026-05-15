@@ -1,0 +1,35 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pfhash"
+version = "0.1.0"
+description = "Placeholder-image hash family — DCT / CIRCLE / TRIANGLE / PIXEL modes share a unified Codec API. PyO3 binding to pfhash-rs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["thumbhash", "placeholder", "image", "hash", "perceptual", "sqip", "primitive"]
+authors = [{ name = "Jianqi Pan", email = "jannchie@gmail.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Rust",
+  "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+  "numpy>=2.0",
+  "pillow>=11.0",
+]
+
+[project.urls]
+Source = "https://github.com/Jannchie/pfhash"
+
+[tool.maturin]
+python-source = "python"
+module-name = "pfhash._native"
+features = ["pyo3/extension-module"]
+manifest-path = "Cargo.toml"

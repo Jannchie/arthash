@@ -1,0 +1,8 @@
+{"impl": "pyo3", "mode": "dct", "op": "encode", "w": 100, "h": 100, "median_us": 619.7, "p95_us": 695.6, "min_us": 596.5, "iters": 200, "mpix_per_s": 16.137, "hash_bytes": 24}
+{"impl": "pyo3", "mode": "dct", "op": "decode", "w": 100, "h": 100, "median_us": 2604.2, "p95_us": 2813.3, "min_us": 2455.1, "iters": 50, "mpix_per_s": 3.84}
+{"impl": "pyo3", "mode": "circle", "op": "encode", "w": 48, "h": 48, "median_us": 5221.2, "p95_us": 5396.2, "min_us": 5132.4, "iters": 15, "mpix_per_s": 0.441, "hash_bytes": 53}
+{"impl": "pyo3", "mode": "circle", "op": "decode", "w": 48, "h": 48, "median_us": 1950.3, "p95_us": 2181.5, "min_us": 1891.9, "iters": 30, "mpix_per_s": 1.181}
+{"impl": "pyo3", "mode": "triangle", "op": "encode", "w": 48, "h": 48, "median_us": 10184.7, "p95_us": 10687.9, "min_us": 9937.7, "iters": 15, "mpix_per_s": 0.226, "hash_bytes": 77}
+{"impl": "pyo3", "mode": "triangle", "op": "decode", "w": 48, "h": 48, "median_us": 1990.6, "p95_us": 2153.5, "min_us": 1942.7, "iters": 30, "mpix_per_s": 1.157}
+{"impl": "pyo3", "mode": "pixel", "op": "encode", "w": 48, "h": 48, "median_us": 46.9, "p95_us": 70.5, "min_us": 46.7, "iters": 100, "mpix_per_s": 49.126, "hash_bytes": 25}
+{"impl": "pyo3", "mode": "pixel", "op": "decode", "w": 48, "h": 48, "median_us": 80.8, "p95_us": 142.0, "min_us": 80.5, "iters": 30, "mpix_per_s": 28.515}

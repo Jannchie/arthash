@@ -1,0 +1,3 @@
+packages:
+  - "packages/pfhash-ts"
+  - "packages/pfhash-playground"

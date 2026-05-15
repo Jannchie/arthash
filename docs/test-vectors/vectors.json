@@ -1,0 +1,341 @@
+{
+  "version": "1.0",
+  "description": "Cross-language conformance vectors for pfhash. All SDKs (Python / TypeScript / Rust) must produce `expected_hex` exactly for each (input, codec, encode_kwargs).",
+  "input_kinds": {
+    "solid": "Solid color fill: H\u00d7W\u00d73 uint8 with arr[..., :] = rgb",
+    "gradient": "Horizontal R gradient + vertical G gradient + constant B(=64). arr[y, x] = (linspace(0,255,W)[x], linspace(0,255,H)[y], 64).",
+    "random": "Pseudo-random uint8 RGB seeded with numpy default_rng(seed). Pixels: (rng.random((H, W, 3)) * 255).astype(uint8). Non-Python SDKs must replicate numpy's PCG64 sequence; if that's impractical, skip the 'random' inputs and exercise only solid/gradient."
+  },
+  "vectors": [
+    {
+      "name": "dct-solid-red-100x100",
+      "input": {
+        "kind": "solid",
+        "h": 100,
+        "w": 100,
+        "rgb": [
+          255,
+          0,
+          0
+        ]
+      },
+      "codec": {
+        "shape": "dct",
+        "n_shapes": 12,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "target_size": 100
+      },
+      "expected_hex": "e8af037f0088888888888888888888888888888888888808",
+      "expected_bytes": 24
+    },
+    {
+      "name": "dct-solid-blue-100x60",
+      "input": {
+        "kind": "solid",
+        "h": 60,
+        "w": 100,
+        "rgb": [
+          0,
+          0,
+          255
+        ]
+      },
+      "codec": {
+        "shape": "dct",
+        "n_shapes": 12,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "target_size": 100
+      },
+      "expected_hex": "1c04009e008888888888888888888888888888",
+      "expected_bytes": 19
+    },
+    {
+      "name": "dct-gradient-100x60",
+      "input": {
+        "kind": "gradient",
+        "h": 60,
+        "w": 100
+      },
+      "codec": {
+        "shape": "dct",
+        "n_shapes": 12,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "target_size": 100
+      },
+      "expected_hex": "6765139e37938787517778797776926e390964",
+      "expected_bytes": 19
+    },
+    {
+      "name": "dct-random-seed42-96x64",
+      "input": {
+        "kind": "random",
+        "h": 96,
+        "w": 64,
+        "seed": 42
+      },
+      "codec": {
+        "shape": "dct",
+        "n_shapes": 12,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "target_size": 100
+      },
+      "expected_hex": "e8b905661176798688966878866999669665779596",
+      "expected_bytes": 21
+    },
+    {
+      "name": "pixel-continuous-n12-gradient-100x60",
+      "input": {
+        "kind": "gradient",
+        "h": 60,
+        "w": 100
+      },
+      "codec": {
+        "shape": "pixel",
+        "n_shapes": 12,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {},
+      "expected_hex": "9e8821886188a188e10824086408a408e4a826a866a8a6a8e6",
+      "expected_bytes": 25
+    },
+    {
+      "name": "pixel-pico8-n16-gradient-100x60",
+      "input": {
+        "kind": "gradient",
+        "h": 60,
+        "w": 100
+      },
+      "codec": {
+        "shape": "pixel",
+        "n_shapes": 16,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16,
+        "palette_hex": [
+          "000000",
+          "1D2B53",
+          "7E2553",
+          "008751",
+          "AB5236",
+          "5F574F",
+          "C2C3C7",
+          "FFF1E8",
+          "FF004D",
+          "FFA300",
+          "FFEC27",
+          "00E436",
+          "29ADFF",
+          "83769C",
+          "FF77A8",
+          "FFCCAA"
+        ],
+        "palette_k": 16
+      },
+      "encode_kwargs": {},
+      "expected_hex": "9e518455843394bbab",
+      "expected_bytes": 9
+    },
+    {
+      "name": "pixel-pico8-n48-solid-red",
+      "input": {
+        "kind": "solid",
+        "h": 48,
+        "w": 48,
+        "rgb": [
+          255,
+          0,
+          0
+        ]
+      },
+      "codec": {
+        "shape": "pixel",
+        "n_shapes": 48,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16,
+        "palette_hex": [
+          "000000",
+          "1D2B53",
+          "7E2553",
+          "008751",
+          "AB5236",
+          "5F574F",
+          "C2C3C7",
+          "FFF1E8",
+          "FF004D",
+          "FFA300",
+          "FFEC27",
+          "00E436",
+          "29ADFF",
+          "83769C",
+          "FF77A8",
+          "FFCCAA"
+        ],
+        "palette_k": 16
+      },
+      "encode_kwargs": {},
+      "expected_hex": "7f888888888888888888888888888888888888888888888888",
+      "expected_bytes": 25
+    },
+    {
+      "name": "circle-continuous-n6-gradient-seed0",
+      "input": {
+        "kind": "gradient",
+        "h": 60,
+        "w": 100
+      },
+      "codec": {
+        "shape": "circle",
+        "n_shapes": 6,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "seed": 0
+      },
+      "expected_hex": "9ea894df2d123fd357648be29fe8d74b641100684922e0f22344c01f",
+      "expected_bytes": 28
+    },
+    {
+      "name": "circle-pico8-n8-random-seed42",
+      "input": {
+        "kind": "random",
+        "h": 96,
+        "w": 64,
+        "seed": 42
+      },
+      "codec": {
+        "shape": "circle",
+        "n_shapes": 8,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16,
+        "palette_hex": [
+          "000000",
+          "1D2B53",
+          "7E2553",
+          "008751",
+          "AB5236",
+          "5F574F",
+          "C2C3C7",
+          "FFF1E8",
+          "FF004D",
+          "FFA300",
+          "FFEC27",
+          "00E436",
+          "29ADFF",
+          "83769C",
+          "FF77A8",
+          "FFCCAA"
+        ],
+        "palette_k": 16
+      },
+      "encode_kwargs": {
+        "seed": 42
+      },
+      "expected_hex": "66fd73f575aae6c7604363bab2c1e361f0202225298108",
+      "expected_bytes": 23
+    },
+    {
+      "name": "triangle-continuous-n4-gradient-seed0",
+      "input": {
+        "kind": "gradient",
+        "h": 60,
+        "w": 100
+      },
+      "codec": {
+        "shape": "triangle",
+        "n_shapes": 4,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16
+      },
+      "encode_kwargs": {
+        "seed": 0
+      },
+      "expected_hex": "9ea894f17ff03f923ffd07107cf483fdfc010408e8045c0300100008",
+      "expected_bytes": 28
+    },
+    {
+      "name": "triangle-pico8-n6-random-seed42",
+      "input": {
+        "kind": "random",
+        "h": 96,
+        "w": 64,
+        "seed": 42
+      },
+      "codec": {
+        "shape": "triangle",
+        "n_shapes": 6,
+        "cx_bits": 5,
+        "cy_bits": 5,
+        "r_bits": 4,
+        "alpha_bits": 3,
+        "color_bits": 16,
+        "palette_hex": [
+          "000000",
+          "1D2B53",
+          "7E2553",
+          "008751",
+          "AB5236",
+          "5F574F",
+          "C2C3C7",
+          "FFF1E8",
+          "FF004D",
+          "FFA300",
+          "FFEC27",
+          "00E436",
+          "29ADFF",
+          "83769C",
+          "FF77A8",
+          "FFCCAA"
+        ],
+        "palette_k": 16
+      },
+      "encode_kwargs": {
+        "seed": 42
+      },
+      "expected_hex": "66fdf3bfdddaeec8029303196494e14b0aadb476fae0820dcc472fbfdc01",
+      "expected_bytes": 30
+    }
+  ]
+}

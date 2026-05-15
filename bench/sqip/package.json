@@ -1,0 +1,15 @@
+{
+  "name": "bench-sqip",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "sharp": "^0.34.5",
+    "sqip": "1.0.0-beta.2",
+    "sqip-plugin-primitive": "1.0.0-beta.2",
+    "sqip-plugin-svgo": "1.0.0-beta.2"
+  },
+  "overrides": {
+    "sharp": "^0.34.5"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@pfhash/ts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript SDK for pfhash — wasm-backed encode/decode/toSvg.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "wasm/pkg",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "wasm-pack build --release --target web --out-dir pkg wasm",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "pnpm run build:wasm && pnpm run build:ts",
+    "test": "vitest run",
+    "lint": "echo 'lint not yet configured'"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,8 @@
+{"impl": "python", "mode": "dct", "op": "encode", "w": 100, "h": 100, "median_us": 908.3, "p95_us": 1157.7, "min_us": 814.2, "iters": 200, "mpix_per_s": 11.01, "hash_bytes": 24}
+{"impl": "python", "mode": "dct", "op": "decode", "w": 100, "h": 100, "median_us": 2699.9, "p95_us": 4160.5, "min_us": 2376.7, "iters": 50, "mpix_per_s": 3.704}
+{"impl": "python", "mode": "circle", "op": "encode", "w": 48, "h": 48, "median_us": 65703.1, "p95_us": 69472.9, "min_us": 61450.5, "iters": 15, "mpix_per_s": 0.035, "hash_bytes": 53}
+{"impl": "python", "mode": "circle", "op": "decode", "w": 48, "h": 48, "median_us": 9410.75, "p95_us": 10318.5, "min_us": 8888.9, "iters": 30, "mpix_per_s": 0.245}
+{"impl": "python", "mode": "triangle", "op": "encode", "w": 48, "h": 48, "median_us": 96733.5, "p95_us": 105753.9, "min_us": 92962.1, "iters": 15, "mpix_per_s": 0.024, "hash_bytes": 77}
+{"impl": "python", "mode": "triangle", "op": "decode", "w": 48, "h": 48, "median_us": 21756.95, "p95_us": 30043.6, "min_us": 19925.6, "iters": 30, "mpix_per_s": 0.106}
+{"impl": "python", "mode": "pixel", "op": "encode", "w": 48, "h": 48, "median_us": 321.25, "p95_us": 839.2, "min_us": 276.5, "iters": 100, "mpix_per_s": 7.172, "hash_bytes": 25}
+{"impl": "python", "mode": "pixel", "op": "decode", "w": 48, "h": 48, "median_us": 2698.6, "p95_us": 4586.7, "min_us": 2446.6, "iters": 30, "mpix_per_s": 0.854}

@@ -1,0 +1,33 @@
+{
+  "name": "pfhash-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "pfhash — placeholder-image hash family. Python / TypeScript / Rust SDKs targeting a shared SPEC.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "test": "pnpm run test:py && pnpm run test:ts && pnpm run test:rs",
+    "test:py": "uv run pytest packages/pfhash-py/tests",
+    "test:ts": "pnpm --filter @pfhash/ts run test",
+    "test:rs": "cargo test --manifest-path packages/pfhash-rs/Cargo.toml",
+
+    "build": "pnpm run build:py && pnpm run build:ts && pnpm run build:rs",
+    "build:py": "maturin build --release --manifest-path packages/pfhash-py/Cargo.toml --out dist",
+    "develop:py": "maturin develop --uv --manifest-path packages/pfhash-py/Cargo.toml",
+    "build:ts": "pnpm --filter @pfhash/ts run build",
+    "build:rs": "cargo build --release --manifest-path packages/pfhash-rs/Cargo.toml",
+    "build:playground": "pnpm --filter @pfhash/playground run build",
+
+    "playground": "pnpm --filter @pfhash/playground run dev",
+    "playground:build": "pnpm run build:ts && pnpm --filter @pfhash/playground run build",
+    "playground:preview": "pnpm --filter @pfhash/playground run preview",
+
+    "lint": "pnpm run lint:py && pnpm run lint:rs",
+    "lint:py": "uv run ruff check packages/pfhash-py",
+    "lint:rs": "cargo clippy --manifest-path packages/pfhash-rs/Cargo.toml -- -D warnings",
+
+    "bench:py": "uv run python scripts/bench_py.py",
+    "bench:rs": "cargo run --release --manifest-path packages/pfhash-rs/Cargo.toml --example bench",
+    "bench:report": "uv run python scripts/thumbhash_cross_impl.py"
+  }
+}

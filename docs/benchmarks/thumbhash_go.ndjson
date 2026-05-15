@@ -1,0 +1,3 @@
+{"h":100,"impl":"go","iters":200,"median_us":414.61,"min_us":348.72,"mode":"dct","mpix_per_s":24.119,"op":"encode","p95_us":625.45,"w":100}
+{"h":100,"impl":"go","iters":50,"median_us":257.25,"min_us":185.75,"mode":"dct","mpix_per_s":38.873,"op":"decode_default","p95_us":371.14,"w":100}
+{"h":100,"impl":"go","iters":50,"median_us":12219.33,"min_us":11820.06,"mode":"dct","mpix_per_s":0.818,"op":"decode_256","p95_us":15801.09,"w":100}

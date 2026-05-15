@@ -1,0 +1,2 @@
+{"impl": "py-thumbhash", "mode": "dct", "op": "encode", "w": 100, "h": 100, "median_us": 25157.0, "p95_us": 28287.8, "min_us": 23506.1, "iters": 200, "mpix_per_s": 0.398, "hash_bytes": 24}
+{"impl": "py-thumbhash", "mode": "dct", "op": "decode_default", "w": 100, "h": 100, "median_us": 5657.7, "p95_us": 7392.3, "min_us": 5314.5, "iters": 50, "mpix_per_s": 1.768}

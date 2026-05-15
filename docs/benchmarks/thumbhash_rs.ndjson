@@ -1,0 +1,2 @@
+{"impl":"rust-thumbhash","mode":"dct","op":"encode","w":100,"h":100,"median_us":308.00,"p95_us":493.70,"min_us":293.00,"iters":200,"mpix_per_s":32.468,"hash_bytes":24}
+{"impl":"rust-thumbhash","mode":"dct","op":"decode_default","w":100,"h":100,"median_us":60.00,"p95_us":156.80,"min_us":59.10,"iters":50,"mpix_per_s":166.667}

@@ -1,0 +1,8 @@
+{"impl":"rust","mode":"dct","op":"encode","w":100,"h":100,"median_us":796.40,"p95_us":936.00,"min_us":748.90,"iters":200,"mpix_per_s":12.557,"hash_bytes":24}
+{"impl":"rust","mode":"dct","op":"decode","w":100,"h":100,"median_us":2061.10,"p95_us":2268.40,"min_us":1819.90,"iters":50,"mpix_per_s":4.852}
+{"impl":"rust","mode":"circle","op":"encode","w":48,"h":48,"median_us":5184.10,"p95_us":5996.50,"min_us":4998.60,"iters":15,"mpix_per_s":0.444,"hash_bytes":53}
+{"impl":"rust","mode":"circle","op":"decode","w":48,"h":48,"median_us":1708.00,"p95_us":1937.20,"min_us":1645.60,"iters":30,"mpix_per_s":1.349}
+{"impl":"rust","mode":"triangle","op":"encode","w":48,"h":48,"median_us":10157.20,"p95_us":10639.90,"min_us":9890.80,"iters":15,"mpix_per_s":0.227,"hash_bytes":77}
+{"impl":"rust","mode":"triangle","op":"decode","w":48,"h":48,"median_us":1768.00,"p95_us":2166.10,"min_us":1681.50,"iters":30,"mpix_per_s":1.303}
+{"impl":"rust","mode":"pixel","op":"encode","w":48,"h":48,"median_us":45.30,"p95_us":88.80,"min_us":45.00,"iters":100,"mpix_per_s":50.861,"hash_bytes":25}
+{"impl":"rust","mode":"pixel","op":"decode","w":48,"h":48,"median_us":74.70,"p95_us":181.30,"min_us":69.40,"iters":30,"mpix_per_s":30.843}

@@ -1,0 +1,9 @@
+{
+  "name": "bench-thumbhash-js",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "thumbhash": "^0.1.1"
+  }
+}

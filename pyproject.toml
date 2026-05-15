@@ -1,0 +1,49 @@
+# pfhash workspace root.
+#
+# This file declares the uv workspace and shared dev/research dependency
+# groups. The actual pfhash package lives at packages/pfhash-py/. To
+# develop on the package:
+#
+#     uv sync --all-extras --group dev --group research
+#     uv run pytest packages/pfhash-py/tests/
+#
+# pnpm-workspace.yaml in this directory governs the JS / TS / Rust packages
+# under packages/; uv governs the Python packages.
+
+[project]
+name = "pfhash-workspace"
+version = "0.0.0"
+description = "Workspace root for the pfhash monorepo. Not a published package."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/pfhash-py", "packages/pfhash-research"]
+
+[tool.uv.sources]
+# Sibling checkout of thumbhash-py — pulled into pfhash-research's
+# dependencies so we can compare against thash without re-publishing.
+# Path is relative to this file.
+thash = { path = "../thumbhash-py", editable = true }
+pfhash = { workspace = true }
+pfhash-research = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.7",
+  "pfhash",
+  "pfhash-research",
+]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["dist", ".venv", "packages/*/dist"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E741", "UP006", "UP035"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

@@ -1,0 +1,161 @@
+name: python wheels
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "py-v*"
+  pull_request:
+    paths:
+      - "packages/pfhash-py/**"
+      - "packages/pfhash-rs/**"
+      - ".github/workflows/wheels.yml"
+
+jobs:
+  # ------------------------------------------------------------------
+  # version sanity: on a release tag (push:tags = py-v*), the tag, the
+  # pyproject.toml version, and Cargo.toml version must all agree. PRs
+  # and workflow_dispatch skip this — versions only need to align at
+  # publish time, not on every push.
+  # ------------------------------------------------------------------
+  version-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/py-v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: assert tag == pyproject == Cargo
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#py-v}"
+          py_ver=$(grep -E '^version' packages/pfhash-py/pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          rs_ver=$(grep -E '^version' packages/pfhash-py/Cargo.toml      | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$tag  pyproject=$py_ver  cargo=$rs_ver"
+          if [ "$tag" != "$py_ver" ] || [ "$tag" != "$rs_ver" ]; then
+            echo "::error::version mismatch: tag=$tag pyproject=$py_ver cargo=$rs_ver" >&2
+            exit 1
+          fi
+
+  # ------------------------------------------------------------------
+  # wheels: one wheel per OS×arch. abi3-py39 means a single wheel covers
+  # CPython 3.11+ (the floor in pyproject.toml), so no Python matrix.
+  # manylinux: auto produces manylinux + musllinux on Linux runners.
+  # ------------------------------------------------------------------
+  wheels:
+    name: ${{ matrix.platform.runner }} · ${{ matrix.platform.target }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-latest
+            target: aarch64
+          - runner: macos-latest
+            target: x86_64
+          - runner: macos-latest
+            target: aarch64
+          - runner: windows-latest
+            target: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: packages/pfhash-py
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          # abi3 → one wheel per platform; pick a single interpreter to
+          # build with (anything ≥ 3.9 works; we use 3.11 to match the
+          # pyproject floor).
+          args: --release --strip --out dist --interpreter python3.11
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}
+          path: packages/pfhash-py/dist/*.whl
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: packages/pfhash-py
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: packages/pfhash-py/dist/*.tar.gz
+
+  # ------------------------------------------------------------------
+  # smoke-test the wheel installs and the binding loads. Python matrix
+  # here verifies the abi3 wheel actually loads under each target Python.
+  # ------------------------------------------------------------------
+  test:
+    name: test · ${{ matrix.runner }} · py${{ matrix.python }}
+    needs: wheels
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-${{ matrix.runner }}-*
+          merge-multiple: true
+          path: dist
+      - name: install wheel and run tests
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --find-links dist --only-binary pfhash pfhash pytest numpy pillow
+          python -m pytest packages/pfhash-py/tests/ -v
+
+  # ------------------------------------------------------------------
+  # release: only on a `py-v*` tag, after wheels + sdist + tests pass.
+  # Uses PyPI Trusted Publishing (OIDC, no API token).
+  # Set up at https://pypi.org/manage/project/pfhash/settings/publishing/
+  # (or "pending publisher" before first upload).
+  # ------------------------------------------------------------------
+  release:
+    name: publish to PyPI
+    needs: [version-check, wheels, sdist, test]
+    if: startsWith(github.ref, 'refs/tags/py-v')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pfhash/
+    permissions:
+      id-token: write   # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "wheels-*"
+          merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: list artefacts
+        run: ls -la dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Sigstore-sign every uploaded artefact (default in this action).
+          # No `password:` — Trusted Publishing uses OIDC.

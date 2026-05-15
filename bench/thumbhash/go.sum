@@ -1,0 +1,4 @@
+go.n16f.net/thumbhash v1.1.0 h1:aBEvuAd4yiwzeQ7Sm4BZoHJYbrQ1ewjrmrRlCE79snk=
+go.n16f.net/thumbhash v1.1.0/go.mod h1:mo9pP7WtfdV9ojIamGFR/Vc0PaPA2l0CUtmYQf/SweU=
+golang.org/x/image v0.32.0 h1:6lZQWq75h7L5IWNk0r+SCpUJ6tUVd3v4ZHnbRKLkUDQ=
+golang.org/x/image v0.32.0/go.mod h1:/R37rrQmKXtO6tYXAjtDLwQgFLHmhW+V6ayXlxzP2Pc=

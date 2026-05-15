@@ -1,0 +1,2 @@
+{"impl":"js","mode":"dct","op":"encode","w":100,"h":100,"median_us":539.88,"p95_us":731.11,"min_us":504.7,"iters":200,"mpix_per_s":18.523,"hash_bytes":24}
+{"impl":"js","mode":"dct","op":"decode_default","w":100,"h":100,"median_us":164.84,"p95_us":179.21,"min_us":158.03,"iters":50,"mpix_per_s":60.664}
