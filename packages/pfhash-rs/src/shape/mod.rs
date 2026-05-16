@@ -9,6 +9,7 @@ pub mod options;
 pub mod pixel;
 pub mod quant;
 pub mod raster;
+pub mod residual;
 pub mod rng;
 pub mod svg;
 pub mod triangle;

@@ -27,7 +27,7 @@ use std::time::Instant;
 
 use pfhash::shape::raster::counters;
 use pfhash::shape::SearchOptions;
-use pfhash::{encode_rgb, Codec, EncodeOptions, ShapeType};
+use pfhash::{decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, ShapeType};
 
 const W: u32 = 48;
 const H: u32 = 48;
@@ -98,14 +98,59 @@ struct TimedRun {
 }
 
 fn search_for(shape: ShapeType) -> SearchOptions {
-    match shape {
+    let mut s = match shape {
         ShapeType::Triangle => SearchOptions::triangle_default(),
         _ => SearchOptions::default(),
+    };
+    // Sweep-friendly overrides for ablation runs. Defaults inherit from the
+    // SDK unless the env var is set.
+    let key = match shape {
+        ShapeType::Triangle => "BENCH_TRI_N_RANDOM",
+        _ => "BENCH_CIR_N_RANDOM",
+    };
+    if let Ok(v) = std::env::var(key) {
+        if let Ok(n) = v.parse::<u32>() {
+            s.n_random = n;
+        }
+    }
+    s
+}
+
+/// sRGB byte → linear float (matches the encoder's input domain). Inlined
+/// here so the bench doesn't depend on the crate's private colorspace fn.
+fn srgb_to_linear(v: u8) -> f32 {
+    let x = v as f32 / 255.0;
+    if x <= 0.04045 {
+        x / 12.92
+    } else {
+        ((x + 0.055) / 1.055).powf(2.4)
     }
 }
 
-fn timed(rgb: &[u8], w: u32, h: u32, codec: &Codec) -> TimedRun {
-    let opts = EncodeOptions { seed: 0, search: None };
+/// Encode then decode-at-thumb, return mean squared error in linear-RGB.
+/// This is the same domain the hill-climb optimizes ΔSSE in, so it directly
+/// reflects how good the encoder's fit was.
+fn reconstruct_mse(rgb: &[u8], w: u32, h: u32, codec: &Codec, search: SearchOptions) -> f64 {
+    let opts = EncodeOptions { seed: 0, search: Some(search) };
+    let hash = encode_rgb(rgb, w, h, codec, opts);
+    let dopts = DecodeOptions { base_size: w.max(h), ..DecodeOptions::default() };
+    let (dw, dh, rgba) = decode(&hash, codec, dopts);
+    debug_assert_eq!((dw, dh), (w, h));
+    let n = (w * h) as usize;
+    let mut sse = 0.0f64;
+    for i in 0..n {
+        for ch in 0..3 {
+            let t = srgb_to_linear(rgb[i * 3 + ch]) as f64;
+            let r = srgb_to_linear(rgba[i * 4 + ch]) as f64;
+            let d = t - r;
+            sse += d * d;
+        }
+    }
+    sse / ((n * 3) as f64)
+}
+
+fn timed(rgb: &[u8], w: u32, h: u32, codec: &Codec, search: SearchOptions) -> TimedRun {
+    let opts = EncodeOptions { seed: 0, search: Some(search) };
     for _ in 0..WARMUP {
         let h = encode_rgb(rgb, w, h, codec, opts);
         std::hint::black_box(h);
@@ -156,15 +201,17 @@ fn main() {
     for (img_name, rgb) in &images {
         for (shape_name, shape) in &shapes {
             let codec = Codec { shape: *shape, n_shapes: N_SHAPES, ..Codec::default() };
-            let _search = search_for(*shape); // documents intent; SDK uses same default
+            let search = search_for(*shape);
+            let enc_opts = EncodeOptions { seed: 0, search: Some(search) };
 
             // Eval-count snapshot (deterministic given seed). Done first so
             // counter state is clean.
             counters::reset();
-            let hash = encode_rgb(rgb, W, H, &codec, EncodeOptions::default());
+            let hash = encode_rgb(rgb, W, H, &codec, enc_opts);
             let snap = counters::snapshot();
 
-            let t = timed(rgb, W, H, &codec);
+            let mse = reconstruct_mse(rgb, W, H, &codec, search);
+            let t = timed(rgb, W, H, &codec, search);
 
             let total_eval = snap.eval_circle + snap.eval_triangle;
             let avg_px = if total_eval > 0 {
@@ -179,7 +226,7 @@ fn main() {
             };
 
             let line = format!(
-                "{{\"label\":\"{label}\",\"counters\":{counters_enabled},\"image\":\"{img}\",\"shape\":\"{sh}\",\"w\":{W},\"h\":{H},\"n_shapes\":{ns},\"median_us\":{m:.1},\"p95_us\":{p:.1},\"min_us\":{mn:.1},\"mpix_per_s\":{mp:.3},\"eval_circle\":{ec},\"eval_triangle\":{et},\"eval_total\":{tot},\"pixels_touched\":{px},\"avg_pixels_per_eval\":{ap:.1},\"hash_bytes\":{hb},\"hash_hex\":\"{hh}\"}}",
+                "{{\"label\":\"{label}\",\"counters\":{counters_enabled},\"image\":\"{img}\",\"shape\":\"{sh}\",\"w\":{W},\"h\":{H},\"n_shapes\":{ns},\"n_random\":{nr},\"median_us\":{m:.1},\"p95_us\":{p:.1},\"min_us\":{mn:.1},\"mpix_per_s\":{mp:.3},\"eval_circle\":{ec},\"eval_triangle\":{et},\"eval_total\":{tot},\"pixels_touched\":{px},\"avg_pixels_per_eval\":{ap:.1},\"recon_mse\":{rmse:.6e},\"hash_bytes\":{hb},\"hash_hex\":\"{hh}\"}}",
                 label = label,
                 counters_enabled = counters_enabled,
                 img = img_name,
@@ -187,6 +234,7 @@ fn main() {
                 W = W,
                 H = H,
                 ns = N_SHAPES,
+                nr = search.n_random,
                 m = t.median_us,
                 p = t.p95_us,
                 mn = t.min_us,
@@ -196,6 +244,7 @@ fn main() {
                 tot = total_eval,
                 px = snap.pixels_touched,
                 ap = avg_px,
+                rmse = mse,
                 hb = hash.len(),
                 hh = hex_encode(&hash),
             );

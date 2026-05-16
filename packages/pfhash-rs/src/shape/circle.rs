@@ -10,6 +10,7 @@ use super::quant::{
     alpha_to_q, aspect_code, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color, write_color,
 };
 use super::raster::{apply_circle, EvalResult};
+use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::Codec;
@@ -84,6 +85,7 @@ fn fit_primitive(
         canvas[i * 3 + 2] = bg[2];
     }
     let mut integral = Integral::build(target, &canvas, h, w);
+    let mut residual = Residual::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
     let palette = codec.palette_linear();
@@ -112,12 +114,12 @@ fn fit_primitive(
         let mut best_geom: Option<(i32, i32, i32)> = None;
 
         for _attempt in 0..search.n_attempts {
-            // Stage 1: pick single best of n_random tiny-start candidates.
+            // Stage 1: pick single best of n_random tiny-start candidates,
+            // with centers sampled proportional to current residual.
             let mut best_d = f32::INFINITY;
             let mut best_init: Option<(i32, i32, i32)> = None;
             for _ in 0..search.n_random {
-                let cx = rng.range(0, w as i64) as i32;
-                let cy = rng.range(0, h as i64) as i32;
+                let (cx, cy) = residual.sample(&mut rng);
                 let r = rng.range(1, r_init_max + 1) as i32;
                 let res = eval_circle_integral(
                     &integral, h, w, cx, cy, r, FIXED_HILL_CLIMB_ALPHA, pal_ref,
@@ -137,18 +139,9 @@ fn fit_primitive(
                 let which = rng.range(0, 3);
                 let (mut ncx, mut ncy, mut nr) = (cx, cy, r);
                 match which {
-                    0 => {
-                        let dn = (rng.normal() * sigma_pos) as i32;
-                        ncx = (cx + dn).clamp(0, w as i32 - 1);
-                    }
-                    1 => {
-                        let dn = (rng.normal() * sigma_pos) as i32;
-                        ncy = (cy + dn).clamp(0, h as i32 - 1);
-                    }
-                    _ => {
-                        let dn = (rng.normal() * sigma_r) as i32;
-                        nr = (r + dn).clamp(1, r_max_global);
-                    }
+                    0 => ncx = (cx + rng.normal_step(sigma_pos)).clamp(0, w as i32 - 1),
+                    1 => ncy = (cy + rng.normal_step(sigma_pos)).clamp(0, h as i32 - 1),
+                    _ => nr = (r + rng.normal_step(sigma_r)).clamp(1, r_max_global),
                 }
                 let res = eval_circle_integral(
                     &integral, h, w, ncx, ncy, nr, FIXED_HILL_CLIMB_ALPHA, pal_ref,
@@ -210,6 +203,7 @@ fn fit_primitive(
         apply_circle(&mut canvas, h as i32, w as i32, cx, cy, r, alpha, &color);
         let (ymin, ymax) = circle_row_range(cy, r, h);
         integral.update_canvas_rows(target, &canvas, ymin, ymax);
+        residual.rebuild(target, &canvas);
         circles.push(Circle { cx, cy, r, alpha, color, pidx });
     }
     (bg, circles)

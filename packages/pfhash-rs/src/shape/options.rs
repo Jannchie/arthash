@@ -39,7 +39,10 @@ impl Default for SearchOptions {
     fn default() -> Self {
         Self {
             strategy: Strategy::Primitive,
-            n_random: 200,
+            // Lowered from the original 200: residual-weighted init (see
+            // shape::residual) hits the useful candidate space ~3× faster
+            // per draw, so fewer draws reach equal-or-better quality.
+            n_random: 64,
             n_topk: 1,
             hill_climb_steps: 40,
             hill_climb_max_age: Some(30),

@@ -201,6 +201,139 @@ sites.
 
 ---
 
+## Opt 3 — Residual-driven init + drift-free Gaussian step (CIRCLE only)
+
+**Status:** always on for CIRCLE; TRIANGLE is unchanged.
+**Hash-preserving:** no — the search trajectory changes, so encoded bytes
+differ from prior versions. Conformance tests still pass: DCT vectors are
+byte-exact (and DCT doesn't use hill-climb); SHAPE/PIXEL tests are
+round-trip sanity, not byte-equality.
+
+This commit bundles two changes that together cut CIRCLE encode evals by
+51–58 % at equal-or-better fidelity. They're packaged together because the
+n_random reduction is what makes residual init pay off, and the bench
+table only makes sense with both applied.
+
+### Change A — `shape::residual::Residual`
+
+A per-pixel residual map `||target − canvas||²` (summed across channels),
+stored as a flat CDF of length `h·w + 1` in row-major order. After every
+`apply_*` commit the CDF is fully rebuilt (O(h·w) ≈ 2304 ops at thumb
+size, negligible vs the per-eval savings).
+
+Sampling is half uniform / half residual-weighted:
+
+```rust
+fn sample(&self, rng) -> (i32, i32) {
+    if total <= 0 || rng.next_f64() < 0.5 {
+        // uniform draw — also the fallback when canvas == target
+    } else {
+        // binary search on the residual CDF
+    }
+}
+```
+
+The 50 % uniform half is load-bearing. Pure residual sampling clusters
+hard on the single highest-residual region, which starves the rest of the
+canvas of init attempts — on adversarial inputs like four solid
+quadrants, this drove reconstruction MSE up by 50 %. Blending in uniform
+restores discovery while still biasing toward unfit regions on smoother
+inputs.
+
+Wired into `circle::fit_primitive` Stage 1: each random init's `(cx, cy)`
+comes from `residual.sample()` instead of `rng.range`; the radius is
+still uniformly random in `[1, r_init_max]`. After each commit we run
+`residual.rebuild(target, &canvas)` alongside the integral update.
+
+TRIANGLE was tested with the same hookup but the data didn't justify
+keeping it: gradient quality improved, but the tiny-cluster init pattern
+on quadrants regressed MSE by 44 %, with marginal time savings (Stage 2
+hill-climb dominates triangle's eval budget, so cutting Stage 1 doesn't
+move the needle). Residual init for TRIANGLE was reverted.
+
+### Change B — `Rng::normal_step`
+
+The pre-existing hill-climb perturbation was `let dn = (rng.normal()*σ)
+as i32`. At σ ≈ 3 px this truncates to 0 on ~13 % of draws — and zero
+delta means the new geometry equals the current one, so the eval returns
+the same ΔSSE, the strict-less-than check fails, and `age` increments
+without any progress. Pure wasted eval.
+
+`normal_step` is the same Gaussian draw but rounded *away* from zero:
+
+```rust
+let raw = self.normal() * sigma;
+let dn = raw as i32;
+if dn != 0 { dn } else if raw < 0.0 { -1 } else { 1 }
+```
+
+Every eval now mutates geometry. Applied to all three axes of CIRCLE
+hill-climb (cx, cy, r). Not applied to TRIANGLE: each triangle
+perturbation moves *both* (dx, dy) of a vertex, so the original
+allow-zero behavior gave a useful "slide along one axis" mode for fine
+boundary alignment — forcing nonzero on both axes regressed
+quadrants/triangle MSE by 153 % (PSNR -4 dB). On TRIANGLE the perturbation
+stays as plain Gaussian truncation.
+
+### Change C — `SearchOptions::default().n_random`
+
+Lowered from 200 to 64 (CIRCLE only — TRIANGLE has its own
+`triangle_default()` at 50, unchanged). Combined with residual-weighted
+init, 64 draws cover the useful candidate space about as well as the
+old 200 uniform draws. We left `n_topk`, `hill_climb_steps`,
+`hill_climb_max_age`, and `n_attempts` at their prior values.
+
+### Performance (2026-05-16)
+
+Same harness as Opt 1 & 2: 60-iter median on Windows 11, 48×48 inputs,
+`n_shapes=12`. Numbers are end-to-end encode time; the "MSE" column is
+the linear-RGB reconstruction error of decode(encode(x)) vs x — the
+quantity the hill-climb actually optimizes.
+
+| image / shape         | baseline (µs / MSE)  | this opt (µs / MSE)  |     Δ time |     Δ MSE |
+| --------------------- | -------------------: | -------------------: | ---------: | --------: |
+| gradient / circle     |     2436 / 5.63 × 10⁻³ |    1747 / 4.03 × 10⁻³ |     **−28 %** | **−28 %** |
+| gradient / triangle   |     3181 / 4.31 × 10⁻³ |    3171 / 4.31 × 10⁻³ |        0 % |        0 % |
+| quadrants / circle    |     1992 / 1.31 × 10⁻² |    1282 / 1.08 × 10⁻² |     **−36 %** | **−18 %** |
+| quadrants / triangle  |     3012 / 9.38 × 10⁻⁴ |    2980 / 9.38 × 10⁻⁴ |        0 % |        0 % |
+| noise / circle        |     1474 / 8.76 × 10⁻² |     841 / 8.73 × 10⁻² |     **−43 %** |  −0.4 %   |
+| noise / triangle      |      982 / 8.77 × 10⁻² |     965 / 8.77 × 10⁻² |     −2 %   |    0 %   |
+
+TRIANGLE numbers are unchanged (matching hash bytes confirm the revert is
+clean). CIRCLE: 28–43 % faster across the board, MSE strictly equal or
+better on every test pattern.
+
+Eval counts tell the same story for CIRCLE: 14144 → 6936 (gradient),
+12716 → 5860 (quadrants), 11304 → 4792 (noise) — about half as many
+evaluations to reach a strictly better fit.
+
+### Public API added
+
+* `pfhash::shape::residual::Residual::{build, rebuild, sample}` — the
+  residual CDF + sampler. Public so external CIRCLE-style fitters can
+  reuse the same init policy.
+* `pfhash::shape::rng::Rng::normal_step(sigma)` — Gaussian draw with
+  magnitude forced to at least 1.
+
+No JS-facing knob: WASM glue / `@pfhash/ts` / playground inherit the
+faster CIRCLE search automatically with no API surface.
+
+### Reproducing this opt's ablation
+
+The bench accepts per-shape `n_random` overrides via env var, which is
+how this opt's sweet spot (n_random=64) was found:
+
+```sh
+for n in 200 100 64 40; do
+  BENCH_CIR_N_RANDOM=$n cargo run --release --example bench_hillclimb \
+      -- --label="cir-n${n}" --out=../../bench/sweep-cir-${n}.ndjson
+done
+```
+
+Match `BENCH_TRI_N_RANDOM` analogously to sweep TRIANGLE.
+
+---
+
 ## Reproducing the data
 
 ```sh
@@ -234,15 +367,25 @@ compare against.
 
 Ranked by expected impact, not yet implemented:
 
-1. **Residual-driven random init** — sample initial centers proportional
-   to the current residual image instead of uniform. Cuts `n_random` ~3×
-   at equal quality. Search trajectory changes — would break test
-   vectors. Estimated: 30–50 % additional speedup on realistic inputs.
-2. **Coordinate line search** in hill-climb to replace single-axis
-   Gaussian random walk. Estimated: ~30 % fewer steps to converge.
-3. **SIMD on `Accum::push`** — packed f32x4 for the per-pixel multiplies.
-   Only meaningful when opt 1 is off (otherwise the inner loop isn't
-   the hot kernel). Estimated: 2–4 % on noise / small-shape workloads.
-4. **Parallel random pool** — `n_random` is embarrassingly parallel.
+1. **TRIANGLE hill-climb improvement** — the obvious "do residual init on
+   triangle too" was tried and rejected (quadrants regressed). Open
+   problem: a triangle-specific init that handles the 6-DoF + min-angle
+   constraint without losing fine boundary-alignment. Possibilities:
+   anchor one vertex via residual sampling while keeping the other two
+   uniform, or sample triangle *centroids* instead of vertices.
+2. **Lazy `Integral` build** — currently `fit_*` builds all `h` rows of
+   the integral image upfront, but Stage 1 candidates only touch
+   `~bbox_height` rows per eval. Building rows on first access could
+   save ~10 % on the n_random phase. Hash-preserving. Adds a row-built
+   bitmap to the data structure.
+3. **`f32` prefix sums in `Integral`** — would halve memory bandwidth in
+   `update_canvas_rows`. Accumulated reassociation error at row width 48
+   is `48 × ε_f32 ≈ 6 × 10⁻⁶`, on the edge of the f32 ΔSSE resolution
+   `≈ 10⁻⁷`. Near-tie hill-climb decisions could flip, changing trajectory.
+4. **SIMD on `Accum::push`** — packed f32x4 for the per-pixel multiplies.
+   Only meaningful for the `apply_*` commit step now that the integral
+   eval path doesn't touch per-pixel scans during search. Estimated:
+   small (apply is < 5 % of total time).
+5. **Parallel random pool** — `n_random` is embarrassingly parallel.
    Native: trivial via Rayon. WASM: needs `wasm-bindgen-rayon` +
    COOP/COEP, deployment-heavy.
