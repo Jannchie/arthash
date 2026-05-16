@@ -261,7 +261,6 @@ button.link:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
   border-radius: 4px;
   overflow: hidden;
   background: #111317;
-  cursor: zoom-in;
 }
 
 .tile-layers { position: absolute; inset: 0; }
@@ -292,19 +291,16 @@ button.link:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
 }
 
 .tile .placeholder { object-fit: cover; filter: saturate(1.05); }
-.tile .placeholder.svg-layer :deep(svg) { width: 100%; height: 100%; display: block; }
+.tile .placeholder.svg-layer svg { width: 100%; height: 100%; display: block; }
 .tile .placeholder.canvas-layer {
   image-rendering: auto;
   object-fit: cover;
 }
 
-.tile .original {
-  object-fit: cover;
-  opacity: 0;
-}
-
-.tile:hover .placeholder { opacity: 0; }
+/* Hover reveals the original by fading the placeholder out. */
+.tile .original { object-fit: cover; opacity: 0; }
 .tile:hover .original { opacity: 1; }
+.tile:hover .placeholder { opacity: 0; }
 
 .tile .pending, .tile .error-pane {
   display: flex;
@@ -321,18 +317,34 @@ button.link:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
   padding: 8px;
   text-align: center;
 }
-.tile .pending .dot {
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  border-radius: 999px;
-  animation: pulse 1s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 1; }
-}
 
+/* ---------- gallery-level encoding progress ---------- */
+
+.encoding-progress {
+  padding: 80px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.encoding-progress-text {
+  letter-spacing: 0.06em;
+}
+.encoding-progress-bar {
+  width: min(360px, 60%);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  border-radius: 999px;
+}
+.encoding-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.55);
+  transition: width 180ms ease;
+}
 .tile .stats {
   position: absolute;
   left: 0;

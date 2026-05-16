@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { Shape as ShapeType } from "@pfhash/ts";
-import { fmtMs, loadImage, runPipeline, toHex } from "../pipeline";
+import { awaitEncodeSlot, fmtMs, loadImage, runPipeline, toHex } from "../pipeline";
 
 interface Props {
   src: string;
@@ -68,8 +68,9 @@ async function run() {
     const img = await ensureImage();
     if (token !== runToken) return;
     status.value = "encoding";
-    // Yield so the browser can paint the new layout before heavy encode.
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    // Reserve a slot in the global encode queue — runs at most one tile per
+    // animation frame so the progress UI gets a chance to paint between calls.
+    await awaitEncodeSlot();
     if (token !== runToken) return;
     const res = runPipeline(img, {
       shape: props.shape,
@@ -157,9 +158,7 @@ const rootStyle = computed(() => {
       />
 
       <!-- subtle status / error overlay -->
-      <div v-if="status === 'loading' || status === 'encoding'" class="layer pending">
-        <span class="dot" />
-      </div>
+      <div v-if="status === 'loading' || status === 'encoding'" class="layer pending" />
       <div v-else-if="status === 'error'" class="layer error-pane">
         <span>{{ error }}</span>
       </div>

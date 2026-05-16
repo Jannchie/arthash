@@ -433,6 +433,20 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   return { hash, decoded, svg, encodeMs, decodeMs };
 }
 
+// Serialize encode work across tiles. Without this, every tile's rAF callback
+// queues up in the same frame, the synchronous WASM encodes run back-to-back
+// without yielding, and the browser only paints once at the end — so progress
+// jumps from ~1/N straight to N/N. Chaining each call behind one rAF gives the
+// browser a frame to paint between encodes, which makes the progress smooth.
+let encodeChain: Promise<unknown> = Promise.resolve();
+export function awaitEncodeSlot(): Promise<void> {
+  const slot = encodeChain.then(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  encodeChain = slot.catch(() => undefined);
+  return slot;
+}
+
 export function fmtMs(ms: number): string {
   if (!ms || !Number.isFinite(ms)) return "—";
   return ms >= 100 ? `${ms.toFixed(0)} ms` : ms >= 10 ? `${ms.toFixed(1)} ms` : `${ms.toFixed(2)} ms`;

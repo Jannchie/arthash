@@ -13,8 +13,8 @@ interface Props {
 }
 defineProps<Props>();
 
-const shape = ref<ShapeType>(Shape.CIRCLE);
-const nShapes = ref(12);
+const shape = ref<ShapeType>(Shape.TRIANGLE);
+const nShapes = ref(64);
 const baseSize = ref(256);
 const blur = ref(0);
 const seed = ref(0);
@@ -41,6 +41,10 @@ const effectiveAspect = computed(() =>
 const items = computed(() => DEMO_IMAGES.map((d) => ({ width: d.w, height: d.h })));
 
 const tileMetrics = ref(new Map<number, { encodeMs: number; decodeMs: number; hashBytes: number }>());
+// "settled" = encode finished (success OR error). Used to gate the waterfall:
+// nothing shows until every tile has reported once, so users don't see a
+// half-encoded grid mid-render.
+const tileSettled = ref(new Set<number>());
 
 const svgPossible = computed(() => supportsSvg(shape.value));
 const renderSvg = computed(() => useSvg.value && svgPossible.value);
@@ -54,16 +58,24 @@ const aggregate = computed(() => {
   return { n: ms.length, avgEncode: avg("encodeMs"), avgDecode: avg("decodeMs"), size: sizeStr };
 });
 
+const settledCount = computed(() => tileSettled.value.size);
+const allEncoded = computed(() => settledCount.value >= DEMO_IMAGES.length);
+const progressPct = computed(() =>
+  Math.round((settledCount.value / DEMO_IMAGES.length) * 100),
+);
+
 function onTileMetrics(i: number, v: { encodeMs: number; decodeMs: number; hashBytes: number } | null) {
   if (v) tileMetrics.value.set(i, v);
   else tileMetrics.value.delete(i);
   tileMetrics.value = new Map(tileMetrics.value);
+  tileSettled.value = new Set(tileSettled.value).add(i);
 }
 
 watch(
   [shape, nShapesD, baseSizeD, blurD, seedD, useSvg, advancedD, colorId],
   () => {
     tileMetrics.value = new Map();
+    tileSettled.value = new Set();
   },
   { deep: true },
 );
@@ -141,8 +153,28 @@ function fmtMs(ms: number) {
       <span class="muted">hover a tile to reveal the original</span>
     </div>
 
-    <div class="wf">
-      <Waterfall :items="items" :cols="cols" :gap="14" :item-padding="0" layout="waterfall">
+    <div v-if="!allEncoded" class="encoding-progress">
+      <div class="encoding-progress-text">
+        encoding {{ settledCount }} / {{ DEMO_IMAGES.length }}
+      </div>
+      <div class="encoding-progress-bar">
+        <div class="encoding-progress-fill" :style="{ width: `${progressPct}%` }" />
+      </div>
+    </div>
+
+    <div v-show="allEncoded" class="wf">
+      <!-- range-expand forces vue-wf to render every slot child even when the
+           wrapper is display:none (during encoding) — otherwise its viewport
+           virtualization only mounts tiles in the visible band, and the rest
+           never encode, stalling the global progress at <total>. -->
+      <Waterfall
+        :items="items"
+        :cols="cols"
+        :gap="14"
+        :item-padding="0"
+        :range-expand="100000"
+        layout="waterfall"
+      >
         <Tile
           v-for="(img, i) in DEMO_IMAGES"
           :key="img.src"
