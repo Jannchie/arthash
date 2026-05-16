@@ -24,7 +24,7 @@ class SearchOptions:
     """Encoder search budget. Higher budget = better fidelity, higher CPU."""
 
     strategy: str = "primitive"
-    n_random: int = 200
+    n_random: int = 64
     n_topk: int = 1
     hill_climb_steps: int = 40
     hill_climb_max_age: "int | None" = 30

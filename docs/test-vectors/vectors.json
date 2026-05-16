@@ -228,7 +228,7 @@
       "encode_kwargs": {
         "seed": 0
       },
-      "expected_hex": "9ea894df2d123fd357648be29fe8d74b641100684922e0f22344c01f",
+      "expected_hex": "9ea894df2d123fd3576417e39fe8d74b631100684922e0ee2344c027",
       "expected_bytes": 28
     },
     {
@@ -270,7 +270,7 @@
       "encode_kwargs": {
         "seed": 42
       },
-      "expected_hex": "66fd73f575aae6c7604363bab2c1e361f0202225298108",
+      "expected_hex": "66fd31b0b6b2ded6d64263ba5ec9e84b58810b52dc2401",
       "expected_bytes": 23
     },
     {
