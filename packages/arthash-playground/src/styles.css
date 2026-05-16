@@ -343,7 +343,6 @@ button.link:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
 .encoding-progress-fill {
   height: 100%;
   background: rgba(255, 255, 255, 0.55);
-  transition: width 180ms ease;
 }
 .tile .stats {
   position: absolute;
