@@ -1,5 +1,7 @@
 # arthash
 
+[![CodeTime Badge](https://shields.jannchie.com/endpoint?style=social&color=0284c7&url=https%3A%2F%2Fcodetime.dev%2Fv3%2Fusers%2Fshield%3Fuid%3D2%26tag%3Darthash)](https://codetime.dev)
+
 > [English](./README.md) · **中文**
 
 用 17 B 到 400 B 描述一张图，足以渲染出一张可辨识的占位图，等真图加载完再替换。

@@ -88,12 +88,12 @@ Each of the three registries needs one-time configuration before the first
 publish, since we're using OIDC / Trusted Publishing everywhere:
 
 - **PyPI**: create a Pending Publisher at
-  `https://pypi.org/manage/account/publishing/` — repo `Jannchie/pfhash`,
+  `https://pypi.org/manage/account/publishing/` — repo `Jannchie/arthash`,
   workflow `wheels.yml`, environment `pypi`.
 - **npm**: provenance works automatically; if you opt out of OIDC and use a
   classic token, save it as `NPM_TOKEN` in the `npm` GitHub environment.
 - **crates.io**: create a Pending Trusted Publisher at the crate's
-  Settings page — repo `Jannchie/pfhash`, workflow `crates-publish.yml`,
+  Settings page — repo `Jannchie/arthash`, workflow `crates-publish.yml`,
   environment `crates-io`.
 
 After the first successful publish each can be flipped from "pending" to

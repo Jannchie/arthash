@@ -1,5 +1,7 @@
 # arthash
 
+[![CodeTime Badge](https://shields.jannchie.com/endpoint?style=social&color=0284c7&url=https%3A%2F%2Fcodetime.dev%2Fv3%2Fusers%2Fshield%3Fuid%3D2%26tag%3Darthash)](https://codetime.dev)
+
 > **English** · [中文](./README.zh-CN.md)
 
 A compact placeholder-image hash — 17 B to 400 B per image, enough to render a recognisable preview while the real image loads.

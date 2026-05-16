@@ -4,7 +4,7 @@ so we can isolate FFI overhead from the Python wrapper's preprocessing.
 
 Run (from repo root):
 
-    uv run python packages/arthash-py/bench_binding.py > docs/benchmarks/binding.ndjson
+    uv run python scripts/bench_binding.py > docs/benchmarks/binding.ndjson
 """
 from __future__ import annotations
 

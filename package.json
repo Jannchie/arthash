@@ -28,6 +28,7 @@
 
     "bench:py": "uv run python scripts/bench_py.py",
     "bench:rs": "cargo run --release --manifest-path packages/arthash-rs/Cargo.toml --example bench",
-    "bench:report": "uv run python scripts/thumbhash_cross_impl.py"
+    "bench:binding": "uv run python scripts/bench_binding.py",
+    "bench:thumbhash-cross": "uv run python scripts/thumbhash_cross_impl.py"
   }
 }

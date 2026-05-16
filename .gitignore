@@ -26,6 +26,10 @@ packages/arthash-ts/wasm/pkg/
 
 # Compiled binaries
 *.exe
+*.pdb
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Research / R&D code (local-only)
 packages/arthash-research/research/
