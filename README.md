@@ -1,8 +1,12 @@
 # pfhash
 
-**Placeholder-image hash family** — compact (~6–32 byte) hashes designed to
-look plausible when blown up to display size while a real image loads. Four
-modes share one Codec API:
+pfhash is a personal hobby project by Jianqi Pan. The name stands for
+**preview fingerprint hash** — compact byte-level fingerprints designed for
+thumbnail and preview workflows.
+
+It is a **placeholder-image hash family** — compact (~6–32 byte) hashes
+designed to look plausible when blown up to display size while a real image
+loads. Four modes share one Codec API:
 
 | Mode | Look | Typical bytes |
 |---|---|---|

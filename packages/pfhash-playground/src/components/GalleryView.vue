@@ -15,7 +15,7 @@ defineProps<Props>();
 
 const shape = ref<ShapeType>(Shape.TRIANGLE);
 const nShapes = ref(64);
-const baseSize = ref(256);
+const baseSize = ref(512);
 const blur = ref(0);
 const seed = ref(0);
 const useSvg = ref(true);

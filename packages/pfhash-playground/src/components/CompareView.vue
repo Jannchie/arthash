@@ -34,7 +34,7 @@ const VARIANTS: Variant[] = [
 ];
 
 const cols = ref(4);
-const baseSize = ref(256);
+const baseSize = ref(512);
 const blur = ref(0);
 const seed = ref(0);
 const colorId = ref<string>("rgb-565");

@@ -81,6 +81,7 @@ async function run() {
       alphaBits: props.alphaBits,
       colorId: props.colorId,
       overrideAspect: props.overrideAspect,
+      useSvg: props.useSvg,
     });
     if (token !== runToken) return;
     encodeMs.value = res.encodeMs;
@@ -88,8 +89,12 @@ async function run() {
     hashLen.value = res.hash.length;
     hashHex.value = toHex(res.hash);
     svg.value = res.svg ?? "";
-    decodedSize.value = { w: res.decoded.w, h: res.decoded.h };
-    paintDecoded(res.decoded);
+    if (res.decoded) {
+      decodedSize.value = { w: res.decoded.w, h: res.decoded.h };
+      paintDecoded(res.decoded);
+    } else {
+      decodedSize.value = null;
+    }
     status.value = "ready";
     emit("metrics", {
       encodeMs: res.encodeMs,
@@ -136,6 +141,13 @@ const rootStyle = computed(() => {
   }
   return {};
 });
+
+// SVG mode bakes blur into the SVG via <feGaussianBlur>. In raster (canvas)
+// mode the decoded pixels are painted directly, so blur has nowhere to apply
+// — fall back to a CSS filter on the canvas element so the knob still works.
+const canvasStyle = computed(() =>
+  props.blur > 0 ? { filter: `blur(${props.blur}px)` } : {},
+);
 </script>
 
 <template>
@@ -144,7 +156,7 @@ const rootStyle = computed(() => {
     <div class="tile-layers">
       <!-- decoded placeholder -->
       <div v-if="showSvg" class="layer placeholder svg-layer" v-html="svg" />
-      <canvas v-else ref="canvas" class="layer placeholder canvas-layer" />
+      <canvas v-else ref="canvas" class="layer placeholder canvas-layer" :style="canvasStyle" />
 
       <!-- full-resolution original revealed on hover -->
       <img

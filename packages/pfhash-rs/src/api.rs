@@ -32,6 +32,14 @@ pub struct DecodeOptions {
     pub base_size: u32,
     pub override_aspect: Option<f32>,
     pub pixel_smooth: PixelSmooth,
+    /// Supersample factor for SHAPE-mode decoding. Renders the canvas at
+    /// `aa × base_size`, then box-downsamples to the requested size — giving
+    /// sub-pixel coverage at shape edges. Useful when callers can't bump
+    /// `base_size` (fixed output target) but still want smooth edges. The
+    /// factor is per-axis, so total samples per output pixel = `aa²`. `1` =
+    /// no AA, default — for most cases raising `base_size` is the cheaper
+    /// path to smoothness. DCT / PIXEL ignore this.
+    pub aa: u32,
 }
 
 impl Default for DecodeOptions {
@@ -40,6 +48,7 @@ impl Default for DecodeOptions {
             base_size: 256,
             override_aspect: None,
             pixel_smooth: PixelSmooth::Nearest,
+            aa: 1,
         }
     }
 }
@@ -158,22 +167,57 @@ fn decode_shape(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, V
         return (w, h, rgb_to_rgba(&rgb, w, h));
     }
 
-    // CIRCLE / TRIANGLE: read bg, render onto canvas, return RGBA.
+    // Render at `ss × (w, h)` then box-downsample to (w, h) so shape edges
+    // get sub-pixel coverage. The shape decoder reads quantized coords and
+    // rebuilds pixel positions from the canvas dimensions, so simply passing
+    // `(ww, hh) = (w·ss, h·ss)` proportionally scales every shape — no
+    // codec changes needed.
+    let ss = opts.aa.max(1);
     let bg = read_color(&mut br, codec);
-    let mut canvas = vec![0.0f32; (w * h * 3) as usize];
-    for i in 0..(w * h) as usize {
+    let (ww, hh) = (w * ss, h * ss);
+    let mut canvas = vec![0.0f32; (ww * hh * 3) as usize];
+    for i in 0..(ww * hh) as usize {
         canvas[i * 3] = bg[0];
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
     match codec.shape {
-        ShapeType::Circle => circle_decode(&mut br, codec, w, h, &mut canvas),
-        ShapeType::Triangle => triangle_decode(&mut br, codec, w, h, &mut canvas),
-        ShapeType::Square => square_decode(&mut br, codec, w, h, &mut canvas),
-        ShapeType::Rect => rect_decode(&mut br, codec, w, h, &mut canvas),
-        ShapeType::RotatedRect => rotrect_decode(&mut br, codec, w, h, &mut canvas),
+        ShapeType::Circle => circle_decode(&mut br, codec, ww, hh, &mut canvas),
+        ShapeType::Triangle => triangle_decode(&mut br, codec, ww, hh, &mut canvas),
+        ShapeType::Square => square_decode(&mut br, codec, ww, hh, &mut canvas),
+        ShapeType::Rect => rect_decode(&mut br, codec, ww, hh, &mut canvas),
+        ShapeType::RotatedRect => rotrect_decode(&mut br, codec, ww, hh, &mut canvas),
         _ => unreachable!(),
     }
+    // Box-downsample (ww × hh) → (w × h) in linear-RGB, then convert sRGB once.
+    // Linear-space averaging is the correct way to combine pixel coverage
+    // — sRGB-space averaging would over-darken on edge transitions.
+    let mut canvas_lin = vec![0.0f32; (w * h * 3) as usize];
+    if ss == 1 {
+        canvas_lin.copy_from_slice(&canvas);
+    } else {
+        let inv_n = 1.0 / ((ss * ss) as f32);
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let mut sum = [0.0f32; 3];
+                for dy in 0..ss as usize {
+                    for dx in 0..ss as usize {
+                        let sy = y * ss as usize + dy;
+                        let sx = x * ss as usize + dx;
+                        let p = (sy * ww as usize + sx) * 3;
+                        sum[0] += canvas[p];
+                        sum[1] += canvas[p + 1];
+                        sum[2] += canvas[p + 2];
+                    }
+                }
+                let out = (y * w as usize + x) * 3;
+                canvas_lin[out] = sum[0] * inv_n;
+                canvas_lin[out + 1] = sum[1] * inv_n;
+                canvas_lin[out + 2] = sum[2] * inv_n;
+            }
+        }
+    }
+    let canvas = canvas_lin;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for i in 0..(w * h) as usize {
         rgba[i * 4] = linear_to_srgb_u8(canvas[i * 3]);

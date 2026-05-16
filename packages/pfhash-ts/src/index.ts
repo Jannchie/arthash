@@ -69,6 +69,12 @@ export interface DecodeOptions extends CodecOptions {
   baseSize?: number;
   /** Override the stored aspect ratio. */
   overrideAspect?: number;
+  /** SHAPE-mode supersample factor (per-axis). Samples per output pixel = aa².
+   *  Useful when the output size is fixed but you still want smooth edges.
+   *  `1` = nearest-pixel (default); `2` = 4 samples; `4` = 16 samples.
+   *  For most callers raising `baseSize` is the cheaper smoothness lever.
+   *  Ignored by DCT / PIXEL. */
+  aa?: number;
 }
 
 export interface SvgRenderOptions extends DecodeOptions {
@@ -162,6 +168,7 @@ export function decode(hash: Uint8Array, opts?: DecodeOptions): DecodeResult {
     codecToObj(opts),
     opts?.baseSize ?? 256,
     opts?.overrideAspect,
+    opts?.aa,
   );
   // Capture before `free()` — wasm-bindgen getters allocate fresh on each
   // call, so we read once and dispose.

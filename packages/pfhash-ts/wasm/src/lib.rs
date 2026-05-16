@@ -118,12 +118,14 @@ impl DecodeResult {
 
 /// Decode a hash to RGBA pixels. `base_size` is the long-edge target
 /// (default 256). `override_aspect` lets callers force a known aspect.
+/// `aa` is the SHAPE-mode supersample factor (1 = off, 2 = default, 4 = nice).
 #[wasm_bindgen]
 pub fn decode(
     hash: &[u8],
     codec: JsValue,
     base_size: u32,
     override_aspect: Option<f32>,
+    aa: Option<u32>,
 ) -> Result<DecodeResult, JsValue> {
     let c = parse_codec(codec)?;
     let (w, h, rgba) = rs_decode(
@@ -133,6 +135,7 @@ pub fn decode(
             base_size,
             override_aspect,
             pixel_smooth: PixelSmooth::Nearest,
+            aa: aa.unwrap_or(1).max(1),
         },
     );
     Ok(DecodeResult { w, h, rgba })

@@ -342,7 +342,10 @@ export function imageToThumbRgb(img: HTMLImageElement, target: number): { rgb: U
 
 export interface RunResult {
   hash: Uint8Array;
-  decoded: { w: number; h: number; rgba: Uint8Array };
+  /** Raster decode. Undefined when the caller opted into SVG-only mode for a
+   *  shape whose SVG path doesn't depend on rendered pixels — we skip the
+   *  raster decode entirely so the work isn't thrown away. */
+  decoded?: { w: number; h: number; rgba: Uint8Array };
   svg: string | null;
   encodeMs: number;
   decodeMs: number;
@@ -355,6 +358,10 @@ export interface RunOpts extends EncodeOptions, DecodeOptions {
   blur: number;
   /** ID of an entry in COLOR_OPTIONS. */
   colorId?: string;
+  /** Hint that the caller will display SVG output. When true and the shape
+   *  has a hash-driven SVG renderer (anything but PIXEL), the raster decode
+   *  is skipped — saves an O(base²) pass per tile in Gallery / Compare. */
+  useSvg?: boolean;
 }
 
 function codecFields(opts: RunOpts) {
@@ -411,16 +418,34 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
     decodeArgs.overrideAspect = opts.overrideAspect;
   }
 
-  const t1 = performance.now();
-  const decoded = pfDecode(hash, decodeArgs);
-  const decodeMs = performance.now() - t1;
+  // Decode strategy:
+  //   * SVG mode for hash-driven shapes (everything but PIXEL): skip raster.
+  //   * SVG mode for PIXEL: decode at a small fixed size — `pixelToSvg` only
+  //     reads one pixel per cell, so resolution past `max(gw, gh)` is wasted.
+  //   * Otherwise: full decode at baseSize.
+  const wantsSvg = opts.useSvg === true && supportsSvg(opts.shape);
+  const skipRaster = wantsSvg && opts.shape !== Shape.PIXEL;
+  const rasterArgs: DecodeOptions = wantsSvg && opts.shape === Shape.PIXEL
+    ? { ...decodeArgs, baseSize: Math.max(pixelGW, pixelGH) * 2 || 64 }
+    : decodeArgs;
+
+  let decoded: { w: number; h: number; rgba: Uint8Array } | undefined;
+  // `decodeMs` is the end-to-end cost from `hash` to a display-ready
+  // representation. SVG mode adds SVG-generation time on top of (mini)
+  // raster decode; non-SVG mode just times raster decode.
+  let decodeMs = 0;
+  if (!skipRaster) {
+    const t1 = performance.now();
+    decoded = pfDecode(hash, rasterArgs);
+    decodeMs = performance.now() - t1;
+  }
 
   let svg: string | null = null;
   if (supportsSvg(opts.shape)) {
+    const tSvg0 = performance.now();
     if (opts.shape === Shape.PIXEL) {
-      // Use the same (gw, gh) we forced into the codec above so the SVG
-      // mosaic exactly matches the encoded grid.
-      svg = pixelToSvg(decoded, pixelGW, pixelGH, opts.blur);
+      // `decoded` is guaranteed by the branching above when SVG is wanted.
+      svg = pixelToSvg(decoded!, pixelGW, pixelGH, opts.blur);
     } else {
       try {
         svg = pfToSvg(hash, { ...decodeArgs, blur: opts.blur });
@@ -435,6 +460,15 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
         svg = null;
       }
     }
+    if (svg) decodeMs += performance.now() - tSvg0;
+  }
+
+  // SVG generation failed unexpectedly. Fall back to a raster decode so the
+  // tile shows the canvas placeholder instead of an empty box.
+  if (skipRaster && svg === null) {
+    const t1 = performance.now();
+    decoded = pfDecode(hash, decodeArgs);
+    decodeMs = performance.now() - t1;
   }
 
   return { hash, decoded, svg, encodeMs, decodeMs };
