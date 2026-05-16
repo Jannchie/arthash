@@ -15,9 +15,74 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "pfhash",
-    "pfhash-research",
-    "pfhash-workspace",
+    "arthash",
+    "arthash-research",
+    "arthash-workspace",
+]
+
+[[package]]
+name = "arthash"
+version = "0.1.0"
+source = { editable = "packages/arthash-py" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "pillow", specifier = ">=11.0" },
+]
+
+[[package]]
+name = "arthash-research"
+version = "0.0.0"
+source = { editable = "packages/arthash-research" }
+dependencies = [
+    { name = "arthash" },
+    { name = "blurhash" },
+    { name = "numba" },
+    { name = "pandas" },
+    { name = "pywavelets" },
+    { name = "scikit-image" },
+    { name = "scipy" },
+    { name = "thash" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "arthash", editable = "packages/arthash-py" },
+    { name = "blurhash", specifier = ">=1.1.5" },
+    { name = "numba", specifier = ">=0.65" },
+    { name = "pandas", specifier = ">=3.0.3" },
+    { name = "pywavelets", specifier = ">=1.9.0" },
+    { name = "scikit-image", specifier = ">=0.22" },
+    { name = "scipy", specifier = ">=1.17.1" },
+    { name = "thash", editable = "../thumbhash-py" },
+]
+
+[[package]]
+name = "arthash-workspace"
+version = "0.0.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "arthash" },
+    { name = "arthash-research" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "arthash", editable = "packages/arthash-py" },
+    { name = "arthash-research", editable = "packages/arthash-research" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.7" },
 ]
 
 [[package]]
@@ -287,71 +352,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/31/89/8fc1c268969fac43688d65fd92e67df24bd128d53cb4d2eee534cd307399/pandas-3.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:9c39be2d709d01fa972a0cabc522389fceca4f3969332ba25a7d6c5802cf976a", size = 11828897, upload-time = "2026-05-11T18:54:17.146Z" },
     { url = "https://files.pythonhosted.org/packages/56/3b/e7d20dea247a3e6dc0bd8a6953854afbedc03951def4e7371e05e7263e25/pandas-3.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4db8c527972a821cf5286b40ccc57642a39bc62e62022b42f99f8a67fca8c3a1", size = 10900855, upload-time = "2026-05-11T18:54:19.72Z" },
     { url = "https://files.pythonhosted.org/packages/0f/54/68a0978d1ef8502b8492099beaa6e7a0c1b32e3b5d4f677f5810cb08711c/pandas-3.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:b2c95f8bfc1ee412bf482605d7bfd30c12d1d26bd59fdd91efeef1d4718decb1", size = 9466464, upload-time = "2026-05-11T18:54:22.754Z" },
-]
-
-[[package]]
-name = "pfhash"
-version = "0.1.0"
-source = { editable = "packages/pfhash-py" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pillow" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=2.0" },
-    { name = "pillow", specifier = ">=11.0" },
-]
-
-[[package]]
-name = "pfhash-research"
-version = "0.0.0"
-source = { editable = "packages/pfhash-research" }
-dependencies = [
-    { name = "blurhash" },
-    { name = "numba" },
-    { name = "pandas" },
-    { name = "pfhash" },
-    { name = "pywavelets" },
-    { name = "scikit-image" },
-    { name = "scipy" },
-    { name = "thash" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "blurhash", specifier = ">=1.1.5" },
-    { name = "numba", specifier = ">=0.65" },
-    { name = "pandas", specifier = ">=3.0.3" },
-    { name = "pfhash", editable = "packages/pfhash-py" },
-    { name = "pywavelets", specifier = ">=1.9.0" },
-    { name = "scikit-image", specifier = ">=0.22" },
-    { name = "scipy", specifier = ">=1.17.1" },
-    { name = "thash", editable = "../thumbhash-py" },
-]
-
-[[package]]
-name = "pfhash-workspace"
-version = "0.0.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "pfhash" },
-    { name = "pfhash-research" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pfhash", editable = "packages/pfhash-py" },
-    { name = "pfhash-research", editable = "packages/pfhash-research" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.7" },
 ]
 
 [[package]]

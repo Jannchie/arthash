@@ -7,8 +7,8 @@ on:
       - "py-v*"
   pull_request:
     paths:
-      - "packages/pfhash-py/**"
-      - "packages/pfhash-rs/**"
+      - "packages/arthash-py/**"
+      - "packages/arthash-rs/**"
       - ".github/workflows/wheels.yml"
 
 jobs:
@@ -28,8 +28,8 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#py-v}"
-          py_ver=$(grep -E '^version' packages/pfhash-py/pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          rs_ver=$(grep -E '^version' packages/pfhash-py/Cargo.toml      | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          py_ver=$(grep -E '^version' packages/arthash-py/pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          rs_ver=$(grep -E '^version' packages/arthash-py/Cargo.toml      | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           echo "tag=$tag  pyproject=$py_ver  cargo=$rs_ver"
           if [ "$tag" != "$py_ver" ] || [ "$tag" != "$rs_ver" ]; then
             echo "::error::version mismatch: tag=$tag pyproject=$py_ver cargo=$rs_ver" >&2
@@ -68,7 +68,7 @@ jobs:
       - name: build wheel
         uses: PyO3/maturin-action@v1
         with:
-          working-directory: packages/pfhash-py
+          working-directory: packages/arthash-py
           target: ${{ matrix.platform.target }}
           manylinux: auto
           # abi3 → one wheel per platform; pick a single interpreter to
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}
-          path: packages/pfhash-py/dist/*.whl
+          path: packages/arthash-py/dist/*.whl
 
   sdist:
     name: sdist
@@ -88,13 +88,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: PyO3/maturin-action@v1
         with:
-          working-directory: packages/pfhash-py
+          working-directory: packages/arthash-py
           command: sdist
           args: --out dist
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: packages/pfhash-py/dist/*.tar.gz
+          path: packages/arthash-py/dist/*.tar.gz
 
   # ------------------------------------------------------------------
   # smoke-test the wheel installs and the binding loads. Python matrix
@@ -123,13 +123,13 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --find-links dist --only-binary pfhash pfhash pytest numpy pillow
-          python -m pytest packages/pfhash-py/tests/ -v
+          python -m pip install --find-links dist --only-binary arthash arthash pytest numpy pillow
+          python -m pytest packages/arthash-py/tests/ -v
 
   # ------------------------------------------------------------------
   # release: only on a `py-v*` tag, after wheels + sdist + tests pass.
   # Uses PyPI Trusted Publishing (OIDC, no API token).
-  # Set up at https://pypi.org/manage/project/pfhash/settings/publishing/
+  # Set up at https://pypi.org/manage/project/arthash/settings/publishing/
   # (or "pending publisher" before first upload).
   # ------------------------------------------------------------------
   release:
@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/pfhash/
+      url: https://pypi.org/project/arthash/
     permissions:
       id-token: write   # OIDC token for Trusted Publishing
     steps:

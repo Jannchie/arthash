@@ -22,21 +22,21 @@ node_modules/
 target/
 
 # wasm-pack output (regenerated; checked into npm publish, not git)
-packages/pfhash-ts/wasm/pkg/
+packages/arthash-ts/wasm/pkg/
 
 # Compiled binaries
 *.exe
 
 # Research / R&D code (local-only)
-packages/pfhash-research/research/
-!packages/pfhash-research/research/corpus/README.md
+packages/arthash-research/research/
+!packages/arthash-research/research/corpus/README.md
 
 # Bench scratch outputs
 bench/sqip/tmp.*
 bench/sqip/out.*
 
 # harness outputs
-packages/pfhash-research/results/
+packages/arthash-research/results/
 *.csv
 
 # Hill-climb bench outputs — reproducible from `cargo run --release

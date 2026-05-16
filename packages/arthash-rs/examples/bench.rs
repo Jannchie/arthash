@@ -1,0 +1,156 @@
+//! Micro-benchmark for arthash-rs. Measures encode + decode for the four
+//! modes on a synthetic gradient input. Run with:
+//!
+//!     cargo run --release --example bench
+//!
+//! Output is one JSON object per line (NDJSON) on stdout — easy to diff
+//! against the Python reference in scripts/bench_py.py.
+//!
+//! Methodology:
+//!   * Inputs: deterministic synthetic gradient at the mode's natural
+//!     thumbnail size (DCT at 100x100, shape modes at 48x48).
+//!   * Each measurement does N warmup iters + M timed iters; we report
+//!     median + p95 in microseconds, plus throughput.
+//!   * We measure end-to-end `encode_rgb` / `decode` — i.e. the same
+//!     surface a PyO3 / napi-rs binding would expose.
+
+use std::time::Instant;
+
+use arthash::{
+    decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, ShapeType,
+};
+
+fn gradient_rgb(w: u32, h: u32) -> Vec<u8> {
+    let n = (w * h) as usize;
+    let mut rgb = vec![0u8; n * 3];
+    for y in 0..h {
+        for x in 0..w {
+            let p = ((y * w + x) * 3) as usize;
+            rgb[p] = ((x as f32) * 255.0 / ((w - 1).max(1) as f32)).round() as u8;
+            rgb[p + 1] = ((y as f32) * 255.0 / ((h - 1).max(1) as f32)).round() as u8;
+            rgb[p + 2] = (((x + y) as f32) * 0.3) as u8;
+        }
+    }
+    rgb
+}
+
+#[derive(Clone, Copy)]
+struct Stats {
+    median_us: f64,
+    p95_us: f64,
+    min_us: f64,
+    iters: usize,
+}
+
+fn measure<F: FnMut()>(mut f: F, warmup: usize, iters: usize) -> Stats {
+    for _ in 0..warmup {
+        f();
+    }
+    let mut samples = Vec::with_capacity(iters);
+    for _ in 0..iters {
+        let t0 = Instant::now();
+        f();
+        let dt = t0.elapsed().as_secs_f64() * 1e6;
+        samples.push(dt);
+    }
+    samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let median = samples[samples.len() / 2];
+    let p95 = samples[(samples.len() as f64 * 0.95) as usize];
+    let min = samples[0];
+    Stats {
+        median_us: median,
+        p95_us: p95,
+        min_us: min,
+        iters,
+    }
+}
+
+fn report(mode: &str, op: &str, w: u32, h: u32, s: Stats, extra: &str) {
+    let pixels = (w * h) as f64;
+    let mpix_s = pixels / s.median_us; // pixels/us == megapixels/s
+    println!(
+        "{{\"impl\":\"rust\",\"mode\":\"{}\",\"op\":\"{}\",\"w\":{},\"h\":{},\"median_us\":{:.2},\"p95_us\":{:.2},\"min_us\":{:.2},\"iters\":{},\"mpix_per_s\":{:.3}{}}}",
+        mode, op, w, h, s.median_us, s.p95_us, s.min_us, s.iters, mpix_s, extra
+    );
+}
+
+fn main() {
+    // DCT — input is 100x100 (DCT default target).
+    {
+        let (w, h) = (100u32, 100u32);
+        let rgb = gradient_rgb(w, h);
+        let codec = Codec::default();
+        let enc_opts = EncodeOptions::default();
+
+        let mut hash: Vec<u8> = Vec::new();
+        let s = measure(
+            || {
+                hash = encode_rgb(&rgb, w, h, &codec, enc_opts);
+            },
+            30,
+            200,
+        );
+        let extra = format!(",\"hash_bytes\":{}", hash.len());
+        report("dct", "encode", w, h, s, &extra);
+
+        let dec_opts = DecodeOptions {
+            base_size: 256,
+            ..Default::default()
+        };
+        let s = measure(
+            || {
+                let _ = decode(&hash, &codec, dec_opts);
+            },
+            10,
+            50,
+        );
+        report("dct", "decode", w, h, s, "");
+    }
+
+    // Shape modes — 48x48 thumbnails.
+    let shapes = [
+        ("circle", ShapeType::Circle, 12u32),
+        ("triangle", ShapeType::Triangle, 12u32),
+        ("pixel", ShapeType::Pixel, 12u32),
+    ];
+    for (name, shape, n_shapes) in shapes {
+        let (w, h) = (48u32, 48u32);
+        let rgb = gradient_rgb(w, h);
+        let codec = Codec {
+            shape,
+            n_shapes,
+            ..Codec::default()
+        };
+        let enc_opts = EncodeOptions::default();
+
+        let (warmup, iters) = if matches!(shape, ShapeType::Pixel) {
+            (10, 100)
+        } else {
+            (3, 15)
+        };
+
+        let mut hash: Vec<u8> = Vec::new();
+        let s = measure(
+            || {
+                hash = encode_rgb(&rgb, w, h, &codec, enc_opts);
+            },
+            warmup,
+            iters,
+        );
+        let extra = format!(",\"hash_bytes\":{}", hash.len());
+        report(name, "encode", w, h, s, &extra);
+
+        let dec_opts = DecodeOptions {
+            base_size: 256,
+            ..Default::default()
+        };
+        let s = measure(
+            || {
+                let _ = decode(&hash, &codec, dec_opts);
+            },
+            5,
+            30,
+        );
+        report(name, "decode", w, h, s, "");
+    }
+}

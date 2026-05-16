@@ -1,0 +1,21 @@
+[package]
+name = "arthash-cli"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+description = "Command-line interface for arthash — encode images to placeholder hashes and back."
+publish = false
+
+[[bin]]
+name = "arthash"
+path = "src/main.rs"
+
+[dependencies]
+arthash = { path = "../arthash-rs" }
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+anyhow = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

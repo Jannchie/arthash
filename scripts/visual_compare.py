@@ -1,4 +1,4 @@
-"""Visual comparison: pfhash 4 modes vs thumbhash (multiple impls) on the
+"""Visual comparison: arthash 4 modes vs thumbhash (multiple impls) on the
 same source image. Outputs:
   * docs/benchmarks/visual_<name>.png — labeled grid of decoded placeholders
   * Per-cell PSNR vs the 256-px-long-edge ground truth, printed to stdout
@@ -9,7 +9,7 @@ Usage:
 For thumbhash cross-impl decoded outputs we call:
   * Rust crate `thumbhash` via the pre-built bench binary's stdin? No — we
     use subprocess + a small helper. Currently we only run the npm
-    thumbhash port (most maintained, official JS), and the pfhash bindings
+    thumbhash port (most maintained, official JS), and the arthash bindings
     for our own modes. Adding Go/Rust thumbhash via subprocess is mechanical.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from pfhash import Codec, ShapeType, decode, encode
+from arthash import Codec, ShapeType, decode, encode
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "docs" / "benchmarks"
@@ -47,7 +47,7 @@ def psnr(a: np.ndarray, b: np.ndarray) -> float:
     return 20 * math.log10(255.0 / math.sqrt(mse))
 
 
-def pfhash_decode_to_image(img_100: Image.Image, shape: ShapeType, n_shapes: int,
+def arthash_decode_to_image(img_100: Image.Image, shape: ShapeType, n_shapes: int,
                             target_w: int, target_h: int) -> tuple[Image.Image, int]:
     """Encode then decode at base_size matched to thumbnail's long edge target_size."""
     codec = Codec(shape=shape, n_shapes=n_shapes) if shape != ShapeType.DCT else Codec()
@@ -179,16 +179,16 @@ def main():
     cells: list[tuple[str, Image.Image, str]] = []
     cells.append(("ground truth (256 long-edge)", img_256, f"PSNR=∞"))
 
-    # pfhash 4 modes
+    # arthash 4 modes
     for shape, n in [
         (ShapeType.DCT, 0),
         (ShapeType.CIRCLE, 12),
         (ShapeType.TRIANGLE, 12),
         (ShapeType.PIXEL, 12),
     ]:
-        im, hb = pfhash_decode_to_image(img_100, shape, n, tw, th)
+        im, hb = arthash_decode_to_image(img_100, shape, n, tw, th)
         p = psnr(np.array(im), gt_arr)
-        cells.append((f"pfhash · {shape.value.upper()}",
+        cells.append((f"arthash · {shape.value.upper()}",
                        im, f"{hb} B · PSNR {p:.1f} dB"))
 
     # thumbhash JS

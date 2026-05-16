@@ -1,0 +1,30 @@
+# Internal research package — runs the ablation studies, benchmarks against
+# baselines (blurhash, thumbhash), and explores experimental variants. NOT
+# published. Lives in the uv workspace so `import research.foo` resolves
+# after `uv sync`.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arthash-research"
+version = "0.0.0"
+description = "Internal research / ablation / benchmark scripts for arthash. Not published."
+requires-python = ">=3.11"
+dependencies = [
+  "arthash",
+  "thash",
+  "blurhash>=1.1.5",
+  "scikit-image>=0.22",
+  "numba>=0.65",
+  "pandas>=3.0.3",
+  "pywavelets>=1.9.0",
+  "scipy>=1.17.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["research"]
+# Exclude bulky data — corpus/ + results/ are dev-time artifacts, not
+# part of the importable code.
+exclude = ["research/corpus", "research/results"]

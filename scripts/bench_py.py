@@ -1,8 +1,8 @@
-"""Benchmark the Python `pfhash` package on identical workloads to the Rust
+"""Benchmark the Python `arthash` package on identical workloads to the Rust
 example/bench.rs. Outputs NDJSON to stdout so the two streams can be merged
 side-by-side in compare_bench.py.
 
-`pfhash` is now a PyO3 binding to `pfhash-rs`, so this benchmark measures
+`arthash` is now a PyO3 binding to `arthash-rs`, so this benchmark measures
 PyO3 boundary overhead + Pillow preprocessing on top of the same Rust core
 that `bench:rs` exercises directly. Use the gap as a budget for FFI cost.
 
@@ -25,7 +25,7 @@ from typing import Callable
 
 import numpy as np
 
-from pfhash import Codec, ShapeType, decode, encode
+from arthash import Codec, ShapeType, decode, encode
 
 
 def gradient_rgb(w: int, h: int) -> np.ndarray:

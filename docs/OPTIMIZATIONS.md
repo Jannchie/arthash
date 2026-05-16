@@ -1,4 +1,4 @@
-# pfhash-rs encoder optimizations
+# arthash-rs encoder optimizations
 
 This document is the living record of performance work on the shape-mode
 encoders (CIRCLE / TRIANGLE). The goal is to keep enough breadcrumbs
@@ -127,20 +127,20 @@ inputs (~6500 µs), and the branching cost would tax every other case.
 
 ### Public API added
 
-* `pfhash::shape::raster::ShapeSums` + `ShapeSums::finalize(α, palette)`
+* `arthash::shape::raster::ShapeSums` + `ShapeSums::finalize(α, palette)`
   — the closed-form α-dependent ΔSSE math, separated from the pixel
   scan. Public so external callers can build their own collectors.
-* `pfhash::shape::raster::collect_circle_sums` and
+* `arthash::shape::raster::collect_circle_sums` and
   `collect_triangle_sums` — the original `O(bbox_area)` scanline kept
   as a public primitive for callers that don't want to build an
   `Integral` (e.g., one-shot evaluation).
-* `pfhash::shape::integral::Integral::{build, update_canvas_rows}` —
+* `arthash::shape::integral::Integral::{build, update_canvas_rows}` —
   per-row prefix-sum tables.
-* `pfhash::shape::integral::eval_circle_integral` /
+* `arthash::shape::integral::eval_circle_integral` /
   `eval_triangle_integral` and their `collect_*_integral` siblings —
   the `O(bbox_height)` evaluators that `fit_*` now uses unconditionally.
 
-No JS-facing knob: the WASM glue / `@pfhash/ts` / playground inherit the
+No JS-facing knob: the WASM glue / `@arthash/ts` / playground inherit the
 fast path automatically with no API surface.
 
 ---
@@ -309,13 +309,13 @@ evaluations to reach a strictly better fit.
 
 ### Public API added
 
-* `pfhash::shape::residual::Residual::{build, rebuild, sample}` — the
+* `arthash::shape::residual::Residual::{build, rebuild, sample}` — the
   residual CDF + sampler. Public so external CIRCLE-style fitters can
   reuse the same init policy.
-* `pfhash::shape::rng::Rng::normal_step(sigma)` — Gaussian draw with
+* `arthash::shape::rng::Rng::normal_step(sigma)` — Gaussian draw with
   magnitude forced to at least 1.
 
-No JS-facing knob: WASM glue / `@pfhash/ts` / playground inherit the
+No JS-facing knob: WASM glue / `@arthash/ts` / playground inherit the
 faster CIRCLE search automatically with no API surface.
 
 ### Reproducing this opt's ablation
@@ -337,7 +337,7 @@ Match `BENCH_TRI_N_RANDOM` analogously to sweep TRIANGLE.
 ## Reproducing the data
 
 ```sh
-# From packages/pfhash-rs
+# From packages/arthash-rs
 
 # (1) Accurate timing — counters off so they don't perturb measurement.
 cargo run --release --example bench_hillclimb -- \

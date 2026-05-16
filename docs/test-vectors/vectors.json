@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "Cross-language conformance vectors for pfhash. All SDKs (Python / TypeScript / Rust) must produce `expected_hex` exactly for each (input, codec, encode_kwargs).",
+  "description": "Cross-language conformance vectors for arthash. All SDKs (Python / TypeScript / Rust) must produce `expected_hex` exactly for each (input, codec, encode_kwargs).",
   "input_kinds": {
     "solid": "Solid color fill: H\u00d7W\u00d73 uint8 with arr[..., :] = rgb",
     "gradient": "Horizontal R gradient + vertical G gradient + constant B(=64). arr[y, x] = (linspace(0,255,W)[x], linspace(0,255,H)[y], 64).",

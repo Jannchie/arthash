@@ -1,13 +1,13 @@
-# pfhash format specification — v1
+# arthash format specification — v1
 
 **Status:** v1 draft, frozen for the v1 development cycle. Implementations:
-`@pfhash/py`, `@pfhash/ts`, `pfhash` (Rust). Reference implementation:
-`@pfhash/py`. When they disagree on a corner case the SPEC wins; please open a
+`@arthash/py`, `@arthash/ts`, `arthash` (Rust). Reference implementation:
+`@arthash/py`. When they disagree on a corner case the SPEC wins; please open a
 PR amending this file rather than mutating any single implementation.
 
 ## 0. Why a SPEC
 
-`pfhash` is a family of compact placeholder-image hashes. Multiple
+`arthash` is a family of compact placeholder-image hashes. Multiple
 implementations (Python / TypeScript / Rust) target the same byte format so
 hashes produced by one can be decoded by another. The byte format is **purely
 defined by the SPEC, not by the reference implementation** — if Python's
@@ -15,19 +15,19 @@ encoder produces output the SPEC doesn't define, that's a bug in Python.
 
 ## 1. Scope and design philosophy
 
-pfhash hashes are tiny (typically 6–32 bytes) and intended only as **lossy
+arthash hashes are tiny (typically 6–32 bytes) and intended only as **lossy
 placeholders** while the full image loads. They are NOT intended for:
 
 - content addressing (use BLAKE3/SHA-256)
 - perceptual deduplication (use pHash/dHash)
 - thumbnail generation at fidelity (use real image resize)
 
-A pfhash carries roughly the same information as a 12×12 image and is
+A arthash carries roughly the same information as a 12×12 image and is
 specifically tuned to look plausible when blown up to display size.
 
 ### 1.1 Two-sided consensus, not self-describing bytes
 
-A pfhash hash is **not self-describing**. The bytes alone are meaningless;
+A arthash hash is **not self-describing**. The bytes alone are meaningless;
 they must be decoded with the same **codec** that produced them. The codec
 carries: which mode (DCT / CIRCLE / TRIANGLE / PIXEL), how many shapes, all
 bit widths, and the palette if any.
@@ -351,7 +351,7 @@ which is the desired behavior.
 
 ## 5. Per-mode byte layouts
 
-### 5.1 DCT mode (V4 pfhash, ~21 bytes)
+### 5.1 DCT mode (V4 arthash, ~21 bytes)
 
 #### 5.1.1 Byte layout
 
@@ -644,7 +644,7 @@ caller-specified `base_size` (long-edge pixels). Several decisions are
 | Anti-aliasing | implementation-defined | Renderer may use distance-field AA (circles), supersample AA (triangles), or no AA. |
 | Pixel-cell upsample filter | implementation-defined | "nearest" (default), "bilinear", or "bicubic". |
 | Working color space | linear RGB | Compositing MUST happen in linear; final output converted back to sRGB. |
-| Output dtype | 8-bit RGBA, premultiplied | Alpha = 1 throughout — pfhash placeholders are fully opaque. |
+| Output dtype | 8-bit RGBA, premultiplied | Alpha = 1 throughout — arthash placeholders are fully opaque. |
 | Background fill | exact color from header | No dithering. |
 
 Renderers MAY make any rendering decision NOT listed above — but the
@@ -746,11 +746,11 @@ those bytes. `palette_k` is emitted only when smaller than `len(palette)`.
 ### Regeneration
 
 ```sh
-cd packages/pfhash-py
+cd packages/arthash-py
 uv run python -m tests.generate_vectors
 ```
 
-The generator lives at `packages/pfhash-py/tests/generate_vectors.py`. Any
+The generator lives at `packages/arthash-py/tests/generate_vectors.py`. Any
 intentional byte-format change must bump the SPEC version (§9) and
 regenerate vectors in the same commit.
 

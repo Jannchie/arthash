@@ -95,7 +95,7 @@ func main() {
 		}
 	}, 10, 50)
 
-	fmt.Fprintln(os.Stderr, "decode @ baseSize=256 (matches pfhash decode)...")
+	fmt.Fprintln(os.Stderr, "decode @ baseSize=256 (matches arthash decode)...")
 	cfg := thumbhash.DecodingCfg{BaseSize: 256, SaturationBoost: 1.25}
 	measure("dct", "decode_256", w, h, func() {
 		_, err := thumbhash.DecodeImageWithCfg(hash, cfg)
