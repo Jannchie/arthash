@@ -38,8 +38,10 @@ jobs:
             packages/arthash-rs
             packages/arthash-ts/wasm
 
-      - name: install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+      # Pin wasm-bindgen-cli to the wasm-bindgen library version used by
+      # packages/arthash-ts/wasm/Cargo.toml — the two MUST agree exactly.
+      - name: install wasm-bindgen-cli
+        run: cargo install -f --locked wasm-bindgen-cli --version 0.2.121
 
       - run: pnpm install --frozen-lockfile
 

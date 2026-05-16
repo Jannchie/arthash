@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "py-v*"
+      - "v*"
   pull_request:
     paths:
       - "packages/arthash-py/**"
@@ -13,28 +13,20 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
-  # version sanity: on a release tag (push:tags = py-v*), the tag, the
-  # pyproject.toml version, and Cargo.toml version must all agree. PRs
-  # and workflow_dispatch skip this — versions only need to align at
-  # publish time, not on every push.
+  # version sanity: on a release tag (push:tags = v*), every manifest
+  # MUST agree with VERSION and with the tag. arthash uses fixed-version
+  # across all SDKs (RELEASING.md); the script reads all seven sites.
+  # PRs and workflow_dispatch skip this — drift only matters at publish.
   # ------------------------------------------------------------------
   version-check:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/py-v')
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
-      - name: assert tag == pyproject == Cargo
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#py-v}"
-          py_ver=$(grep -E '^version' packages/arthash-py/pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          rs_ver=$(grep -E '^version' packages/arthash-py/Cargo.toml      | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "tag=$tag  pyproject=$py_ver  cargo=$rs_ver"
-          if [ "$tag" != "$py_ver" ] || [ "$tag" != "$rs_ver" ]; then
-            echo "::error::version mismatch: tag=$tag pyproject=$py_ver cargo=$rs_ver" >&2
-            exit 1
-          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-versions.mjs "${GITHUB_REF_NAME}"
 
   # ------------------------------------------------------------------
   # wheels: one wheel per OS×arch. abi3-py39 means a single wheel covers
@@ -135,7 +127,7 @@ jobs:
   release:
     name: publish to PyPI
     needs: [version-check, wheels, sdist, test]
-    if: startsWith(github.ref, 'refs/tags/py-v')
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment:
       name: pypi

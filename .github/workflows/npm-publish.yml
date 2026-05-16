@@ -1,0 +1,91 @@
+name: npm publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ------------------------------------------------------------------
+  # version sanity: on a release tag (push:tags = v*), every manifest
+  # MUST agree with VERSION and with the tag. arthash uses fixed-version
+  # across all SDKs (RELEASING.md); the script reads all seven sites.
+  # workflow_dispatch skips this — manual publishes use whatever's in
+  # package.json without enforcing alignment.
+  # ------------------------------------------------------------------
+  version-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-versions.mjs "${GITHUB_REF_NAME}"
+
+  # ------------------------------------------------------------------
+  # build + publish. One job — cross-platform wasm is identical bytes
+  # regardless of build host, so we only need a single linux runner.
+  # ------------------------------------------------------------------
+  publish:
+    needs: [version-check]
+    # Run on tag push always; allow manual workflow_dispatch even when
+    # version-check was skipped (the `needs` gate is satisfied when the
+    # dependency is skipped, not just when it succeeds).
+    if: |
+      always() &&
+      (needs.version-check.result == 'success' || needs.version-check.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/arthash
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/arthash-rs
+            packages/arthash-ts/wasm
+
+      # Pin wasm-bindgen-cli to the wasm-bindgen library version used by
+      # packages/arthash-ts/wasm/Cargo.toml — the two MUST agree exactly.
+      # Bump this in lockstep with the Cargo.toml dep.
+      - name: install wasm-bindgen-cli
+        run: cargo install -f --locked wasm-bindgen-cli --version 0.2.121
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pnpm publish` would run `prepack` itself, which would re-run the
+      # full build. We do an explicit build first so a build failure surfaces
+      # before we touch npm, and so the dry-run inspection sees the real
+      # tarball contents.
+      - name: build arthash (wasm + ts)
+        run: pnpm --filter arthash run build
+
+      - name: inspect tarball
+        run: pnpm --filter arthash pack --pack-destination /tmp
+
+      # Provenance (--provenance) requires `id-token: write` and OIDC, which
+      # we have. It attaches a signed SLSA statement so consumers can verify
+      # the tarball was built by this workflow.
+      - name: publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm --filter arthash publish --access public --no-git-checks --provenance

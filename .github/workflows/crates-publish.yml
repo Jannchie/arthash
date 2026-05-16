@@ -1,0 +1,73 @@
+name: crates.io publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ------------------------------------------------------------------
+  # version sanity: tag must match VERSION and every manifest.
+  # See RELEASING.md — arthash uses fixed-version across all SDKs.
+  # ------------------------------------------------------------------
+  version-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-versions.mjs "${GITHUB_REF_NAME}"
+
+  # ------------------------------------------------------------------
+  # smoke-test before we push to crates.io. Mirrors `cargo publish`'s
+  # internal `cargo verify-build`, but also runs the test suite so a
+  # broken release can't reach the registry.
+  # ------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/arthash-rs
+      - name: cargo test
+        run: cargo test --manifest-path packages/arthash-rs/Cargo.toml --release
+
+  # ------------------------------------------------------------------
+  # release: only on a `v*` tag, after version-check + tests pass.
+  # Uses crates.io Trusted Publishing (OIDC, no API token).
+  # Set up the pending publisher at:
+  #   https://crates.io/crates/arthash/settings (or "pending" before
+  #   first upload).
+  # ------------------------------------------------------------------
+  release:
+    name: publish to crates.io
+    needs: [version-check, test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/arthash
+    permissions:
+      contents: read
+      id-token: write   # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/arthash-rs
+
+      # Exchanges the workflow's OIDC token for a short-lived crates.io
+      # publish token (~30 min TTL).
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --manifest-path packages/arthash-rs/Cargo.toml
