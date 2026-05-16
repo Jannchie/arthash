@@ -46,11 +46,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm 10+ is REQUIRED for npm OIDC Trusted Publishing. pnpm 9's
+      # publish path only reads NODE_AUTH_TOKEN and never attempts the
+      # OIDC token exchange, so it fails with ENEEDAUTH even when a
+      # trusted publisher is configured on npmjs.com.
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
@@ -87,11 +93,14 @@ jobs:
         working-directory: packages/arthash-ts
         run: pnpm pack --pack-destination /tmp
 
-      # Provenance (--provenance) requires `id-token: write` and OIDC, which
-      # we have. It attaches a signed SLSA statement so consumers can verify
-      # the tarball was built by this workflow.
+      # OIDC Trusted Publishing: pnpm 10 exchanges this job's GitHub
+      # OIDC token for a short-lived npm publish token, so no NPM_TOKEN
+      # secret is needed. Requires:
+      #   * `id-token: write` permission (set on the job above).
+      #   * Trusted publisher configured at npmjs.com/package/arthash —
+      #     owner `Jannchie`, repo `arthash`, workflow `npm-publish.yml`,
+      #     environment `npm` (matches `environment: name: npm` above).
+      # `--provenance` attaches a signed SLSA statement to the tarball.
       - name: publish to npm
         working-directory: packages/arthash-ts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm publish --access public --no-git-checks --provenance
