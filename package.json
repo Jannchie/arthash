@@ -12,8 +12,8 @@
     "test:rs": "cargo test --manifest-path packages/arthash-rs/Cargo.toml",
 
     "build": "pnpm run build:py && pnpm run build:ts && pnpm run build:rs",
-    "build:py": "maturin build --release --manifest-path packages/arthash-py/Cargo.toml --out dist",
-    "develop:py": "maturin develop --uv --manifest-path packages/arthash-py/Cargo.toml",
+    "build:py": "uv run maturin build --release --manifest-path packages/arthash-py/Cargo.toml --out dist",
+    "develop:py": "uv run maturin develop --manifest-path packages/arthash-py/Cargo.toml",
     "build:ts": "pnpm --filter arthash run build",
     "build:rs": "cargo build --release --manifest-path packages/arthash-rs/Cargo.toml",
     "build:playground": "pnpm --filter @arthash/playground run build",

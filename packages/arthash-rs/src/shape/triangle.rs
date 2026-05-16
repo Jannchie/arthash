@@ -82,7 +82,7 @@ fn hill_climb_gaussian(
     w: u32,
     mut verts: [(i32, i32); 3],
     fixed_alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
     n_steps: u32,
     rng: &mut Rng,
     sigma: f64,
@@ -152,7 +152,7 @@ fn pick_best_alpha(
     w: u32,
     verts: [(i32, i32); 3],
     alpha_levels: &[f32],
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
 ) -> (f32, f32, [f32; 3], u32) {
     // Collect once, finalize K times — geometry is fixed.
     let sums = collect_triangle_sums_integral(
@@ -222,8 +222,8 @@ fn fit_primitive(
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
-    let palette = codec.palette_linear();
-    let pal_ref = palette.as_deref();
+    let palette = super::palette::from_codec(codec);
+    let pal_ref = palette.as_ref();
 
     let sigma = (2.0f64).max(w.max(h) as f64 * 6.0 / 100.0);
     let use_max_age = search.hill_climb_max_age.is_some();
@@ -303,8 +303,8 @@ fn fit_topk_uniform(
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
-    let palette = codec.palette_linear();
-    let pal_ref = palette.as_deref();
+    let palette = super::palette::from_codec(codec);
+    let pal_ref = palette.as_ref();
 
     let margin = (w.max(h) / 4) as i64;
     let use_max_age = search.hill_climb_max_age.is_some();
@@ -485,22 +485,7 @@ pub fn encode_triangle(
     let (bg, triangles) = fit_triangles(target, th, tw, codec, seed, search);
     let mut bw = BitWriter::new();
     bw.write(aspect_code(w_orig, h_orig), 8);
-    let pidx = if codec.is_palette_mode() {
-        let pal = codec.palette_linear().unwrap();
-        let k = pal.len() / 3;
-        let mut best_k = 0usize;
-        let mut best_d = f32::INFINITY;
-        for ki in 0..k {
-            let d = (0..3).map(|i| (pal[ki * 3 + i] - bg[i]).powi(2)).sum::<f32>();
-            if d < best_d {
-                best_d = d;
-                best_k = ki;
-            }
-        }
-        best_k as u32
-    } else {
-        0
-    };
+    let pidx = super::palette::nearest_in_codec(codec, bg).unwrap_or(0);
     write_color(&mut bw, &bg, pidx, codec);
     encode_body(&mut bw, &triangles, tw, th, codec);
     bw.finish()

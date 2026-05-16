@@ -46,11 +46,17 @@ fn measure<F: FnMut()>(mut f: F, warmup: usize, iters: usize) -> Stats {
     for _ in 0..warmup {
         f();
     }
+    // Batch within each sample so per-call `Instant::now()` overhead — which
+    // on Windows is ~100 ns and was inflating sub-millisecond medians by up
+    // to ~30 % — averages out. Matches the JS / PyO3 harnesses.
+    let batch = if iters >= 50 { 50 } else { 1 };
     let mut samples = Vec::with_capacity(iters);
     for _ in 0..iters {
         let t0 = Instant::now();
-        f();
-        let dt = t0.elapsed().as_secs_f64() * 1e6;
+        for _ in 0..batch {
+            f();
+        }
+        let dt = t0.elapsed().as_secs_f64() * 1e6 / (batch as f64);
         samples.push(dt);
     }
     samples.sort_by(|a, b| a.partial_cmp(b).unwrap());

@@ -41,6 +41,67 @@ fn srgb_to_linear_f(s: f32) -> f32 {
     }
 }
 
+/// 256-entry LUT mapping sRGB u8 (0..255) → linear-RGB f32 (0..1).
+/// Built once at first use; the cost is amortised across every encode call.
+fn srgb_to_linear_u8_lut() -> &'static [f32; 256] {
+    use std::sync::OnceLock;
+    static LUT: OnceLock<[f32; 256]> = OnceLock::new();
+    LUT.get_or_init(|| {
+        let mut t = [0.0f32; 256];
+        for i in 0..256 {
+            t[i] = srgb_to_linear_f(i as f32 / 255.0);
+        }
+        t
+    })
+}
+
+/// Pack `(R, G, B)` u8 planes (sRGB) directly to linear-RGB f32 planes via
+/// the 256-LUT — bypasses the per-pixel `powf(2.4)` in `srgb_to_linear_f`.
+/// Used by the opaque DCT fast path.
+pub fn rgb_u8_to_linear_planes(
+    rgb: &[u8],
+    n: usize,
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let lut = srgb_to_linear_u8_lut();
+    let mut r = vec![0.0f32; n];
+    let mut g = vec![0.0f32; n];
+    let mut b = vec![0.0f32; n];
+    for i in 0..n {
+        r[i] = lut[rgb[i * 3] as usize];
+        g[i] = lut[rgb[i * 3 + 1] as usize];
+        b[i] = lut[rgb[i * 3 + 2] as usize];
+    }
+    (r, g, b)
+}
+
+/// Linear-RGB f32 planes → Oklab `(L, a*AB_SCALE, b*AB_SCALE)` planes.
+/// Skips the sRGB→linear step (caller did it via LUT).
+pub fn linear_rgb_to_oklab_channels(
+    r: &[f32],
+    g: &[f32],
+    b: &[f32],
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let n = r.len();
+    let mut l_out = vec![0.0f32; n];
+    let mut a_out = vec![0.0f32; n];
+    let mut b_out = vec![0.0f32; n];
+    for i in 0..n {
+        let rl = r[i];
+        let gl = g[i];
+        let bl = b[i];
+        let lm = M1[0][0] * rl + M1[0][1] * gl + M1[0][2] * bl;
+        let mm = M1[1][0] * rl + M1[1][1] * gl + M1[1][2] * bl;
+        let sm = M1[2][0] * rl + M1[2][1] * gl + M1[2][2] * bl;
+        let lc = lm.cbrt();
+        let mc = mm.cbrt();
+        let sc = sm.cbrt();
+        l_out[i] = M2[0][0] * lc + M2[0][1] * mc + M2[0][2] * sc;
+        a_out[i] = (M2[1][0] * lc + M2[1][1] * mc + M2[1][2] * sc) * AB_SCALE;
+        b_out[i] = (M2[2][0] * lc + M2[2][1] * mc + M2[2][2] * sc) * AB_SCALE;
+    }
+    (l_out, a_out, b_out)
+}
+
 #[inline]
 fn linear_to_srgb_f(l: f32) -> f32 {
     let c = l.clamp(0.0, 1.0);

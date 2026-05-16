@@ -1,0 +1,20 @@
+{
+  "name": "bench-js-cross",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-impl JS benchmarks: arthash (wasm) vs thumbhash (JS) vs sqip (Node).",
+  "dependencies": {
+    "arthash": "link:../../packages/arthash-ts",
+    "sharp": "^0.34.5",
+    "sqip": "1.0.0-beta.2",
+    "sqip-plugin-primitive": "1.0.0-beta.2",
+    "sqip-plugin-svgo": "1.0.0-beta.2",
+    "thumbhash": "^0.1.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "^0.34.5"
+    }
+  }
+}

@@ -4,6 +4,16 @@
 //! negative when adding the shape improves the canvas. Color is either the
 //! analytic optimal continuous-mode color, or the best palette entry. These
 //! are the inner kernels of the hill-climb loop — keep them tight.
+//!
+//! ## Palette mode optimization
+//!
+//! Per-shape SSE for a candidate color `p` is
+//! `sse(p) = const - 2α(p·s_t) + 2α(1-α)(p·s_c) + α²|p|²·cnt`. Substituting
+//! the continuous-optimal `p* = (s_t − (1−α)·s_c) / (α·cnt)` gives
+//! `sse(p) = sse(p*) + α²·cnt · |p − p*|²`, so minimizing SSE over a palette
+//! ⊂ ℝ³ collapses to nearest-neighbor of `p*` under Euclidean distance.
+//! `palette::PaletteIndex` does that lookup in O(1) (or O(K) for small K),
+//! replacing the original per-eval O(K) SSE scan.
 
 /// Optional benchmarking counters. When `bench-counters` is enabled, every
 /// `eval_*` call and every `Accum::push` bumps a thread-local — letting an
@@ -72,6 +82,8 @@ pub struct EvalResult {
     pub pidx: u32,
 }
 
+use super::palette::PaletteIndex;
+
 /// Evaluate one CIRCLE candidate via bounding-box scan.
 pub fn eval_circle(
     target: &[f32],
@@ -82,7 +94,7 @@ pub fn eval_circle(
     cy: i32,
     r: i32,
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_CIRCLE.with(|c| c.set(c.get() + 1));
@@ -141,7 +153,7 @@ pub fn eval_triangle(
     vx2: i32,
     vy2: i32,
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_TRIANGLE.with(|c| c.set(c.get() + 1));
@@ -252,7 +264,7 @@ impl ShapeSums {
     /// Evaluate ΔSSE + optimal color at the given α. Geometry-independent
     /// (only depends on the sums), so an α-sweep on a fixed geometry can
     /// reuse the same `ShapeSums` instance instead of re-scanning pixels.
-    pub fn finalize(&self, alpha: f32, palette: Option<&[f32]>) -> EvalResult {
+    pub fn finalize(&self, alpha: f32, palette: Option<&PaletteIndex>) -> EvalResult {
         if self.count == 0 {
             return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
         }
@@ -264,66 +276,53 @@ impl ShapeSums {
             .map(|i| self.s_t2[i] - 2.0 * self.s_tc[i] + self.s_c2[i])
             .sum::<f64>();
 
-        match palette {
-            None => {
-                let mut opt = [0.0f64; 3];
-                for (i, slot) in opt.iter_mut().enumerate() {
-                    let raw = (self.s_t[i] - one_ma * self.s_c[i]) / (alpha * cnt);
-                    *slot = raw.clamp(0.0, 1.0);
-                }
-                let sse_after: f64 = (0..3)
-                    .map(|i| {
-                        self.s_t2[i] - 2.0 * one_ma * self.s_tc[i]
-                            + one_ma * one_ma * self.s_c2[i]
-                            - 2.0 * alpha * opt[i] * self.s_t[i]
-                            + 2.0 * alpha * one_ma * opt[i] * self.s_c[i]
-                            + alpha * alpha * opt[i] * opt[i] * cnt
-                    })
-                    .sum();
-                EvalResult {
-                    delta_sse: (sse_after - sse_before) as f32,
-                    color: [opt[0] as f32, opt[1] as f32, opt[2] as f32],
-                    pidx: 0,
-                }
+        // Closed-form continuous optimum (unclamped). Used directly in the
+        // None branch (after clamping to [0, 1]) and as the NN query point
+        // in the palette branch.
+        let denom = alpha * cnt;
+        let mut p_opt = [0.0f64; 3];
+        if denom > 0.0 {
+            for (i, slot) in p_opt.iter_mut().enumerate() {
+                *slot = (self.s_t[i] - one_ma * self.s_c[i]) / denom;
             }
+        }
+
+        let (color, pidx) = match palette {
+            None => (
+                [
+                    p_opt[0].clamp(0.0, 1.0) as f32,
+                    p_opt[1].clamp(0.0, 1.0) as f32,
+                    p_opt[2].clamp(0.0, 1.0) as f32,
+                ],
+                0u32,
+            ),
             Some(pal) => {
-                let k = pal.len() / 3;
-                let common = self.s_t2.iter().sum::<f64>()
-                    - 2.0 * one_ma * self.s_tc.iter().sum::<f64>()
-                    + one_ma * one_ma * self.s_c2.iter().sum::<f64>();
-                let mut best_sse = f64::INFINITY;
-                let mut best_k = 0usize;
-                for ki in 0..k {
-                    let p = [
-                        pal[ki * 3] as f64,
-                        pal[ki * 3 + 1] as f64,
-                        pal[ki * 3 + 2] as f64,
-                    ];
-                    let sse = common
-                        - 2.0 * alpha * (p[0] * self.s_t[0] + p[1] * self.s_t[1] + p[2] * self.s_t[2])
-                        + 2.0
-                            * alpha
-                            * one_ma
-                            * (p[0] * self.s_c[0] + p[1] * self.s_c[1] + p[2] * self.s_c[2])
-                        + alpha
-                            * alpha
-                            * (p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
-                            * cnt;
-                    if sse < best_sse {
-                        best_sse = sse;
-                        best_k = ki;
-                    }
-                }
-                EvalResult {
-                    delta_sse: (best_sse - sse_before) as f32,
-                    color: [
-                        pal[best_k * 3],
-                        pal[best_k * 3 + 1],
-                        pal[best_k * 3 + 2],
-                    ],
-                    pidx: best_k as u32,
-                }
+                let (idx, c) = pal.nearest([
+                    p_opt[0] as f32,
+                    p_opt[1] as f32,
+                    p_opt[2] as f32,
+                ]);
+                (c, idx)
             }
+        };
+
+        // ΔSSE for the chosen color. Identical algebraic form for both
+        // branches: substitute `color` for `p` in `sse(p)`.
+        let p = [color[0] as f64, color[1] as f64, color[2] as f64];
+        let sse_after: f64 = (0..3)
+            .map(|i| {
+                self.s_t2[i] - 2.0 * one_ma * self.s_tc[i]
+                    + one_ma * one_ma * self.s_c2[i]
+                    - 2.0 * alpha * p[i] * self.s_t[i]
+                    + 2.0 * alpha * one_ma * p[i] * self.s_c[i]
+                    + alpha * alpha * p[i] * p[i] * cnt
+            })
+            .sum();
+
+        EvalResult {
+            delta_sse: (sse_after - sse_before) as f32,
+            color,
+            pidx,
         }
     }
 }

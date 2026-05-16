@@ -159,7 +159,7 @@ pub fn eval_rect_integral(
     x1: i32,
     y1: i32,
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_RECT.with(|c| c.set(c.get() + 1));

@@ -1,0 +1,6 @@
+{"impl":"arthash-ts","mode":"dct","op":"encode","w":100,"h":100,"median_us":279.16,"p95_us":316.95,"min_us":262.46,"iters":200,"hash_bytes":24}
+{"impl":"arthash-ts","mode":"dct","op":"decode_32","w":100,"h":100,"median_us":116.31,"p95_us":174.92,"min_us":107.74,"iters":100,"base_size":32}
+{"impl":"arthash-ts","mode":"dct","op":"decode_256","w":100,"h":100,"median_us":6686.06,"p95_us":7736.43,"min_us":6484.46,"iters":50,"base_size":256}
+{"impl":"arthash-ts","mode":"dct","op":"decode_512","w":100,"h":100,"median_us":26223.6,"p95_us":27746.6,"min_us":26027.72,"iters":30,"base_size":512}
+{"impl":"thumbhash-js","mode":"dct","op":"encode","w":100,"h":100,"median_us":532.47,"p95_us":671.32,"min_us":497.9,"iters":200,"hash_bytes":24}
+{"impl":"thumbhash-js","mode":"dct","op":"decode_default","w":100,"h":100,"median_us":164.82,"p95_us":199.55,"min_us":157.26,"iters":100,"base_size":"~32 (default)"}

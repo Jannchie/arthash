@@ -49,7 +49,11 @@ pub fn fit_pixels(
     let a_code = aspect_code(w_orig, h_orig);
     let quant_aspect = aspect_from_code(a_code);
     let (gw, gh) = pixel_grid(codec.n_shapes, quant_aspect, codec.grid_aspect);
-    let palette = codec.palette_linear();
+    // Few queries (= cell count, usually 12–64), so skip the LUT build —
+    // linear scan over K palette entries beats amortizing the build cost.
+    let palette = codec
+        .palette_linear()
+        .map(super::palette::PaletteIndex::build_linear);
     let mut out = Vec::with_capacity((gw * gh) as usize);
     for gy in 0..gh {
         let y0 = ((gy as f32 * th as f32) / (gh as f32)).round().max(0.0) as u32;
@@ -80,25 +84,7 @@ pub fn fit_pixels(
                 [0.0; 3]
             };
             let (pidx, color) = match &palette {
-                Some(pal) => {
-                    let k = pal.len() / 3;
-                    let mut best_k = 0usize;
-                    let mut best_d = f32::INFINITY;
-                    for ki in 0..k {
-                        let d = (0..3)
-                            .map(|i| (pal[ki * 3 + i] - cell[i]).powi(2))
-                            .sum::<f32>();
-                        if d < best_d {
-                            best_d = d;
-                            best_k = ki;
-                        }
-                    }
-                    (best_k as u32, [
-                        pal[best_k * 3],
-                        pal[best_k * 3 + 1],
-                        pal[best_k * 3 + 2],
-                    ])
-                }
+                Some(pal) => pal.nearest(cell),
                 None => (0u32, cell),
             };
             out.push(Cell { pidx, color });

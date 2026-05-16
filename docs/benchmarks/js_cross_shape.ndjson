@@ -1,0 +1,6 @@
+{"impl":"arthash-ts","mode":"circle","n_shapes":12,"op":"encode","w":100,"h":100,"median_ms":5.27,"p95_ms":6.234,"min_ms":4.279,"iters":30,"hash_bytes":53}
+{"impl":"arthash-ts","mode":"triangle","n_shapes":12,"op":"encode","w":100,"h":100,"median_ms":5.144,"p95_ms":6.184,"min_ms":4.605,"iters":30,"hash_bytes":77}
+{"impl":"arthash-ts","mode":"circle","n_shapes":24,"op":"encode","w":100,"h":100,"median_ms":7.236,"p95_ms":7.924,"min_ms":7.026,"iters":30,"hash_bytes":102}
+{"impl":"arthash-ts","mode":"triangle","n_shapes":24,"op":"encode","w":100,"h":100,"median_ms":7.897,"p95_ms":8.593,"min_ms":7.502,"iters":30,"hash_bytes":150}
+{"impl":"arthash-ts","mode":"circle","n_shapes":64,"op":"encode","w":100,"h":100,"median_ms":15.469,"p95_ms":16.684,"min_ms":14.661,"iters":30,"hash_bytes":267}
+{"impl":"arthash-ts","mode":"triangle","n_shapes":64,"op":"encode","w":100,"h":100,"median_ms":15.189,"p95_ms":16.037,"min_ms":14.775,"iters":30,"hash_bytes":395}

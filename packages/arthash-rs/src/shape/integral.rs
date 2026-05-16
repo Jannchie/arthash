@@ -226,7 +226,7 @@ pub fn eval_circle_integral(
     cy: i32,
     r: i32,
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_CIRCLE.with(|c| c.set(c.get() + 1));
@@ -297,7 +297,7 @@ pub fn eval_triangle_integral(
     vx2: i32,
     vy2: i32,
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_TRIANGLE.with(|c| c.set(c.get() + 1));
@@ -404,7 +404,7 @@ pub fn eval_quad_integral(
     w: u32,
     v: [(i32, i32); 4],
     alpha: f32,
-    palette: Option<&[f32]>,
+    palette: Option<&super::palette::PaletteIndex>,
 ) -> EvalResult {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_ROTRECT.with(|c| c.set(c.get() + 1));

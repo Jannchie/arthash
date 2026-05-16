@@ -1,0 +1,3 @@
+{"impl":"sqip-node","mode":"primitive-triangle","n_shapes":12,"op":"encode","median_ms":284.335,"p95_ms":317.169,"min_ms":249.087,"iters":22,"svg_bytes":842}
+{"impl":"sqip-node","mode":"primitive-triangle","n_shapes":24,"op":"encode","median_ms":445.615,"p95_ms":504.459,"min_ms":424.506,"iters":22,"svg_bytes":1482}
+{"impl":"sqip-node","mode":"primitive-triangle","n_shapes":64,"op":"encode","median_ms":1015.362,"p95_ms":1083.798,"min_ms":921.807,"iters":10,"svg_bytes":3650}

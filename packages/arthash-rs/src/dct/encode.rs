@@ -1,6 +1,8 @@
 //! V4 DCT encoder. SPEC §5.1.
 
-use super::colorspace::rgb_to_oklab_channels;
+use super::colorspace::{
+    linear_rgb_to_oklab_channels, rgb_to_oklab_channels, rgb_u8_to_linear_planes,
+};
 
 /// AC compander powers (encoder applies `sign(c)·|c|^p`, decoder inverts).
 const COMPANDER_POWER_L: f32 = 0.6;
@@ -337,6 +339,91 @@ pub fn encode_dct(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
     if has_alpha {
         for &n in nearest_nibbles(&a_ac, a_scale, COMPANDER_POWER_A).iter() {
             push_nibble(&mut out, n, &mut is_odd);
+        }
+    }
+
+    out
+}
+
+/// Specialised fast path for fully-opaque RGB input (the most common shape
+/// of call — `encode_rgb` packs α=255 unconditionally). Skips:
+///   * alpha extraction / a_over_255 / avg accumulation
+///   * the premultiplication pass (rr/gg/bb collapse to channel/255)
+///   * the alpha DCT projection + nibble pass
+///   * the per-pixel `powf(2.4)` in srgb→linear (uses a 256-LUT keyed by u8)
+///
+/// Produces byte-identical output to `encode_dct` for opaque input.
+pub fn encode_dct_rgb_opaque(w: u32, h: u32, rgb: &[u8]) -> Vec<u8> {
+    let w = w as usize;
+    let h = h as usize;
+    let n = w * h;
+    assert_eq!(rgb.len(), n * 3, "RGB buffer length mismatch");
+
+    // sRGB u8 → linear-RGB f32 via 256-LUT (3 lookups per pixel, no powf).
+    let (rl, gl, bl) = rgb_u8_to_linear_planes(rgb, n);
+    let (l_ch, p_ch, q_ch) = linear_rgb_to_oklab_channels(&rl, &gl, &bl);
+
+    // Aspect (SPEC §4.2)
+    let raw_aspect = (w as f32) / (h as f32);
+    let aspect_code: i32 = ((raw_aspect.log2() + 3.0) / 6.0 * 254.0)
+        .round()
+        .clamp(0.0, 254.0) as i32;
+    let quant_aspect: f32 = 2.0f32.powf((aspect_code as f32) / 254.0 * 6.0 - 3.0);
+
+    // Derive (lx, ly) — has_alpha is always false here, so l_limit = 7.
+    let l_limit: f32 = 7.0;
+    let (lx, ly) = if quant_aspect >= 1.0 {
+        (l_limit as usize, (l_limit / quant_aspect).round().max(1.0) as usize)
+    } else {
+        ((l_limit * quant_aspect).round().max(1.0) as usize, l_limit as usize)
+    };
+
+    let (l_dc, l_ac) = dct_channel_raw(&l_ch, h, w, lx.max(3), ly.max(3));
+    let (p_dc, p_ac) = dct_channel_raw(&p_ch, h, w, 3, 3);
+    let (q_dc, q_ac) = dct_channel_raw(&q_ch, h, w, 3, 3);
+
+    let l_scale = search_optimal_scale(&l_ac, 5, COMPANDER_POWER_L);
+    let p_scale = search_optimal_scale(&p_ac, 4, COMPANDER_POWER_PQ);
+    let q_scale = search_optimal_scale(&q_ac, 4, COMPANDER_POWER_PQ);
+
+    let p_dc_companded = compand(p_dc, DC_COMPANDER_POWER_PQ);
+    let q_dc_companded = compand(q_dc, DC_COMPANDER_POWER_PQ);
+
+    let l_dc_q = (63.0 * l_dc).round().clamp(0.0, 63.0) as u32;
+    let p_dc_q = (31.5 + 31.5 * p_dc_companded).round().clamp(0.0, 63.0) as u32;
+    let q_dc_q = (31.5 + 31.5 * q_dc_companded).round().clamp(0.0, 63.0) as u32;
+    let l_scale_q = (31.0 * l_scale).round().clamp(0.0, 31.0) as u32;
+    let header24: u32 =
+        l_dc_q | (p_dc_q << 6) | (q_dc_q << 12) | (l_scale_q << 18); // has_alpha bit = 0
+
+    let p_scale_q = (15.0 * p_scale).round().clamp(0.0, 15.0) as u32;
+    let q_scale_q = (15.0 * q_scale).round().clamp(0.0, 15.0) as u32;
+    let header16: u32 = (aspect_code as u32) | (p_scale_q << 8) | (q_scale_q << 12);
+
+    let mut out: Vec<u8> = Vec::with_capacity(5 + (l_ac.len() + 16).div_ceil(2));
+    out.push((header24 & 0xff) as u8);
+    out.push(((header24 >> 8) & 0xff) as u8);
+    out.push(((header24 >> 16) & 0xff) as u8);
+    out.push((header16 & 0xff) as u8);
+    out.push(((header16 >> 8) & 0xff) as u8);
+
+    let mut is_odd = false;
+    let mut push_nibble = |out: &mut Vec<u8>, u: u8| {
+        if is_odd {
+            *out.last_mut().unwrap() |= u << 4;
+        } else {
+            out.push(u & 0x0f);
+        }
+        is_odd = !is_odd;
+    };
+
+    for (raw, scale, power) in [
+        (&l_ac, l_scale, COMPANDER_POWER_L),
+        (&p_ac, p_scale, COMPANDER_POWER_PQ),
+        (&q_ac, q_scale, COMPANDER_POWER_PQ),
+    ] {
+        for &n in nearest_nibbles(raw, scale, power).iter() {
+            push_nibble(&mut out, n);
         }
     }
 

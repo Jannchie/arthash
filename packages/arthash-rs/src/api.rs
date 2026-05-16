@@ -66,16 +66,9 @@ fn rgb_u8_to_linear_flat(rgb: &[u8]) -> Vec<f32> {
 pub fn encode_rgb(rgb: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
     match codec.shape {
         ShapeType::Dct => {
-            // Pack to RGBA with α=255 and delegate.
-            let n = (w * h) as usize;
-            let mut rgba = vec![0u8; n * 4];
-            for i in 0..n {
-                rgba[i * 4] = rgb[i * 3];
-                rgba[i * 4 + 1] = rgb[i * 3 + 1];
-                rgba[i * 4 + 2] = rgb[i * 3 + 2];
-                rgba[i * 4 + 3] = 255;
-            }
-            crate::dct::encode_dct(w, h, &rgba)
+            // Opaque fast path: avoids the alpha extraction + premultiplication
+            // passes and the per-pixel powf(2.4) in srgb→linear.
+            crate::dct::encode_dct_rgb_opaque(w, h, rgb)
         }
         _ => {
             let target_lin = rgb_u8_to_linear_flat(rgb);

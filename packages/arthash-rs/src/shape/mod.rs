@@ -8,6 +8,7 @@ pub mod circle;
 pub mod integral;
 pub mod integral2d;
 pub mod options;
+pub mod palette;
 pub mod pixel;
 pub mod quant;
 pub mod raster;

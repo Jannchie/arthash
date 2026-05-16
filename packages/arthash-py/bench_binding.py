@@ -33,11 +33,15 @@ def gradient_rgb(w: int, h: int) -> np.ndarray:
 def measure(fn: Callable[[], None], warmup: int, iters: int) -> dict:
     for _ in range(warmup):
         fn()
+    # Batch within each sample so per-call timer overhead averages out.
+    # Matches the harness in packages/arthash-rs/examples/bench.rs.
+    batch = 50 if iters >= 50 else 1
     samples = []
     for _ in range(iters):
         t0 = time.perf_counter_ns()
-        fn()
-        samples.append((time.perf_counter_ns() - t0) / 1000.0)
+        for _ in range(batch):
+            fn()
+        samples.append((time.perf_counter_ns() - t0) / 1000.0 / batch)
     samples.sort()
     return {
         "median_us": statistics.median(samples),

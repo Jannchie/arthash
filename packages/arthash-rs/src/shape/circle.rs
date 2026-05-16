@@ -88,8 +88,8 @@ fn fit_primitive(
     let mut residual = Residual::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
-    let palette = codec.palette_linear();
-    let pal_ref = palette.as_deref();
+    let palette = super::palette::from_codec(codec);
+    let pal_ref = palette.as_ref();
 
     let long_edge = w.max(h);
     let sigma_pos = (2u32).max(long_edge * 6 / 100) as f64;
@@ -229,8 +229,8 @@ fn fit_topk_uniform(
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
-    let palette = codec.palette_linear();
-    let pal_ref = palette.as_deref();
+    let palette = super::palette::from_codec(codec);
+    let pal_ref = palette.as_ref();
 
     let r_min = (4u32).max(w.min(h) / 8);
     let r_max = (r_min + 1).max(w.max(h));
@@ -398,25 +398,9 @@ pub fn encode_circle(
     let (bg, circles) = fit_circles(target, th, tw, codec, seed, search);
     let mut bw = BitWriter::new();
     bw.write(aspect_code(w_orig, h_orig), 8);
-    // Choose bg palette index for palette mode (nearest).
-    let pidx = if codec.is_palette_mode() {
-        let pal = codec.palette_linear().unwrap();
-        let mut best_k = 0usize;
-        let mut best_d = f32::INFINITY;
-        let k = pal.len() / 3;
-        for ki in 0..k {
-            let d = (0..3)
-                .map(|i| (pal[ki * 3 + i] - bg[i]).powi(2))
-                .sum::<f32>();
-            if d < best_d {
-                best_d = d;
-                best_k = ki;
-            }
-        }
-        best_k as u32
-    } else {
-        0
-    };
+    // Choose bg palette index for palette mode (nearest). One-shot lookup,
+    // so skip the LUT build that `PaletteIndex` would amortize.
+    let pidx = super::palette::nearest_in_codec(codec, bg).unwrap_or(0);
     write_color(&mut bw, &bg, pidx, codec);
     encode_body(&mut bw, &circles, tw, th, codec);
     bw.finish()
