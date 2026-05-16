@@ -195,6 +195,9 @@ fn main() {
     let shapes: Vec<(&str, ShapeType)> = vec![
         ("circle", ShapeType::Circle),
         ("triangle", ShapeType::Triangle),
+        ("square", ShapeType::Square),
+        ("rect", ShapeType::Rect),
+        ("rotrect", ShapeType::RotatedRect),
     ];
 
     let mut lines: Vec<String> = Vec::new();
@@ -213,7 +216,11 @@ fn main() {
             let mse = reconstruct_mse(rgb, W, H, &codec, search);
             let t = timed(rgb, W, H, &codec, search);
 
-            let total_eval = snap.eval_circle + snap.eval_triangle;
+            let total_eval = snap.eval_circle
+                + snap.eval_triangle
+                + snap.eval_rect
+                + snap.eval_square
+                + snap.eval_rotrect;
             let avg_px = if total_eval > 0 {
                 snap.pixels_touched as f64 / total_eval as f64
             } else {

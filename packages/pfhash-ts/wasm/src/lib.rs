@@ -26,6 +26,8 @@ struct CodecOptions {
     r_bits: u32,
     alpha_bits: u32,
     color_bits: u32,
+    /// ROTATED_RECT only; ignored for other shapes.
+    theta_bits: u32,
     /// Flat sRGB bytes, length = 3·K. `None`/empty ⇒ continuous color mode.
     palette: Option<Vec<u8>>,
     /// Effective K. Defaults to `palette.len() / 3` when palette is set.
@@ -43,6 +45,7 @@ impl Default for CodecOptions {
             r_bits: c.r_bits,
             alpha_bits: c.alpha_bits,
             color_bits: c.color_bits,
+            theta_bits: c.theta_bits,
             palette: None,
             palette_k: None,
         }
@@ -67,6 +70,7 @@ impl CodecOptions {
             r_bits: self.r_bits,
             alpha_bits: self.alpha_bits,
             color_bits: self.color_bits,
+            theta_bits: self.theta_bits,
             palette,
             palette_k: self.palette_k,
             ..Codec::default()

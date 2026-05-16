@@ -84,6 +84,9 @@ const shapeOptions: Array<{ value: ShapeType; label: string }> = [
   { value: Shape.DCT, label: "DCT" },
   { value: Shape.CIRCLE, label: "Circle" },
   { value: Shape.TRIANGLE, label: "Triangle" },
+  { value: Shape.SQUARE, label: "Square" },
+  { value: Shape.RECT, label: "Rect" },
+  { value: Shape.ROTATED_RECT, label: "RotRect" },
   { value: Shape.PIXEL, label: "Pixel" },
 ];
 

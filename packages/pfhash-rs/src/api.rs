@@ -11,6 +11,9 @@ use crate::colorspace::{linear_to_srgb_u8, srgb_u8_to_linear};
 use crate::shape::circle::{decode_render as circle_decode, encode_circle};
 use crate::shape::pixel::{decode_render as pixel_decode, encode_pixel, PixelSmooth};
 use crate::shape::quant::{aspect_from_code, read_color};
+use crate::shape::rect::{decode_render as rect_decode, encode_rect};
+use crate::shape::rotrect::{decode_render as rotrect_decode, encode_rotrect};
+use crate::shape::square::{decode_render as square_decode, encode_square};
 use crate::shape::triangle::{decode_render as triangle_decode, encode_triangle};
 use crate::shape::SearchOptions;
 
@@ -86,6 +89,15 @@ pub fn encode_rgb(rgb: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions
                 ShapeType::Triangle => {
                     encode_triangle(&target_lin, h, w, w, h, codec, opts.seed, &search)
                 }
+                ShapeType::Square => {
+                    encode_square(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                }
+                ShapeType::Rect => {
+                    encode_rect(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                }
+                ShapeType::RotatedRect => {
+                    encode_rotrect(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                }
                 ShapeType::Pixel => encode_pixel(&target_lin, h, w, w, h, codec),
                 ShapeType::Dct => unreachable!(),
             }
@@ -157,6 +169,9 @@ fn decode_shape(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, V
     match codec.shape {
         ShapeType::Circle => circle_decode(&mut br, codec, w, h, &mut canvas),
         ShapeType::Triangle => triangle_decode(&mut br, codec, w, h, &mut canvas),
+        ShapeType::Square => square_decode(&mut br, codec, w, h, &mut canvas),
+        ShapeType::Rect => rect_decode(&mut br, codec, w, h, &mut canvas),
+        ShapeType::RotatedRect => rotrect_decode(&mut br, codec, w, h, &mut canvas),
         _ => unreachable!(),
     }
     let mut rgba = vec![0u8; (w * h * 4) as usize];

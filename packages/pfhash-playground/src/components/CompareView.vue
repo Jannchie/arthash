@@ -22,14 +22,15 @@ interface Variant {
 // A curated comparison set covering all four shape families plus a small
 // n_shapes sweep within Circle (the cheapest, most-used mode).
 const VARIANTS: Variant[] = [
-  { id: "dct",         label: "DCT",            shape: Shape.DCT,      nShapes: 0,  useSvg: false },
-  { id: "circle-4",    label: "Circle · n=4",   shape: Shape.CIRCLE,   nShapes: 4,  useSvg: true  },
-  { id: "circle-8",    label: "Circle · n=8",   shape: Shape.CIRCLE,   nShapes: 8,  useSvg: true  },
-  { id: "circle-12",   label: "Circle · n=12",  shape: Shape.CIRCLE,   nShapes: 12, useSvg: true  },
-  { id: "circle-24",   label: "Circle · n=24",  shape: Shape.CIRCLE,   nShapes: 24, useSvg: true  },
-  { id: "triangle-12", label: "Triangle · n=12",shape: Shape.TRIANGLE, nShapes: 12, useSvg: true  },
-  { id: "triangle-24", label: "Triangle · n=24",shape: Shape.TRIANGLE, nShapes: 24, useSvg: true  },
-  { id: "pixel-12",    label: "Pixel · n=12",   shape: Shape.PIXEL,    nShapes: 12, useSvg: true  },
+  { id: "dct",          label: "DCT",              shape: Shape.DCT,          nShapes: 0,  useSvg: false },
+  { id: "circle-12",    label: "Circle · n=12",    shape: Shape.CIRCLE,       nShapes: 12, useSvg: true  },
+  { id: "circle-24",    label: "Circle · n=24",    shape: Shape.CIRCLE,       nShapes: 24, useSvg: true  },
+  { id: "triangle-12",  label: "Triangle · n=12",  shape: Shape.TRIANGLE,     nShapes: 12, useSvg: true  },
+  { id: "triangle-24",  label: "Triangle · n=24",  shape: Shape.TRIANGLE,     nShapes: 24, useSvg: true  },
+  { id: "square-12",    label: "Square · n=12",    shape: Shape.SQUARE,       nShapes: 12, useSvg: true  },
+  { id: "rect-12",      label: "Rect · n=12",      shape: Shape.RECT,         nShapes: 12, useSvg: true  },
+  { id: "rotrect-12",   label: "RotRect · n=12",   shape: Shape.ROTATED_RECT, nShapes: 12, useSvg: true  },
+  { id: "pixel-12",     label: "Pixel · n=12",     shape: Shape.PIXEL,        nShapes: 12, useSvg: true  },
 ];
 
 const cols = ref(4);

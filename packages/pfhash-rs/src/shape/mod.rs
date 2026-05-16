@@ -1,16 +1,20 @@
-//! Shape modes: CIRCLE / TRIANGLE / PIXEL.
+//! Shape modes: CIRCLE / TRIANGLE / PIXEL / SQUARE / RECT / ROTATED_RECT.
 //!
-//! All three modes share an aspect-coded header + per-shape body, encoded
+//! All modes share an aspect-coded header + per-shape body, encoded
 //! LSB-first via `bitio`. See SPEC §5.2 / §5.3 / §5.4.
 
 pub mod circle;
 pub mod integral;
+pub mod integral2d;
 pub mod options;
 pub mod pixel;
 pub mod quant;
 pub mod raster;
+pub mod rect;
 pub mod residual;
 pub mod rng;
+pub mod rotrect;
+pub mod square;
 pub mod svg;
 pub mod triangle;
 

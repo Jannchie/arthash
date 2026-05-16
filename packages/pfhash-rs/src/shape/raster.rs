@@ -17,6 +17,9 @@ pub mod counters {
     thread_local! {
         pub(crate) static EVAL_CIRCLE: Cell<u64> = const { Cell::new(0) };
         pub(crate) static EVAL_TRIANGLE: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static EVAL_RECT: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static EVAL_SQUARE: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static EVAL_ROTRECT: Cell<u64> = const { Cell::new(0) };
         pub(crate) static PIXELS_TOUCHED: Cell<u64> = const { Cell::new(0) };
     }
 
@@ -24,6 +27,9 @@ pub mod counters {
     pub struct Snapshot {
         pub eval_circle: u64,
         pub eval_triangle: u64,
+        pub eval_rect: u64,
+        pub eval_square: u64,
+        pub eval_rotrect: u64,
         pub pixels_touched: u64,
     }
 
@@ -32,6 +38,9 @@ pub mod counters {
         {
             EVAL_CIRCLE.with(|c| c.set(0));
             EVAL_TRIANGLE.with(|c| c.set(0));
+            EVAL_RECT.with(|c| c.set(0));
+            EVAL_SQUARE.with(|c| c.set(0));
+            EVAL_ROTRECT.with(|c| c.set(0));
             PIXELS_TOUCHED.with(|c| c.set(0));
         }
     }
@@ -42,6 +51,9 @@ pub mod counters {
             Snapshot {
                 eval_circle: EVAL_CIRCLE.with(|c| c.get()),
                 eval_triangle: EVAL_TRIANGLE.with(|c| c.get()),
+                eval_rect: EVAL_RECT.with(|c| c.get()),
+                eval_square: EVAL_SQUARE.with(|c| c.get()),
+                eval_rotrect: EVAL_ROTRECT.with(|c| c.get()),
                 pixels_touched: PIXELS_TOUCHED.with(|c| c.get()),
             }
         }
@@ -350,6 +362,116 @@ pub fn apply_circle(
             }
         }
     }
+}
+
+/// Apply (commit) an axis-aligned RECT onto the canvas.
+pub fn apply_rect(
+    canvas: &mut [f32],
+    th: i32,
+    tw: i32,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    alpha: f32,
+    color: &[f32; 3],
+) {
+    let xmin = x0.min(x1).max(0);
+    let xmax = x0.max(x1).min(tw - 1);
+    let ymin = y0.min(y1).max(0);
+    let ymax = y0.max(y1).min(th - 1);
+    if xmin > xmax || ymin > ymax {
+        return;
+    }
+    let one_ma = 1.0 - alpha;
+    for y in ymin..=ymax {
+        let row_off = (y * tw) as usize * 3;
+        for x in xmin..=xmax {
+            let p = row_off + (x as usize) * 3;
+            canvas[p] = one_ma * canvas[p] + alpha * color[0];
+            canvas[p + 1] = one_ma * canvas[p + 1] + alpha * color[1];
+            canvas[p + 2] = one_ma * canvas[p + 2] + alpha * color[2];
+        }
+    }
+}
+
+/// Range of rows touched by an axis-aligned rect, clamped to canvas. Used to
+/// trigger row-wise integral updates after [`apply_rect`].
+pub fn rect_row_range(y0: i32, y1: i32, h: u32) -> (i32, i32) {
+    let ymin = y0.min(y1).max(0);
+    let ymax = y0.max(y1).min(h as i32 - 1);
+    (ymin, ymax)
+}
+
+/// Apply (commit) a rotated rect — generic 4-vertex convex polygon scanline.
+/// Vertices may be supplied in either winding order; the half-plane test
+/// auto-detects sign from the (oriented) signed area of the first triangle.
+pub fn apply_quad(
+    canvas: &mut [f32],
+    th: i32,
+    tw: i32,
+    v: [(i32, i32); 4],
+    alpha: f32,
+    color: &[f32; 3],
+) {
+    let xmin = v.iter().map(|p| p.0).min().unwrap().max(0);
+    let xmax = v.iter().map(|p| p.0).max().unwrap().min(tw - 1);
+    let ymin = v.iter().map(|p| p.1).min().unwrap().max(0);
+    let ymax = v.iter().map(|p| p.1).max().unwrap().min(th - 1);
+    if xmin > xmax || ymin > ymax {
+        return;
+    }
+    let area2 = (v[1].0 - v[0].0) * (v[2].1 - v[0].1)
+        - (v[1].1 - v[0].1) * (v[2].0 - v[0].0);
+    if area2 == 0 {
+        return;
+    }
+    let sign_pos = area2 > 0;
+
+    // Precompute 4 edge functions e_i(x, y) = (x_{i+1}-x_i)(y-y_i) - (y_{i+1}-y_i)(x-x_i).
+    // Inside is e_i ≥ 0 for sign_pos else ≤ 0.
+    let mut a = [0i32; 4]; // ∂e/∂x
+    let mut b = [0i32; 4]; // ∂e/∂y
+    let mut row_e = [0i32; 4]; // value at (xmin, ymin)
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        a[i] = -(v[j].1 - v[i].1);
+        b[i] = v[j].0 - v[i].0;
+        row_e[i] = (v[j].0 - v[i].0) * (ymin - v[i].1)
+            - (v[j].1 - v[i].1) * (xmin - v[i].0);
+    }
+    let one_ma = 1.0 - alpha;
+    for y in ymin..=ymax {
+        let mut e = row_e;
+        let row_off = (y * tw) as usize * 3;
+        for x in xmin..=xmax {
+            let inside = if sign_pos {
+                e[0] >= 0 && e[1] >= 0 && e[2] >= 0 && e[3] >= 0
+            } else {
+                e[0] <= 0 && e[1] <= 0 && e[2] <= 0 && e[3] <= 0
+            };
+            if inside {
+                let p = row_off + (x as usize) * 3;
+                canvas[p] = one_ma * canvas[p] + alpha * color[0];
+                canvas[p + 1] = one_ma * canvas[p + 1] + alpha * color[1];
+                canvas[p + 2] = one_ma * canvas[p + 2] + alpha * color[2];
+            }
+            for k in 0..4 {
+                e[k] += a[k];
+            }
+        }
+        for k in 0..4 {
+            row_e[k] += b[k];
+        }
+    }
+}
+
+/// Row range touched by a quad, clamped to canvas. For row-wise integral
+/// updates after [`apply_quad`].
+pub fn quad_row_range(v: [(i32, i32); 4], h: u32) -> (i32, i32) {
+    let ymin = v.iter().map(|p| p.1).min().unwrap().max(0);
+    let ymax = v.iter().map(|p| p.1).max().unwrap().min(h as i32 - 1);
+    (ymin, ymax)
 }
 
 /// Apply (commit) a TRIANGLE onto the canvas using the same edge functions.

@@ -8,10 +8,13 @@ use crate::colorspace::srgb_u8_to_linear;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShapeType {
-    Dct,      // V4 thumbhash-style (~21 B)
-    Circle,   // SQIP-style overlapping circles
-    Triangle, // Primitive-style triangle mosaic
-    Pixel,    // Retro-palette pixel mosaic
+    Dct,         // V4 thumbhash-style (~21 B)
+    Circle,      // SQIP-style overlapping circles
+    Triangle,    // Primitive-style triangle mosaic
+    Pixel,       // Retro-palette pixel mosaic
+    Square,      // Axis-aligned square (cx, cy, s)
+    Rect,        // Axis-aligned rectangle (cx, cy, w, h)
+    RotatedRect, // Rotated rectangle (cx, cy, w, h, theta)
 }
 
 impl ShapeType {
@@ -22,6 +25,9 @@ impl ShapeType {
             "circle" => Some(Self::Circle),
             "triangle" => Some(Self::Triangle),
             "pixel" => Some(Self::Pixel),
+            "square" => Some(Self::Square),
+            "rect" => Some(Self::Rect),
+            "rotrect" | "rotated_rect" => Some(Self::RotatedRect),
             _ => None,
         }
     }
@@ -36,9 +42,13 @@ pub struct Codec {
     pub n_shapes: u32,
     pub cx_bits: u32,
     pub cy_bits: u32,
+    /// CIRCLE: radius bits. SQUARE: side bits. RECT/ROTATED_RECT: per-axis
+    /// extent bits (width and height each get this many bits).
     pub r_bits: u32,
     pub alpha_bits: u32,
     pub color_bits: u32, // 16 = RGB-565, 24 = RGB-888
+    /// ROTATED_RECT only: bits for theta ∈ [0, π). Unused by other modes.
+    pub theta_bits: u32,
 
     /// (K, 3) uint8 sRGB palette, row-major flat. `None` ⇒ continuous color.
     pub palette: Option<Vec<u8>>,
@@ -61,6 +71,7 @@ impl Default for Codec {
             r_bits: 4,
             alpha_bits: 3,
             color_bits: 16,
+            theta_bits: 5,
             palette: None,
             palette_k: None,
             alpha_levels: None,

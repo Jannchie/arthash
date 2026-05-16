@@ -395,6 +395,97 @@ pub fn collect_triangle_sums_integral(
     sums
 }
 
+/// Rotated-rect (or general convex 4-vertex polygon) ΔSSE via the same
+/// per-row half-plane span as the triangle path, with one extra edge.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_quad_integral(
+    integral: &Integral,
+    h: u32,
+    w: u32,
+    v: [(i32, i32); 4],
+    alpha: f32,
+    palette: Option<&[f32]>,
+) -> EvalResult {
+    #[cfg(feature = "bench-counters")]
+    counters::EVAL_ROTRECT.with(|c| c.set(c.get() + 1));
+    collect_quad_sums_integral(integral, h, w, v).finalize(alpha, palette)
+}
+
+/// Quad analogue of [`collect_triangle_sums_integral`]. Vertices may be in
+/// either winding order — orientation is auto-detected from the signed
+/// area of the (v0, v1, v2) sub-triangle.
+pub fn collect_quad_sums_integral(
+    integral: &Integral,
+    h: u32,
+    w: u32,
+    v: [(i32, i32); 4],
+) -> ShapeSums {
+    let mut sums = ShapeSums::new();
+    let area2 = (v[1].0 - v[0].0) * (v[2].1 - v[0].1)
+        - (v[1].1 - v[0].1) * (v[2].0 - v[0].0);
+    if area2 == 0 {
+        return sums;
+    }
+    let ymin = v.iter().map(|p| p.1).min().unwrap().max(0);
+    let ymax = v.iter().map(|p| p.1).max().unwrap().min(h as i32 - 1);
+    if ymin > ymax {
+        return sums;
+    }
+    let sign_pos = area2 > 0;
+    let sign = if sign_pos { 1i64 } else { -1i64 };
+
+    let mut a = [0i64; 4];
+    let mut c_row = [0i64; 4];
+    let mut c_step = [0i64; 4];
+    for i in 0..4 {
+        let (x_i, y_i) = v[i];
+        let (x_j, y_j) = v[(i + 1) % 4];
+        let a_i = -(y_j - y_i) as i64;
+        let step = (x_j - x_i) as i64;
+        let c0 = (y_j - y_i) as i64 * x_i as i64
+            + (x_j - x_i) as i64 * (ymin - y_i) as i64;
+        a[i] = sign * a_i;
+        c_step[i] = sign * step;
+        c_row[i] = sign * c0;
+    }
+
+    for y in ymin..=ymax {
+        let mut x_lo: i64 = 0;
+        let mut x_hi: i64 = (w as i64) - 1;
+        let mut empty = false;
+        for i in 0..4 {
+            let ai = a[i];
+            let ci = c_row[i];
+            if ai > 0 {
+                x_lo = x_lo.max(div_ceil_i64(-ci, ai));
+            } else if ai < 0 {
+                x_hi = x_hi.min(div_floor_i64(-ci, ai));
+            } else if ci < 0 {
+                empty = true;
+                break;
+            }
+        }
+        if !empty && x_lo <= x_hi {
+            let x_l = x_lo.max(0) as usize;
+            let x_r = (x_hi as usize).min(integral.w - 1);
+            if x_l <= x_r {
+                integral.add_span(
+                    y as usize, x_l, x_r,
+                    &mut sums.s_t, &mut sums.s_c,
+                    &mut sums.s_t2, &mut sums.s_c2, &mut sums.s_tc,
+                );
+                sums.count += (x_r - x_l + 1) as u32;
+            }
+        }
+        for i in 0..4 {
+            c_row[i] += c_step[i];
+        }
+    }
+    #[cfg(feature = "bench-counters")]
+    counters::PIXELS_TOUCHED.with(|c| c.set(c.get() + sums.count as u64));
+    sums
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

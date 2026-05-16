@@ -25,6 +25,9 @@
 //! form. Both return [`SvgError::UnsupportedShape`].
 
 use super::quant::{aspect_from_code, q_to_alpha, q_to_r, read_color};
+use super::rect::decode_rect_at;
+use super::rotrect::decode_rotrect_at;
+use super::square::decode_square_at;
 use crate::bitio::BitReader;
 use crate::codec::{Codec, ShapeType};
 use crate::colorspace::linear_to_srgb_u8;
@@ -208,13 +211,69 @@ fn triangle_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mu
     }
 }
 
-/// Render a CIRCLE or TRIANGLE shape-mode hash as a byte-optimized SVG
-/// string.
+fn rect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+    for _ in 0..codec.n_shapes {
+        let (cx, cy, rw, rh, color, alpha) = decode_rect_at(br, codec, w, h);
+        let x = cx - rw / 2;
+        let y = cy - rh / 2;
+        let fill = color_to_hex(&color);
+        let opacity = opacity_attr(alpha);
+        write!(
+            out,
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}/>",
+            x, y, rw.max(0), rh.max(0), fill, opacity
+        )
+        .unwrap();
+    }
+}
+
+fn square_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+    for _ in 0..codec.n_shapes {
+        let (cx, cy, s, color, alpha) = decode_square_at(br, codec, w, h);
+        let x = cx - s / 2;
+        let y = cy - s / 2;
+        let fill = color_to_hex(&color);
+        let opacity = opacity_attr(alpha);
+        write!(
+            out,
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}/>",
+            x, y, s.max(0), s.max(0), fill, opacity
+        )
+        .unwrap();
+    }
+}
+
+fn rotrect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+    for _ in 0..codec.n_shapes {
+        let (cx, cy, rw, rh, theta_deg, color, alpha) = decode_rotrect_at(br, codec, w, h);
+        let x = cx - rw / 2;
+        let y = cy - rh / 2;
+        let fill = color_to_hex(&color);
+        let opacity = opacity_attr(alpha);
+        write!(
+            out,
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{} transform=\"rotate({} {} {})\"/>",
+            x, y, rw.max(0), rh.max(0), fill, opacity,
+            fmt_num(theta_deg), cx, cy
+        )
+        .unwrap();
+    }
+}
+
+/// Render a CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT shape-mode hash
+/// as a byte-optimized SVG string.
 ///
 /// # Errors
 /// Returns [`SvgError::UnsupportedShape`] for DCT and PIXEL codecs.
 pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<String, SvgError> {
-    if !matches!(codec.shape, ShapeType::Circle | ShapeType::Triangle) {
+    if !matches!(
+        codec.shape,
+        ShapeType::Circle
+            | ShapeType::Triangle
+            | ShapeType::Square
+            | ShapeType::Rect
+            | ShapeType::RotatedRect
+    ) {
         return Err(SvgError::UnsupportedShape(codec.shape));
     }
 
@@ -242,6 +301,9 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
     match codec.shape {
         ShapeType::Circle => circle_elements(&mut br, codec, w, h, &mut body),
         ShapeType::Triangle => triangle_elements(&mut br, codec, w, h, &mut body),
+        ShapeType::Square => square_elements(&mut br, codec, w, h, &mut body),
+        ShapeType::Rect => rect_elements(&mut br, codec, w, h, &mut body),
+        ShapeType::RotatedRect => rotrect_elements(&mut br, codec, w, h, &mut body),
         _ => unreachable!(),
     }
 
@@ -338,6 +400,45 @@ mod tests {
         // 1 background + 4 circles = 5 fill="..." attrs.
         assert_eq!(svg.matches("fill=\"").count(), 5);
         assert_eq!(svg.matches("<circle ").count(), 4);
+    }
+
+    #[test]
+    fn rect_round_trip_parses() {
+        let codec = Codec { shape: ShapeType::Rect, n_shapes: 3, ..Codec::default() };
+        let rgb = solid_rgb(48, 48, [60, 120, 200]);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        assert_eq!(svg.matches("<rect ").count(), 3);
+        // Background path + 3 rects = 4 fill attrs.
+        assert_eq!(svg.matches("fill=\"").count(), 4);
+        assert!(!svg.contains("transform="));
+    }
+
+    #[test]
+    fn square_round_trip_parses() {
+        let codec = Codec { shape: ShapeType::Square, n_shapes: 3, ..Codec::default() };
+        let rgb = solid_rgb(48, 48, [60, 120, 200]);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        assert_eq!(svg.matches("<rect ").count(), 3);
+        // Every emitted rect should have width == height.
+        for rect in svg.split("<rect ").skip(1) {
+            let rect = rect.split("/>").next().unwrap();
+            let w = rect.split("width=\"").nth(1).and_then(|s| s.split('"').next()).unwrap();
+            let h = rect.split("height=\"").nth(1).and_then(|s| s.split('"').next()).unwrap();
+            assert_eq!(w, h, "square's width != height in svg fragment: {rect}");
+        }
+    }
+
+    #[test]
+    fn rotrect_round_trip_parses() {
+        let codec = Codec { shape: ShapeType::RotatedRect, n_shapes: 3, ..Codec::default() };
+        let rgb = solid_rgb(48, 48, [60, 120, 200]);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        assert_eq!(svg.matches("<rect ").count(), 3);
+        // Every rotated rect carries a transform=rotate(...) attribute.
+        assert_eq!(svg.matches(" transform=\"rotate(").count(), 3);
     }
 
     #[test]

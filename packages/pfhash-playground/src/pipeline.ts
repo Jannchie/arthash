@@ -205,7 +205,14 @@ export function paletteToBytes(palette: Palette): Uint8Array {
 }
 
 export function supportsSvg(shape: ShapeType): boolean {
-  return shape === Shape.CIRCLE || shape === Shape.TRIANGLE || shape === Shape.PIXEL;
+  return (
+    shape === Shape.CIRCLE
+    || shape === Shape.TRIANGLE
+    || shape === Shape.SQUARE
+    || shape === Shape.RECT
+    || shape === Shape.ROTATED_RECT
+    || shape === Shape.PIXEL
+  );
 }
 
 /** Pick (gw, gh) that targets ~`nTarget` cells while making each cell as

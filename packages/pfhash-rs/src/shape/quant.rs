@@ -129,3 +129,63 @@ pub fn quant_xy(cx: f32, cy: f32, tw: u32, th: u32, cx_bits: u32, cy_bits: u32) 
     let y_q = (cy / th_m1 * (y_max as f32)).round().clamp(0.0, y_max as f32) as u32;
     (x_q, y_q)
 }
+
+// --- per-axis extent (RECT / ROTATED_RECT width and height; SQUARE side) ---
+//
+// Log-spaced quantization between `dim_min = max(1, max_dim/24)` and
+// `dim_max = max_dim`, matching `r_to_q`'s shape. Used independently per axis
+// for rect, so width and height can have different absolute resolutions when
+// the canvas is non-square.
+
+pub fn dim_to_q(dim: f32, max_dim: u32, bits: u32) -> u32 {
+    let levels = (1u32 << bits) - 1;
+    let dim_min = (1.0f32).max((max_dim as f32) / 24.0);
+    let dim_max = (dim_min + 1.0).max(max_dim as f32);
+    let dim = dim.max(dim_min);
+    let t = (dim / dim_min).log2() / (dim_max / dim_min).log2();
+    (t * (levels as f32)).round().clamp(0.0, levels as f32) as u32
+}
+
+pub fn q_to_dim(q: u32, max_dim: u32, bits: u32) -> f32 {
+    let levels = (1u32 << bits) - 1;
+    let dim_min = (1.0f32).max((max_dim as f32) / 24.0);
+    let dim_max = (dim_min + 1.0).max(max_dim as f32);
+    if levels == 0 {
+        return dim_min;
+    }
+    let t = (q as f32) / (levels as f32);
+    dim_min * (dim_max / dim_min).powf(t)
+}
+
+// --- rotation angle (ROTATED_RECT only) ---
+//
+// θ is stored in `[0, π)`. A rectangle rotated by π is centro-symmetrically
+// identical to itself, so anything beyond π is redundant. With `theta_bits=5`
+// (32 levels) the resolution is ≈ 5.6° per step; finer is available by
+// raising `codec.theta_bits`.
+
+pub fn theta_to_q(theta_rad: f32, bits: u32) -> u32 {
+    let levels = 1u32 << bits;
+    if levels == 0 {
+        return 0;
+    }
+    let two_pi = std::f32::consts::TAU;
+    // Wrap to [0, π) first.
+    let mut t = theta_rad % std::f32::consts::PI;
+    if t < 0.0 {
+        t += std::f32::consts::PI;
+    }
+    let _ = two_pi; // (kept as a doc anchor — see `q_to_theta` note below)
+    let q = (t / std::f32::consts::PI * (levels as f32)).floor() as i64;
+    q.clamp(0, (levels as i64) - 1) as u32
+}
+
+pub fn q_to_theta(q: u32, bits: u32) -> f32 {
+    let levels = 1u32 << bits;
+    if levels == 0 {
+        return 0.0;
+    }
+    // Bucket center: q + 0.5 to make the encode→decode round-trip stable
+    // against floor()-tie boundaries.
+    (q as f32 + 0.5) / (levels as f32) * std::f32::consts::PI
+}

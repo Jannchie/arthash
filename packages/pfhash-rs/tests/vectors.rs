@@ -233,6 +233,85 @@ fn circle_roundtrip_solid() {
 }
 
 #[test]
+fn rect_roundtrip_gradient() {
+    let (w, h) = (48u32, 48u32);
+    let n = (w * h) as usize;
+    let mut rgb = vec![0u8; n * 3];
+    for y in 0..h {
+        for x in 0..w {
+            let p = ((y * w + x) * 3) as usize;
+            rgb[p] = ((x as f32) * 255.0 / ((w - 1) as f32)).round() as u8;
+            rgb[p + 1] = ((y as f32) * 255.0 / ((h - 1) as f32)).round() as u8;
+            rgb[p + 2] = 64;
+        }
+    }
+    let codec = Codec {
+        shape: ShapeType::Rect,
+        n_shapes: 6,
+        ..Codec::default()
+    };
+    let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+    assert!(!hash.is_empty());
+    let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
+    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
+    // Gradient should still go left→right red-ish.
+    let mid_y = out_h / 2;
+    let left = rgba[((mid_y * out_w) * 4) as usize] as i32;
+    let right = rgba[(((mid_y + 1) * out_w - 1) * 4) as usize] as i32;
+    assert!(right > left, "gradient direction lost: left={left}, right={right}");
+}
+
+#[test]
+fn square_roundtrip_solid() {
+    let (w, h) = (48u32, 48u32);
+    let n = (w * h) as usize;
+    let mut rgb = vec![0u8; n * 3];
+    for i in 0..n {
+        rgb[i * 3] = 200;
+        rgb[i * 3 + 1] = 100;
+        rgb[i * 3 + 2] = 50;
+    }
+    let codec = Codec {
+        shape: ShapeType::Square,
+        n_shapes: 6,
+        ..Codec::default()
+    };
+    let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+    assert!(!hash.is_empty());
+    let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
+    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
+    let mid = (((out_h / 2) * out_w + out_w / 2) * 4) as usize;
+    assert!(rgba[mid] > 150, "expected reddish center, got {}", rgba[mid]);
+}
+
+#[test]
+fn rotrect_roundtrip_gradient() {
+    let (w, h) = (48u32, 48u32);
+    let n = (w * h) as usize;
+    let mut rgb = vec![0u8; n * 3];
+    for y in 0..h {
+        for x in 0..w {
+            let p = ((y * w + x) * 3) as usize;
+            rgb[p] = ((x as f32) * 255.0 / ((w - 1) as f32)).round() as u8;
+            rgb[p + 1] = ((y as f32) * 255.0 / ((h - 1) as f32)).round() as u8;
+            rgb[p + 2] = 64;
+        }
+    }
+    let codec = Codec {
+        shape: ShapeType::RotatedRect,
+        n_shapes: 6,
+        ..Codec::default()
+    };
+    let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+    assert!(!hash.is_empty());
+    let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
+    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
+}
+
+#[test]
 fn triangle_roundtrip_gradient() {
     let (w, h) = (48u32, 29u32);
     let n = (w * h) as usize;

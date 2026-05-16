@@ -29,6 +29,9 @@ export const Shape = {
   CIRCLE: "circle",
   TRIANGLE: "triangle",
   PIXEL: "pixel",
+  SQUARE: "square",
+  RECT: "rect",
+  ROTATED_RECT: "rotrect",
 } as const;
 export type Shape = (typeof Shape)[keyof typeof Shape];
 
@@ -36,13 +39,16 @@ export type Shape = (typeof Shape)[keyof typeof Shape];
  *  needs the same codec used at encode time. */
 export interface CodecOptions {
   shape?: Shape;
-  /** Number of shapes (CIRCLE / TRIANGLE / PIXEL). Default 12. */
+  /** Number of shapes (CIRCLE / TRIANGLE / PIXEL / SQUARE / RECT / ROTATED_RECT). Default 12. */
   nShapes?: number;
   cxBits?: number;
   cyBits?: number;
+  /** CIRCLE: radius bits. SQUARE: side bits. RECT/ROTATED_RECT: per-axis extent bits. */
   rBits?: number;
   alphaBits?: number;
   colorBits?: 16 | 24;
+  /** ROTATED_RECT only: bits for theta ∈ [0, π). Default 5 (≈5.6°/level). */
+  thetaBits?: number;
   /** Optional sRGB palette, flat row-major bytes (length = 3·K, K ∈ {2,4,8,16,32,64,128,256,512,1024}).
    *  When set, the codec stores `log2(K)` bits per shape (palette index) instead of
    *  `colorBits` — shrinks the hash but requires the **same palette** at decode time.
@@ -113,6 +119,7 @@ function codecToObj(opts: CodecOptions | undefined): Record<string, unknown> {
   if (o.rBits !== undefined) out.r_bits = o.rBits;
   if (o.alphaBits !== undefined) out.alpha_bits = o.alphaBits;
   if (o.colorBits !== undefined) out.color_bits = o.colorBits;
+  if (o.thetaBits !== undefined) out.theta_bits = o.thetaBits;
   if (o.palette !== undefined && o.palette.length > 0) {
     // serde-wasm-bindgen accepts a plain array of numbers for Vec<u8>; pass as
     // Array to avoid TypedArray vs raw-bytes interpretation ambiguity.
@@ -163,8 +170,9 @@ export function decode(hash: Uint8Array, opts?: DecodeOptions): DecodeResult {
   return out;
 }
 
-/** Render a CIRCLE or TRIANGLE hash as a compact SVG string.
- *  Throws for DCT and PIXEL modes (no natural SVG primitive form). */
+/** Render a shape-mode hash (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT)
+ *  as a compact SVG string. Throws for DCT and PIXEL modes (no natural SVG
+ *  primitive form). */
 export function toSvg(hash: Uint8Array, opts?: SvgRenderOptions): string {
   assertReady();
   return wasmToSvg(
