@@ -3,8 +3,8 @@
 Rust SDK for arthash — the canonical implementation of the byte-format
 contract in [`docs/SPEC.md`](../../docs/SPEC.md). The Python SDK
 (`packages/arthash-py`) is a PyO3 wrapper around this crate; the TypeScript
-SDK (`packages/arthash-ts`) is a wasm-bindgen wrapper. Four shape modes share
-one `Codec` API, hash bytes are not self-describing, decoder needs the same
+SDK (`packages/arthash-ts`) is a wasm-bindgen wrapper. Seven modes share one
+`Codec` API, hash bytes are not self-describing, decoder needs the same
 `Codec`.
 
 Status: **functional, conformance-tested against the cross-language vectors at
@@ -12,12 +12,15 @@ Status: **functional, conformance-tested against the cross-language vectors at
 
 ## Modes
 
-| Mode       | Look                                       | Typical bytes |
-|------------|--------------------------------------------|---------------|
-| `Dct`      | thumbhash-style blurry thumbnail (V4)      | ~21           |
-| `Circle`   | SQIP-style overlapping circles             | 8–24          |
-| `Triangle` | Primitive-style triangle mosaic            | 12–32         |
-| `Pixel`    | Retro-palette pixel mosaic                 | 8–32          |
+| Mode            | Look                                       | Typical bytes |
+|-----------------|--------------------------------------------|---------------|
+| `Dct`           | thumbhash-style blurry thumbnail (V4)      | ~21           |
+| `Circle`        | SQIP-style overlapping circles             | 8–24          |
+| `Triangle`      | Primitive-style triangle mosaic            | 12–32         |
+| `Square`        | Axis-aligned squares (cx, cy, side)        | 8–24          |
+| `Rect`          | Axis-aligned rectangles (cx, cy, w, h)     | 10–28         |
+| `RotatedRect`   | Rotated rectangles (+theta)                | 12–32         |
+| `Pixel`         | Retro-palette pixel mosaic                 | 8–32          |
 
 ## Quick start
 

@@ -6,12 +6,15 @@
 
 //! arthash — placeholder-image hash family (Rust SDK).
 //!
-//! Four modes share one `Codec` API:
+//! Seven modes share one `Codec` API:
 //!
-//! * `Dct`      — V4 thumbhash-style hash (~21 B). Default codec.
-//! * `Circle`   — SQIP-style overlapping circles.
-//! * `Triangle` — Primitive-style triangle mosaic.
-//! * `Pixel`    — Retro-palette pixel mosaic.
+//! * `Dct`         — V4 thumbhash-style hash (~21 B). Default codec.
+//! * `Circle`      — SQIP-style overlapping circles.
+//! * `Triangle`    — Primitive-style triangle mosaic.
+//! * `Square`      — Axis-aligned squares (cx, cy, side).
+//! * `Rect`        — Axis-aligned rectangles (cx, cy, w, h).
+//! * `RotatedRect` — Rotated rectangles (cx, cy, w, h, theta).
+//! * `Pixel`       — Retro-palette pixel mosaic.
 //!
 //! The byte format is defined by `docs/SPEC.md`; this crate implements
 //! that specification.

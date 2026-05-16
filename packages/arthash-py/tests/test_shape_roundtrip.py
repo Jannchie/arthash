@@ -93,6 +93,41 @@ def test_triangle_deterministic_with_seed(rgb_random_seed42):
     assert h1 == h2
 
 
+# ----------------------------- SQUARE / RECT / ROTATED_RECT -----------------------------
+
+@pytest.mark.parametrize(
+    "shape",
+    [ShapeType.SQUARE, ShapeType.RECT, ShapeType.ROTATED_RECT],
+)
+def test_rect_family_continuous_roundtrip(rgb_random_seed42, shape):
+    codec = Codec(shape=shape, n_shapes=4)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    assert len(h) == codec.bytes_total()
+    w, hh, arr = decode(h, codec, base_size=64)
+    assert arr.shape == (hh, w, 3)
+    assert arr.dtype == np.uint8
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [ShapeType.SQUARE, ShapeType.RECT, ShapeType.ROTATED_RECT],
+)
+def test_rect_family_deterministic_with_seed(rgb_random_seed42, shape):
+    codec = Codec(shape=shape, n_shapes=4)
+    assert encode(rgb_random_seed42, codec, seed=42) == encode(rgb_random_seed42, codec, seed=42)
+
+
+def test_rotated_rect_theta_bits_changes_bytes(rgb_random_seed42):
+    """theta_bits is wired through PyO3 → bumping it widens hash bytes."""
+    narrow = Codec(shape=ShapeType.ROTATED_RECT, n_shapes=4, theta_bits=3)
+    wide = Codec(shape=ShapeType.ROTATED_RECT, n_shapes=4, theta_bits=8)
+    assert wide.bytes_total() > narrow.bytes_total()
+    h_narrow = encode(rgb_random_seed42, narrow, seed=0)
+    h_wide = encode(rgb_random_seed42, wide, seed=0)
+    assert len(h_narrow) == narrow.bytes_total()
+    assert len(h_wide) == wide.bytes_total()
+
+
 # ----------------------------- pixel_smooth options -----------------------------
 
 @pytest.mark.parametrize("smooth", ["nearest", "bilinear"])

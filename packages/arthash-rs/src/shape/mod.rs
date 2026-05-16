@@ -1,7 +1,8 @@
-//! Shape modes: CIRCLE / TRIANGLE / PIXEL / SQUARE / RECT / ROTATED_RECT.
+//! Shape modes: CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT / PIXEL.
 //!
 //! All modes share an aspect-coded header + per-shape body, encoded
-//! LSB-first via `bitio`. See SPEC §5.2 / §5.3 / §5.4.
+//! LSB-first via `bitio`. See SPEC §5.2 (CIRCLE), §5.3 (TRIANGLE),
+//! §5.4 (SQUARE), §5.5 (RECT), §5.6 (ROTATED_RECT), §5.7 (PIXEL).
 
 pub mod circle;
 pub mod integral;

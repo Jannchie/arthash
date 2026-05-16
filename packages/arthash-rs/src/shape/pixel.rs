@@ -1,4 +1,4 @@
-//! PIXEL mode — fixed-grid mosaic. SPEC §5.4.
+//! PIXEL mode — fixed-grid mosaic. SPEC §5.7.
 //!
 //! Grid `(gw, gh)` is derived from the QUANTIZED aspect (the same value the
 //! decoder reconstructs from the header), so both sides agree on cell count.

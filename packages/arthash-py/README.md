@@ -1,13 +1,16 @@
 # arthash
 
-Placeholder-image hash family. Four modes share a unified Codec API:
+Placeholder-image hash family. Seven modes share a unified Codec API:
 
-| Shape    | Bytes (typical) | Notes |
-|----------|-----------------|-------|
-| DCT      | ~21 B           | ThumbHash V4 derivative. Default. |
-| CIRCLE   | varies          | SQIP-style overlapping circles. |
-| TRIANGLE | varies          | fogleman/primitive-style triangle mosaic. |
-| PIXEL    | varies          | Retro-palette pixel mosaic. |
+| Shape          | Bytes (typical) | Notes |
+|----------------|-----------------|-------|
+| DCT            | ~21 B           | ThumbHash V4 derivative. Default. |
+| CIRCLE         | varies          | SQIP-style overlapping circles. |
+| TRIANGLE       | varies          | fogleman/primitive-style triangle mosaic. |
+| SQUARE         | varies          | Axis-aligned squares (cx, cy, side). |
+| RECT           | varies          | Axis-aligned rectangles (cx, cy, w, h). |
+| ROTATED_RECT   | varies          | Rotated rectangles — `theta_bits` tunes angle steps. |
+| PIXEL          | varies          | Retro-palette pixel mosaic. |
 
 The implementation is a thin Python wrapper around the `arthash-rs` Rust crate
 exposed via PyO3 — encode/decode/SVG all run in native code.

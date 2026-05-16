@@ -1,4 +1,4 @@
-//! ROTATED_RECT mode — arbitrary-angle rectangles.
+//! ROTATED_RECT mode — arbitrary-angle rectangles. SPEC §5.6.
 //!
 //! Five geometric DoF: (cx, cy, w, h, θ). Eval uses the existing row-wise
 //! [`super::integral::Integral`] via 4 half-plane spans per row — same

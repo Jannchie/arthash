@@ -95,6 +95,29 @@ def test_per_shape_bits_pixel():
     assert c.per_shape_bits == 16  # color_bits
 
 
+def test_per_shape_bits_square_matches_circle():
+    """SQUARE shares CIRCLE's bit layout (single extent param)."""
+    assert (
+        Codec(shape=ShapeType.SQUARE).per_shape_bits
+        == Codec(shape=ShapeType.CIRCLE).per_shape_bits
+    )
+
+
+def test_per_shape_bits_rect():
+    c = Codec(shape=ShapeType.RECT)
+    # cx(5) + cy(5) + 2*r(4) + color(16) + alpha(3) = 37
+    assert c.per_shape_bits == 37
+
+
+def test_per_shape_bits_rotated_rect_uses_theta_bits():
+    c = Codec(shape=ShapeType.ROTATED_RECT)
+    # RECT(37) + theta_bits(5) = 42
+    assert c.per_shape_bits == 42
+    # bumping theta_bits widens the per-shape budget
+    c2 = Codec(shape=ShapeType.ROTATED_RECT, theta_bits=8)
+    assert c2.per_shape_bits == 45
+
+
 def test_palette_bits():
     c = Codec(shape=ShapeType.CIRCLE, palette=PICO8)
     assert c.palette_bits == 4  # log2(16)

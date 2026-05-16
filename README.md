@@ -16,17 +16,20 @@ preview while the real image loads.
 - **Fast.** Encode in ~0.8 ms, decode a 256-pixel placeholder in ~2 ms on a
   laptop — including a 6× faster decode-at-display-size path than the
   reference thumbhash Go port (see [Benchmarks](#benchmarks)).
-- **Artful SVG placeholders.** Four modes share one Codec API: thumbhash-style
-  DCT blur plus three SQIP-flavoured shape modes (CIRCLE / TRIANGLE / PIXEL)
-  that decode to a clean, configurable SVG — palette, shape count, blur and
-  seed are all tunable.
+- **Artful SVG placeholders.** Seven modes share one Codec API: thumbhash-style
+  DCT blur plus six shape modes (CIRCLE / TRIANGLE / SQUARE / RECT /
+  ROTATED_RECT / PIXEL) that decode to a clean, configurable SVG —
+  palette, shape count, blur and seed are all tunable.
 
-| Mode       | Look                                     | Typical bytes |
-| ---------- | ---------------------------------------- | ------------- |
-| `DCT`      | Oklab thumbhash-style blurry thumbnail   | ~21           |
-| `CIRCLE`   | SQIP-style overlapping circles, SVG out  | 8–24          |
-| `TRIANGLE` | Primitive-style triangle mosaic, SVG out | 12–32         |
-| `PIXEL`    | Retro-palette pixel mosaic               | 8–32          |
+| Mode            | Look                                          | Typical bytes |
+| --------------- | --------------------------------------------- | ------------- |
+| `DCT`           | Oklab thumbhash-style blurry thumbnail        | ~21           |
+| `CIRCLE`        | SQIP-style overlapping circles, SVG out       | 8–24          |
+| `TRIANGLE`      | Primitive-style triangle mosaic, SVG out      | 12–32         |
+| `SQUARE`        | Axis-aligned squares (cx, cy, side), SVG out  | 8–24          |
+| `RECT`          | Axis-aligned rectangles (cx, cy, w, h), SVG   | 10–28         |
+| `ROTATED_RECT`  | Rotated rectangles (+theta), SVG out          | 12–32         |
+| `PIXEL`         | Retro-palette pixel mosaic                    | 8–32          |
 
 The byte format is pinned in [`docs/SPEC.md`](./docs/SPEC.md).
 
@@ -103,11 +106,19 @@ svg = to_svg(hash_bytes, codec, base_size=256, blur=8.0)
 ### TypeScript (browser / Node, wasm)
 
 ```ts
-import { encode, decode, toSvg, Codec, ShapeType } from "arthash";
+import { init, encode, decode, toSvg, Shape } from "arthash";
 
-const hash = await encode(imageData, new Codec({ shape: ShapeType.CIRCLE, nShapes: 12 }));
-const svg = await toSvg(hash, { baseSize: 256, blur: 8 });
+// One-time wasm load (~70 KB gzip). Safe to call repeatedly.
+await init();
+
+const opts = { shape: Shape.CIRCLE, nShapes: 12 };
+const hash = encode(rgbBytes, width, height, opts);
+const { w, h, rgba } = decode(hash, { ...opts, baseSize: 256 });
+const svg = toSvg(hash, { ...opts, baseSize: 256, blur: 8 });
 ```
+
+`Shape` covers `DCT`, `CIRCLE`, `TRIANGLE`, `SQUARE`, `RECT`, `ROTATED_RECT`,
+`PIXEL` — see [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md).
 
 ## Repository layout
 

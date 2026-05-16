@@ -57,7 +57,7 @@ pub struct Codec {
     /// Discrete alpha set. Length MUST equal `1 << alpha_bits`. `None` ⇒
     /// `linspace(0.20, 0.90, 1 << alpha_bits)` (SPEC §4.5).
     pub alpha_levels: Option<Vec<f32>>,
-    /// PIXEL only. `None` ⇒ derive from image aspect (SPEC §5.4).
+    /// PIXEL only. `None` ⇒ derive from image aspect (SPEC §5.7).
     pub grid_aspect: Option<f32>,
 }
 

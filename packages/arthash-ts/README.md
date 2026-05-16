@@ -20,6 +20,23 @@ const svg = toSvg(hash, { shape: Shape.CIRCLE, nShapes: 12, blur: 12 });
 // → inline-ready: '<svg xmlns="..." viewBox="...">...</svg>'
 ```
 
+## Shape modes
+
+All variants in `Shape` are wired up to the wasm core:
+
+| Mode                | Look                                                |
+|---------------------|-----------------------------------------------------|
+| `Shape.DCT`         | thumbhash-style blurry placeholder (default codec). |
+| `Shape.CIRCLE`      | SQIP-style overlapping circles.                     |
+| `Shape.TRIANGLE`    | Primitive-style triangle mosaic.                    |
+| `Shape.SQUARE`      | Axis-aligned squares (cx, cy, side).                |
+| `Shape.RECT`        | Axis-aligned rectangles (cx, cy, w, h).             |
+| `Shape.ROTATED_RECT`| Rotated rectangles — `thetaBits` tunes angle steps. |
+| `Shape.PIXEL`       | Retro-palette pixel mosaic.                         |
+
+`toSvg` supports CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT;
+DCT and PIXEL have no natural SVG primitive form and throw.
+
 ## Build
 
 Requires the Rust toolchain + [`wasm-pack`](https://rustwasm.github.io/wasm-pack/).

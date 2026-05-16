@@ -1,4 +1,4 @@
-//! SQUARE mode — axis-aligned squares.
+//! SQUARE mode — axis-aligned squares. SPEC §5.4.
 //!
 //! Same bit layout as CIRCLE (cx, cy, s, color, alpha) — the only difference
 //! is the rasterized shape. Reuses the [`super::integral2d`] 2D-integral O(1)

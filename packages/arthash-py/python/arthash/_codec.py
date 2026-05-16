@@ -26,6 +26,9 @@ class ShapeType(str, enum.Enum):
     CIRCLE = "circle"
     TRIANGLE = "triangle"
     PIXEL = "pixel"
+    SQUARE = "square"
+    RECT = "rect"
+    ROTATED_RECT = "rotrect"
 
 
 VALID_PALETTE_K = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024}
@@ -40,9 +43,13 @@ class Codec:
     n_shapes: int = 12
     cx_bits: int = 5
     cy_bits: int = 5
+    # CIRCLE: radius bits. SQUARE: side bits. RECT/ROTATED_RECT: per-axis
+    # extent bits (width and height each get this many).
     r_bits: int = 4
     alpha_bits: int = 3
     color_bits: int = 16            # 16 = RGB-565, 24 = RGB-888
+    # ROTATED_RECT only: bits for theta in [0, π). Unused by other modes.
+    theta_bits: int = 5
 
     palette: Optional[np.ndarray] = None     # (K, 3) uint8 sRGB
     palette_k: Optional[int] = None
@@ -104,13 +111,20 @@ class Codec:
 
     @property
     def per_shape_bits(self) -> int:
-        if self.shape == ShapeType.CIRCLE:
-            return (self.cx_bits + self.cy_bits + self.r_bits
-                    + self.color_field_bits + self.alpha_bits)
+        cx, cy, r = self.cx_bits, self.cy_bits, self.r_bits
+        col, a = self.color_field_bits, self.alpha_bits
+        if self.shape in (ShapeType.CIRCLE, ShapeType.SQUARE):
+            # circle radius / square side share the same single-extent layout
+            return cx + cy + r + col + a
+        if self.shape == ShapeType.RECT:
+            # independent width + height
+            return cx + cy + 2 * r + col + a
+        if self.shape == ShapeType.ROTATED_RECT:
+            return cx + cy + 2 * r + self.theta_bits + col + a
         if self.shape == ShapeType.TRIANGLE:
-            return 3 * (self.cx_bits + self.cy_bits) + self.color_field_bits + self.alpha_bits
+            return 3 * (cx + cy) + col + a
         if self.shape == ShapeType.PIXEL:
-            return self.color_field_bits
+            return col
         if self.shape == ShapeType.DCT:
             return 0
         raise ValueError(f"unknown shape: {self.shape}")
@@ -152,6 +166,7 @@ class Codec:
             "r_bits": int(self.r_bits),
             "alpha_bits": int(self.alpha_bits),
             "color_bits": int(self.color_bits),
+            "theta_bits": int(self.theta_bits),
         }
         if self.palette is not None:
             pal = np.ascontiguousarray(self.palette, dtype=np.uint8)

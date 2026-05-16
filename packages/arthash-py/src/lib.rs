@@ -20,13 +20,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
 fn parse_shape(s: &str) -> PyResult<ShapeType> {
-    match s {
-        "dct" => Ok(ShapeType::Dct),
-        "circle" => Ok(ShapeType::Circle),
-        "triangle" => Ok(ShapeType::Triangle),
-        "pixel" => Ok(ShapeType::Pixel),
-        _ => Err(PyValueError::new_err(format!("unknown shape: {}", s))),
-    }
+    ShapeType::from_str(s)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown shape: {}", s)))
 }
 
 fn parse_pixel_smooth(s: &str) -> PyResult<PixelSmooth> {
@@ -75,6 +70,9 @@ fn codec_from_dict(d: Option<&Bound<'_, PyDict>>) -> PyResult<Codec> {
     }
     if let Some(v) = d.get_item("color_bits")? {
         codec.color_bits = v.extract()?;
+    }
+    if let Some(v) = d.get_item("theta_bits")? {
+        codec.theta_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("palette")? {
         let pal: Vec<u8> = v.extract()?;

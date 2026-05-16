@@ -30,8 +30,8 @@ specifically tuned to look plausible when blown up to display size.
 
 A arthash hash is **not self-describing**. The bytes alone are meaningless;
 they must be decoded with the same **codec** that produced them. The codec
-carries: which mode (DCT / CIRCLE / TRIANGLE / PIXEL), how many shapes, all
-bit widths, and the palette if any.
+carries: which mode (DCT / CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT /
+PIXEL), how many shapes, all bit widths, and the palette if any.
 
 In exchange for losing self-description, the byte stream carries no header
 overhead — every bit is image-dependent. Storage systems that need different
@@ -46,19 +46,24 @@ choose the codec at the application layer.
 The fields below have defaults; when a field is "ignored" for a mode, its
 value MUST still parse but does not affect bytes.
 
-| Field | Default | DCT | CIRCLE | TRIANGLE | PIXEL |
-|---|---|---|---|---|---|
-| `shape` | `"circle"` | — | — | — | — |
-| `n_shapes` | `12` | ignored | required | required | required (= grid_w × grid_h) |
-| `cx_bits` | `5` | ignored | required | required | ignored |
-| `cy_bits` | `5` | ignored | required | required | ignored |
-| `r_bits` | `4` | ignored | required | ignored | ignored |
-| `alpha_bits` | `3` | ignored | required | required | ignored |
-| `color_bits` | `16` | ignored | when palette null | when palette null | when palette null |
-| `palette` | `null` | ignored | optional | optional | optional |
-| `palette_k` | `null` | ignored | when palette set | when palette set | when palette set |
-| `alpha_levels` | linspace(0.20, 0.90, 2^alpha_bits) | ignored | optional | optional | ignored |
-| `grid_aspect` | `null` | ignored | ignored | ignored | optional |
+"Shape modes" below means any of CIRCLE / TRIANGLE / SQUARE / RECT /
+ROTATED_RECT — the variants that fit N parameterized primitives over a
+background. PIXEL is a grid mode; DCT is a frequency-domain mode.
+
+| Field | Default | DCT | Shape modes | PIXEL |
+|---|---|---|---|---|
+| `shape` | `"dct"` | — | — | — |
+| `n_shapes` | `12` | ignored | required | required (= grid_w × grid_h) |
+| `cx_bits` | `5` | ignored | required | ignored |
+| `cy_bits` | `5` | ignored | required | ignored |
+| `r_bits` | `4` | ignored | CIRCLE: radius bits. SQUARE: side bits. RECT/ROTATED_RECT: per-axis extent bits. TRIANGLE: ignored. | ignored |
+| `alpha_bits` | `3` | ignored | required | ignored |
+| `color_bits` | `16` | ignored | when palette null | when palette null |
+| `theta_bits` | `5` | ignored | ROTATED_RECT only | ignored |
+| `palette` | `null` | ignored | optional | optional |
+| `palette_k` | `null` | ignored | when palette set | when palette set |
+| `alpha_levels` | linspace(0.20, 0.90, 2^alpha_bits) | ignored | optional | ignored |
+| `grid_aspect` | `null` | ignored | ignored | optional |
 
 A field marked "ignored" MAY be omitted by serialization formats but MUST
 not break parsing if present.
@@ -67,8 +72,9 @@ not break parsing if present.
 
 v1 freezes:
 
-- The set of modes: `DCT`, `CIRCLE`, `TRIANGLE`, `PIXEL` (mode tags are
-  enum names; integer encodings only exist within a Codec).
+- The set of modes: `DCT`, `CIRCLE`, `TRIANGLE`, `SQUARE`, `RECT`,
+  `ROTATED_RECT`, `PIXEL` (mode tags are enum names; integer encodings only
+  exist within a Codec).
 - The bit layout for each mode given a Codec.
 - The semantics of every field (aspect, color encoding, palette indexing,
   alpha quantization, geometry quantization).
@@ -88,17 +94,30 @@ or improving the encoder does NOT.
 ## 2. Codec contract
 
 ```ts
-type ShapeType = "dct" | "circle" | "triangle" | "pixel"
+type ShapeType =
+  | "dct"
+  | "circle"
+  | "triangle"
+  | "square"
+  | "rect"
+  | "rotrect"        // canonical wire tag for ROTATED_RECT
+  | "pixel"
 
 interface Codec {
   shape: ShapeType
   n_shapes: number      // DCT: ignored. PIXEL: grid_w*grid_h.
 
-  // Quantization grids (CIRCLE/TRIANGLE/PIXEL).
+  // Quantization grids (shape modes / PIXEL).
   cx_bits: number       // default 5
   cy_bits: number       // default 5
-  r_bits: number        // default 4 (CIRCLE only)
-  alpha_bits: number    // default 3 (CIRCLE/TRIANGLE only)
+  // CIRCLE: radius bits. SQUARE: side bits.
+  // RECT / ROTATED_RECT: per-axis extent bits (width and height each get
+  // this many). TRIANGLE: ignored.
+  r_bits: number        // default 4
+  alpha_bits: number    // default 3 (all shape modes)
+
+  // ROTATED_RECT only: bits for theta in [0, π). Unused by other modes.
+  theta_bits: number    // default 5
 
   // Color storage (continuous mode only).
   color_bits: 16 | 24   // 16 = RGB-565, 24 = RGB-888
@@ -120,7 +139,7 @@ interface Codec {
 - `shape` matches.
 - `n_shapes` matches.
 - For shape modes: all bit widths (`cx_bits`, `cy_bits`, `r_bits`, `alpha_bits`,
-  `color_bits`) match.
+  `color_bits`, plus `theta_bits` for ROTATED_RECT) match.
 - Palette mode matches (both `palette == null` or both `palette != null`).
 - If palette mode: `palette_k` is the same and `palette[0:palette_k]` is
   element-wise identical (uint8). Entries beyond `palette_k` in either codec
@@ -604,7 +623,72 @@ Vertices are quantized identically to circle centers. Vertex order within a
 triangle is NOT semantic — winding order is whatever the encoder produces;
 the renderer must rasterize regardless of orientation.
 
-### 5.4 PIXEL mode
+### 5.4 SQUARE mode
+
+Identical bit layout to CIRCLE — `r_bits` encodes the **side length** of the
+square instead of a radius, but it uses the same `q_to_r` quantization grid
+(§4.8) so an existing CIRCLE codec can be reinterpreted as SQUARE without
+changing any bit widths.
+
+```
+[ aspect_code: 8 bits, see §4.2 ]
+[ background color: color_field_bits, see §4.3 / §4.4 ]
+[ for i in 0..n_shapes: ]
+  [ cx_q:    cx_bits     ]
+  [ cy_q:    cy_bits     ]
+  [ s_q:     r_bits, see §4.8     ]
+  [ color:   color_field_bits ]
+  [ alpha_q: alpha_bits, see §4.5  ]
+```
+
+Squares are axis-aligned. The bounding box is `(cx - s/2, cy - s/2) ..
+(cx + s/2, cy + s/2)` rounded to integer pixels.
+
+### 5.5 RECT mode
+
+```
+[ aspect_code: 8 bits ]
+[ background color: color_field_bits ]
+[ for i in 0..n_shapes: ]
+  [ cx_q:    cx_bits     ]
+  [ cy_q:    cy_bits     ]
+  [ w_q:     r_bits, see §4.8     ]
+  [ h_q:     r_bits, see §4.8     ]
+  [ color:   color_field_bits ]
+  [ alpha_q: alpha_bits  ]
+```
+
+`w_q` and `h_q` are quantized independently on the same `q_to_r` grid as
+CIRCLE radius / SQUARE side. The decoded rectangle is axis-aligned and
+centered at `(cx, cy)`.
+
+### 5.6 ROTATED_RECT mode
+
+```
+[ aspect_code: 8 bits ]
+[ background color: color_field_bits ]
+[ for i in 0..n_shapes: ]
+  [ cx_q:    cx_bits     ]
+  [ cy_q:    cy_bits     ]
+  [ w_q:     r_bits      ]
+  [ h_q:     r_bits      ]
+  [ t_q:     theta_bits  ]
+  [ color:   color_field_bits ]
+  [ alpha_q: alpha_bits  ]
+```
+
+`t_q` encodes the rotation angle `theta ∈ [0, π)` (rectangles are
+π-symmetric, so the full circle is not needed):
+
+```
+t_q     = clamp(floor(theta / π * (1 << theta_bits)), 0, (1 << theta_bits) - 1)
+theta   = (t_q + 0.5) / (1 << theta_bits) * π     // half-step bias to center the bucket
+```
+
+The decoded rectangle is rotated around `(cx, cy)` by `theta` radians,
+counter-clockwise in image coordinates (y-down).
+
+### 5.7 PIXEL mode
 
 ```
 [ aspect_code: 8 bits ]
@@ -654,8 +738,8 @@ renderer can't add artistic flourishes).
 
 ### 6.1 Alpha compositing formula (shape modes)
 
-For CIRCLE and TRIANGLE, each shape is composited onto the running canvas
-in linear RGB. Given canvas pixel `C` (linear RGB), shape color `K`
+For all shape modes (CIRCLE, TRIANGLE, SQUARE, RECT, ROTATED_RECT), each
+shape is composited onto the running canvas in linear RGB. Given canvas pixel `C` (linear RGB), shape color `K`
 (linear RGB), shape alpha `α ∈ [0, 1]`, and shape coverage `m ∈ [0, 1]`
 (1.0 inside the shape, 0.0 outside; fractional for anti-aliased edges):
 
@@ -685,8 +769,11 @@ Reference implementations use:
 
 - **DCT:** grid-search per-channel scale that minimizes SSE under the
   4-bit quantizer.
-- **CIRCLE / TRIANGLE:** Fogleman-style hill climbing — N random
-  candidates, refine top-K with steepest-descent mutations.
+- **CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT:** Fogleman-style hill
+  climbing — N random candidates, refine top-K with steepest-descent
+  mutations. SQUARE / RECT reuse a 2D integral image for O(1) candidate
+  evaluation; ROTATED_RECT falls back to row-wise integrals (only
+  axis-aligned rects support the 4-corner trick).
 - **PIXEL:** mean-color of each cell, snapped to nearest palette entry
   (in linear-RGB Euclidean distance).
 
@@ -759,7 +846,8 @@ regenerate vectors in the same commit.
 
 Within v1:
 
-- Mode set is fixed: DCT, CIRCLE, TRIANGLE, PIXEL.
+- Mode set is fixed: DCT, CIRCLE, TRIANGLE, SQUARE, RECT, ROTATED_RECT,
+  PIXEL.
 - Byte layouts are fixed.
 - Default codecs may be added but not changed.
 

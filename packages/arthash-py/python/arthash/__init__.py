@@ -1,11 +1,14 @@
 """arthash — placeholder-image hash family (PyO3 binding to arthash-rs).
 
-Four modes share one Codec API:
+Seven modes share one Codec API:
 
-    * DCT      — V4 thumbhash-style hash (~21 B). Default codec.
-    * CIRCLE   — SQIP-style overlapping circles.
-    * TRIANGLE — Primitive-style triangle mosaic.
-    * PIXEL    — Retro-palette pixel mosaic.
+    * DCT          — V4 thumbhash-style hash (~21 B). Default codec.
+    * CIRCLE       — SQIP-style overlapping circles.
+    * TRIANGLE     — Primitive-style triangle mosaic.
+    * SQUARE       — Axis-aligned squares (cx, cy, side).
+    * RECT         — Axis-aligned rectangles (cx, cy, w, h).
+    * ROTATED_RECT — Rotated rectangles (cx, cy, w, h, theta).
+    * PIXEL        — Retro-palette pixel mosaic.
 
 Quick start:
 

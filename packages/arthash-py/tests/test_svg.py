@@ -151,6 +151,22 @@ def test_triangle_uses_path(rgb_random_seed42):
     assert "<path" in svg
 
 
+@pytest.mark.parametrize(
+    "shape",
+    [ShapeType.SQUARE, ShapeType.RECT, ShapeType.ROTATED_RECT],
+)
+def test_rect_family_svg_renders(rgb_random_seed42, shape):
+    """SQUARE / RECT / ROTATED_RECT all have an SVG primitive form."""
+    codec = Codec(shape=shape, n_shapes=4)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    svg = to_svg(h, codec, base_size=256)
+    root = _parse(svg)
+    assert _strip_ns(root.tag) == "svg"
+    children = list(root)
+    # bg <path> + N shape elements
+    assert len(children) == 1 + 4
+
+
 def test_override_aspect_affects_viewbox(rgb_random_seed42):
     """override_aspect should change the viewBox dims (same as decode)."""
     codec = Codec(shape=ShapeType.CIRCLE, n_shapes=4)

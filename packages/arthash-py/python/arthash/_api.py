@@ -136,8 +136,9 @@ def to_svg(
     override_aspect: Optional[float] = None,
     blur: float = 0.0,
 ) -> str:
-    """Render a CIRCLE / TRIANGLE hash as a compact SVG string.
+    """Render a shape-mode hash as a compact SVG string.
 
+    Supported shapes: CIRCLE, TRIANGLE, SQUARE, RECT, ROTATED_RECT.
     Raises NotImplementedError for DCT and PIXEL (no natural SVG form).
     """
     if not isinstance(codec, Codec):

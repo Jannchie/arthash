@@ -1,4 +1,4 @@
-//! RECT mode — axis-aligned rectangles.
+//! RECT mode — axis-aligned rectangles. SPEC §5.5.
 //!
 //! Each shape stores (cx, cy, w, h, color, alpha). The fit uses the same
 //! primitive-style two-stage search as CIRCLE / TRIANGLE: residual-weighted
