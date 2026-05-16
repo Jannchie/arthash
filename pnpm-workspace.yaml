@@ -1,3 +1,5 @@
 packages:
   - "packages/arthash-ts"
   - "packages/arthash-playground"
+allowBuilds:
+  esbuild: true
