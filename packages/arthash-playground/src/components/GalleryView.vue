@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { Waterfall } from "vue-wf";
-import { Shape, type Shape as ShapeType } from "@arthash/ts";
+import { Shape, type Shape as ShapeType } from "arthash";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
 import { DEMO_IMAGES } from "../demo";

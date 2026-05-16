@@ -1,10 +1,13 @@
 [package]
 name = "arthash"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Placeholder-image hash family — Rust SDK"
-publish = false
+description = "Placeholder-image hash family — compact placeholder fingerprints for thumbnail and preview workflows. DCT / CIRCLE / TRIANGLE / PIXEL modes share a unified Codec API."
+repository = "https://github.com/Jannchie/arthash"
+readme = "README.md"
+keywords = ["thumbhash", "placeholder", "image", "hash", "perceptual"]
+categories = ["multimedia::images", "compression"]
 
 [lib]
 name = "arthash"

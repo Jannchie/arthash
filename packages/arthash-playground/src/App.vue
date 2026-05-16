@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { init as initArthash } from "@arthash/ts";
+import { init as initArthash } from "arthash";
 import GalleryView from "./components/GalleryView.vue";
 import CompareView from "./components/CompareView.vue";
 

@@ -8,14 +8,14 @@ importers:
 
   .: {}
 
-  packages/pfhash-playground:
+  packages/arthash-playground:
     dependencies:
-      '@pfhash/ts':
-        specifier: workspace:*
-        version: link:../pfhash-ts
       '@vueuse/core':
         specifier: ^14.3.0
         version: 14.3.0(vue@3.5.34(typescript@5.9.3))
+      arthash:
+        specifier: workspace:*
+        version: link:../arthash-ts
       vue:
         specifier: ^3.5.13
         version: 3.5.34(typescript@5.9.3)
@@ -36,7 +36,7 @@ importers:
         specifier: ^2.2.0
         version: 2.2.12(typescript@5.9.3)
 
-  packages/pfhash-ts:
+  packages/arthash-ts:
     devDependencies:
       typescript:
         specifier: ^6.0.0

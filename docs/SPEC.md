@@ -1,9 +1,10 @@
 # arthash format specification — v1
 
 **Status:** v1 draft, frozen for the v1 development cycle. Implementations:
-`@arthash/py`, `@arthash/ts`, `arthash` (Rust). Reference implementation:
-`@arthash/py`. When they disagree on a corner case the SPEC wins; please open a
-PR amending this file rather than mutating any single implementation.
+PyPI `arthash` (Python), npm `arthash` (TypeScript), crates.io `arthash` (Rust).
+Reference implementation: Python. When they disagree on a corner case the SPEC
+wins; please open a PR amending this file rather than mutating any single
+implementation.
 
 ## 0. Why a SPEC
 

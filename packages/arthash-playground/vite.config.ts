@@ -13,6 +13,6 @@ export default defineConfig({
   optimizeDeps: {
     // wasm-bindgen glue contains a `new URL('...wasm', import.meta.url)`
     // pattern that Vite must keep intact.
-    exclude: ["@arthash/ts"],
+    exclude: ["arthash"],
   },
 });

@@ -6,7 +6,7 @@ import {
   type Shape as ShapeType,
   type EncodeOptions,
   type DecodeOptions,
-} from "@arthash/ts";
+} from "arthash";
 
 export const DCT_THUMB = 100;
 export const SHAPE_THUMB = 48;

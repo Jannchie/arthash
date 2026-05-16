@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
-import type { Shape as ShapeType } from "@arthash/ts";
+import type { Shape as ShapeType } from "arthash";
 import { awaitEncodeSlot, fmtMs, loadImage, runPipeline, toHex } from "../pipeline";
 
 interface Props {

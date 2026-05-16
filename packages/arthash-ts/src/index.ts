@@ -1,12 +1,12 @@
 /**
- * @arthash/ts — TypeScript SDK for arthash.
+ * arthash — TypeScript SDK for arthash.
  *
  * Backed by the `arthash-rs` core compiled to WebAssembly via wasm-bindgen.
  * Works in browser and Node (>= 18, native `Uint8Array` + WebAssembly).
  *
  * Quick start:
  * ```ts
- * import { encode, decode, toSvg, Shape } from "@arthash/ts";
+ * import { encode, decode, toSvg, Shape } from "arthash";
  *
  * const hash = encode(rgbBytes, width, height, { shape: Shape.CIRCLE, nShapes: 12 });
  * const { w, h, rgba } = decode(hash, { shape: Shape.CIRCLE, nShapes: 12 });
@@ -138,7 +138,7 @@ function codecToObj(opts: CodecOptions | undefined): Record<string, unknown> {
 function assertReady(): void {
   if (!wasmReady) {
     throw new Error(
-      "@arthash/ts: wasm not initialized — call `await init()` before using encode/decode/toSvg.",
+      "arthash: wasm not initialized — call `await init()` before using encode/decode/toSvg.",
     );
   }
 }

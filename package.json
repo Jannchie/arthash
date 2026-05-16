@@ -8,13 +8,13 @@
   "scripts": {
     "test": "pnpm run test:py && pnpm run test:ts && pnpm run test:rs",
     "test:py": "uv run pytest packages/arthash-py/tests",
-    "test:ts": "pnpm --filter @arthash/ts run test",
+    "test:ts": "pnpm --filter arthash run test",
     "test:rs": "cargo test --manifest-path packages/arthash-rs/Cargo.toml",
 
     "build": "pnpm run build:py && pnpm run build:ts && pnpm run build:rs",
     "build:py": "maturin build --release --manifest-path packages/arthash-py/Cargo.toml --out dist",
     "develop:py": "maturin develop --uv --manifest-path packages/arthash-py/Cargo.toml",
-    "build:ts": "pnpm --filter @arthash/ts run build",
+    "build:ts": "pnpm --filter arthash run build",
     "build:rs": "cargo build --release --manifest-path packages/arthash-rs/Cargo.toml",
     "build:playground": "pnpm --filter @arthash/playground run build",
 

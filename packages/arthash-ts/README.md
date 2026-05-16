@@ -1,11 +1,11 @@
-# @arthash/ts
+# arthash
 
 TypeScript SDK for arthash. Backed by `arthash-rs` compiled to WebAssembly via
 wasm-bindgen — same byte-format contract, same algorithms, no Node native
 modules. Works in browser and Node ≥ 18.
 
 ```ts
-import { init, encode, decode, toSvg, Shape } from "@arthash/ts";
+import { init, encode, decode, toSvg, Shape } from "arthash";
 
 await init();  // load the wasm module (~70 KB gzip)
 
@@ -25,7 +25,7 @@ const svg = toSvg(hash, { shape: Shape.CIRCLE, nShapes: 12, blur: 12 });
 Requires the Rust toolchain + [`wasm-pack`](https://rustwasm.github.io/wasm-pack/).
 
 ```sh
-pnpm --filter @arthash/ts run build
+pnpm --filter arthash run build
 ```
 
 This runs in two phases:

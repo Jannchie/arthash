@@ -140,7 +140,7 @@ inputs (~6500 µs), and the branching cost would tax every other case.
   `eval_triangle_integral` and their `collect_*_integral` siblings —
   the `O(bbox_height)` evaluators that `fit_*` now uses unconditionally.
 
-No JS-facing knob: the WASM glue / `@arthash/ts` / playground inherit the
+No JS-facing knob: the WASM glue / `arthash` / playground inherit the
 fast path automatically with no API surface.
 
 ---
@@ -315,7 +315,7 @@ evaluations to reach a strictly better fit.
 * `arthash::shape::rng::Rng::normal_step(sigma)` — Gaussian draw with
   magnitude forced to at least 1.
 
-No JS-facing knob: WASM glue / `@arthash/ts` / playground inherit the
+No JS-facing knob: WASM glue / `arthash` / playground inherit the
 faster CIRCLE search automatically with no API surface.
 
 ### Reproducing this opt's ablation

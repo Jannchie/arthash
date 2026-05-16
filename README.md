@@ -10,7 +10,7 @@ preview while the real image loads.
 
 - **Written in Rust.** One canonical implementation; everything else is a
   thin binding.
-- **Bindings for the web and Python.** `@arthash/ts` ships a `wasm-bindgen`
+- **Bindings for the web and Python.** `arthash` ships a `wasm-bindgen`
   build for browsers / Node; `arthash` on PyPI is a PyO3 wheel covering
   Linux / macOS / Windows × Python 3.11–3.13 via a single abi3 build.
 - **Fast.** Encode in ~0.8 ms, decode a 256-pixel placeholder in ~2 ms on a
@@ -103,7 +103,7 @@ svg = to_svg(hash_bytes, codec, base_size=256, blur=8.0)
 ### TypeScript (browser / Node, wasm)
 
 ```ts
-import { encode, decode, toSvg, Codec, ShapeType } from "@arthash/ts";
+import { encode, decode, toSvg, Codec, ShapeType } from "arthash";
 
 const hash = await encode(imageData, new Codec({ shape: ShapeType.CIRCLE, nShapes: 12 }));
 const svg = await toSvg(hash, { baseSize: 256, blur: 8 });
