@@ -79,13 +79,19 @@ jobs:
       - name: build arthash (wasm + ts)
         run: pnpm --filter arthash run build
 
+      # `pnpm --filter <pkg> pack` and `pnpm --filter <pkg> publish` are
+      # broken in pnpm 9 — they leak `--recursive` into the subcommand's
+      # arg parser and fail with "Unknown option: 'recursive'". Run from
+      # the package directory instead; that path is officially supported.
       - name: inspect tarball
-        run: pnpm --filter arthash pack --pack-destination /tmp
+        working-directory: packages/arthash-ts
+        run: pnpm pack --pack-destination /tmp
 
       # Provenance (--provenance) requires `id-token: write` and OIDC, which
       # we have. It attaches a signed SLSA statement so consumers can verify
       # the tarball was built by this workflow.
       - name: publish to npm
+        working-directory: packages/arthash-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm --filter arthash publish --access public --no-git-checks --provenance
+        run: pnpm publish --access public --no-git-checks --provenance
