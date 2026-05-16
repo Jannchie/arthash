@@ -1,5 +1,9 @@
 packages:
   - "packages/arthash-ts"
   - "packages/arthash-playground"
+  - "bench/js-cross"
+  - "bench/sqip"
+  - "bench/thumbhash-js"
 allowBuilds:
   esbuild: true
+  sharp: true

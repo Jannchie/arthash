@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Cross-impl JS benchmarks: arthash (wasm) vs thumbhash (JS) vs sqip (Node).",
   "dependencies": {
-    "arthash": "link:../../packages/arthash-ts",
+    "arthash": "workspace:*",
     "sharp": "^0.34.5",
     "sqip": "1.0.0-beta.2",
     "sqip-plugin-primitive": "1.0.0-beta.2",
