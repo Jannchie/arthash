@@ -38,3 +38,10 @@ bench/sqip/out.*
 # harness outputs
 packages/pfhash-research/results/
 *.csv
+
+# Hill-climb bench outputs — reproducible from `cargo run --release
+# --example bench_hillclimb`, so they stay out of git.
+bench/hillclimb-*.ndjson
+
+# Windows shell crash dumps
+*.stackdump

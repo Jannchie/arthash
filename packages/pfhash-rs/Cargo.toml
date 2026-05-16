@@ -16,6 +16,10 @@ default = []
 # instead of pre-resized raw RGB bytes. Off by default to keep the core
 # crate dependency-free.
 image-io = ["dep:image"]
+# Enables thread-local counters in shape::raster (per-eval-call,
+# per-pixel-touched). Used by examples/bench_hillclimb.rs to attribute
+# hill-climb cost; zero-cost when off.
+bench-counters = []
 
 [dependencies]
 image = { version = "0.25", optional = true, default-features = false, features = [

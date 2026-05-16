@@ -88,16 +88,7 @@ fn parse_codec(js: JsValue) -> Result<Codec, JsValue> {
 #[wasm_bindgen(js_name = encodeRgb)]
 pub fn encode_rgb(rgb: &[u8], w: u32, h: u32, codec: JsValue, seed: u64) -> Result<Vec<u8>, JsValue> {
     let c = parse_codec(codec)?;
-    let bytes = rs_encode_rgb(
-        rgb,
-        w,
-        h,
-        &c,
-        EncodeOptions {
-            seed,
-            search: None,
-        },
-    );
+    let bytes = rs_encode_rgb(rgb, w, h, &c, EncodeOptions { seed, search: None });
     Ok(bytes)
 }
 

@@ -4,14 +4,24 @@
 //! Gaussian hill-climb, m independent attempts. After the climb, sweep all
 //! quantized alphas to pick the best for the chosen geometry.
 
+use super::integral::{collect_circle_sums_integral, eval_circle_integral, Integral};
 use super::options::{SearchOptions, Strategy};
 use super::quant::{
     alpha_to_q, aspect_code, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color, write_color,
 };
-use super::raster::{apply_circle, eval_circle, EvalResult};
+use super::raster::{apply_circle, EvalResult};
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::Codec;
+
+/// Range of rows touched by a circle of radius `r` centered at `cy`, clamped
+/// to `[0, h-1]`. Used to update the integral image after `apply_circle`.
+#[inline]
+fn circle_row_range(cy: i32, r: i32, h: u32) -> (i32, i32) {
+    let ymin = (cy - r).max(0);
+    let ymax = (cy + r).min(h as i32 - 1);
+    (ymin, ymax)
+}
 
 /// Internal record carried out of `fit_circles` for `encode_body`.
 #[derive(Clone, Debug)]
@@ -73,6 +83,7 @@ fn fit_primitive(
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
+    let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
     let palette = codec.palette_linear();
@@ -108,9 +119,8 @@ fn fit_primitive(
                 let cx = rng.range(0, w as i64) as i32;
                 let cy = rng.range(0, h as i64) as i32;
                 let r = rng.range(1, r_init_max + 1) as i32;
-                let res = eval_circle(
-                    target, &canvas, h as i32, w as i32, cx, cy, r,
-                    FIXED_HILL_CLIMB_ALPHA, pal_ref,
+                let res = eval_circle_integral(
+                    &integral, h, w, cx, cy, r, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_d {
                     best_d = res.delta_sse;
@@ -140,9 +150,8 @@ fn fit_primitive(
                         nr = (r + dn).clamp(1, r_max_global);
                     }
                 }
-                let res = eval_circle(
-                    target, &canvas, h as i32, w as i32, ncx, ncy, nr,
-                    FIXED_HILL_CLIMB_ALPHA, pal_ref,
+                let res = eval_circle_integral(
+                    &integral, h, w, ncx, ncy, nr, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_local_delta {
                     cx = ncx;
@@ -167,7 +176,7 @@ fn fit_primitive(
             }
         }
 
-        // Stage 3: alpha sweep.
+        // Stage 3: alpha sweep — collect once, finalize K times.
         let (cx, cy, r, alpha, color, pidx) = match best_geom {
             None => (
                 w as i32 / 2,
@@ -178,6 +187,7 @@ fn fit_primitive(
                 0u32,
             ),
             Some((cx, cy, r)) => {
+                let sums = collect_circle_sums_integral(&integral, h, w, cx, cy, r);
                 let mut best_a_delta = f32::INFINITY;
                 let mut chosen = EvalResult {
                     delta_sse: 0.0,
@@ -186,9 +196,7 @@ fn fit_primitive(
                 };
                 let mut chosen_alpha = null_alpha;
                 for &a in &alpha_levels {
-                    let res = eval_circle(
-                        target, &canvas, h as i32, w as i32, cx, cy, r, a, pal_ref,
-                    );
+                    let res = sums.finalize(a, pal_ref);
                     if res.delta_sse < best_a_delta {
                         best_a_delta = res.delta_sse;
                         chosen = res;
@@ -200,6 +208,8 @@ fn fit_primitive(
         };
 
         apply_circle(&mut canvas, h as i32, w as i32, cx, cy, r, alpha, &color);
+        let (ymin, ymax) = circle_row_range(cy, r, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
         circles.push(Circle { cx, cy, r, alpha, color, pidx });
     }
     (bg, circles)
@@ -222,6 +232,7 @@ fn fit_topk_uniform(
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
+    let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
     let palette = codec.palette_linear();
@@ -265,7 +276,7 @@ fn fit_topk_uniform(
                 let r = radii[r_idx];
                 let a_idx = rng.range(0, alpha_levels.len() as i64) as usize;
                 let alpha = alpha_levels[a_idx];
-                let res = eval_circle(target, &canvas, h as i32, w as i32, cx, cy, r, alpha, pal_ref);
+                let res = eval_circle_integral(&integral, h, w, cx, cy, r, alpha, pal_ref);
                 candidates.push((res.delta_sse, cx, cy, r, alpha, res.color, res.pidx, r_idx, a_idx));
             }
             candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -296,7 +307,7 @@ fn fit_topk_uniform(
                             nalpha = alpha_levels[na_idx];
                         }
                     }
-                    let res = eval_circle(target, &canvas, h as i32, w as i32, ncx, ncy, nr, nalpha, pal_ref);
+                    let res = eval_circle_integral(&integral, h, w, ncx, ncy, nr, nalpha, pal_ref);
                     if res.delta_sse < best_local_delta {
                         cx = ncx; cy = ncy; r = nr; alpha = nalpha;
                         r_idx = nr_idx; a_idx = na_idx;
@@ -334,6 +345,8 @@ fn fit_topk_uniform(
             &mut canvas, h as i32, w as i32,
             chosen.cx, chosen.cy, chosen.r, chosen.alpha, &chosen.color,
         );
+        let (ymin, ymax) = circle_row_range(chosen.cy, chosen.r, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
         circles.push(chosen);
     }
     (bg, circles)

@@ -5,6 +5,53 @@
 //! analytic optimal continuous-mode color, or the best palette entry. These
 //! are the inner kernels of the hill-climb loop — keep them tight.
 
+/// Optional benchmarking counters. When `bench-counters` is enabled, every
+/// `eval_*` call and every `Accum::push` bumps a thread-local — letting an
+/// external bench attribute hill-climb cost. Zero-cost when the feature
+/// is off (no code is generated for the increments).
+pub mod counters {
+    #[cfg(feature = "bench-counters")]
+    use std::cell::Cell;
+
+    #[cfg(feature = "bench-counters")]
+    thread_local! {
+        pub(crate) static EVAL_CIRCLE: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static EVAL_TRIANGLE: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static PIXELS_TOUCHED: Cell<u64> = const { Cell::new(0) };
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Snapshot {
+        pub eval_circle: u64,
+        pub eval_triangle: u64,
+        pub pixels_touched: u64,
+    }
+
+    pub fn reset() {
+        #[cfg(feature = "bench-counters")]
+        {
+            EVAL_CIRCLE.with(|c| c.set(0));
+            EVAL_TRIANGLE.with(|c| c.set(0));
+            PIXELS_TOUCHED.with(|c| c.set(0));
+        }
+    }
+
+    pub fn snapshot() -> Snapshot {
+        #[cfg(feature = "bench-counters")]
+        {
+            Snapshot {
+                eval_circle: EVAL_CIRCLE.with(|c| c.get()),
+                eval_triangle: EVAL_TRIANGLE.with(|c| c.get()),
+                pixels_touched: PIXELS_TOUCHED.with(|c| c.get()),
+            }
+        }
+        #[cfg(not(feature = "bench-counters"))]
+        {
+            Snapshot::default()
+        }
+    }
+}
+
 /// Result of a single shape evaluation.
 #[derive(Clone, Copy, Debug)]
 pub struct EvalResult {
@@ -25,18 +72,35 @@ pub fn eval_circle(
     alpha: f32,
     palette: Option<&[f32]>,
 ) -> EvalResult {
+    #[cfg(feature = "bench-counters")]
+    counters::EVAL_CIRCLE.with(|c| c.set(c.get() + 1));
+    collect_circle_sums(target, canvas, th, tw, cx, cy, r).finalize(alpha, palette)
+}
+
+/// Collect the per-channel sums (`ShapeSums`) for one circle candidate — the
+/// expensive part of `eval_circle`, without the α-dependent finalize. Useful
+/// when α-sweeping a fixed geometry: collect once, finalize K times.
+pub fn collect_circle_sums(
+    target: &[f32],
+    canvas: &[f32],
+    th: i32,
+    tw: i32,
+    cx: i32,
+    cy: i32,
+    r: i32,
+) -> ShapeSums {
     if r <= 0 {
-        return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
+        return ShapeSums::new();
     }
     let xmin = (cx - r).max(0);
     let xmax = (cx + r).min(tw - 1);
     let ymin = (cy - r).max(0);
     let ymax = (cy + r).min(th - 1);
     if xmin > xmax || ymin > ymax {
-        return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
+        return ShapeSums::new();
     }
     let r2 = r * r;
-    let mut accum = Accum::new();
+    let mut accum = ShapeSums::new();
     for y in ymin..=ymax {
         let dy = y - cy;
         let dy2 = dy * dy;
@@ -49,7 +113,7 @@ pub fn eval_circle(
             }
         }
     }
-    accum.finalize(alpha, palette)
+    accum
 }
 
 /// Evaluate one TRIANGLE candidate via incremental edge functions.
@@ -67,16 +131,36 @@ pub fn eval_triangle(
     alpha: f32,
     palette: Option<&[f32]>,
 ) -> EvalResult {
+    #[cfg(feature = "bench-counters")]
+    counters::EVAL_TRIANGLE.with(|c| c.set(c.get() + 1));
+    collect_triangle_sums(target, canvas, th, tw, vx0, vy0, vx1, vy1, vx2, vy2)
+        .finalize(alpha, palette)
+}
+
+/// Triangle counterpart of [`collect_circle_sums`].
+#[allow(clippy::too_many_arguments)]
+pub fn collect_triangle_sums(
+    target: &[f32],
+    canvas: &[f32],
+    th: i32,
+    tw: i32,
+    vx0: i32,
+    vy0: i32,
+    vx1: i32,
+    vy1: i32,
+    vx2: i32,
+    vy2: i32,
+) -> ShapeSums {
     let area2 = (vx1 - vx0) * (vy2 - vy0) - (vy1 - vy0) * (vx2 - vx0);
     if area2 == 0 {
-        return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
+        return ShapeSums::new();
     }
     let xmin = vx0.min(vx1).min(vx2).max(0);
     let xmax = vx0.max(vx1).max(vx2).min(tw - 1);
     let ymin = vy0.min(vy1).min(vy2).max(0);
     let ymax = vy0.max(vy1).max(vy2).min(th - 1);
     if xmin > xmax || ymin > ymax {
-        return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
+        return ShapeSums::new();
     }
     let sign_pos = area2 > 0;
 
@@ -91,7 +175,7 @@ pub fn eval_triangle(
     let mut row_e1 = (vx2 - vx1) * (ymin - vy1) - (vy2 - vy1) * (xmin - vx1);
     let mut row_e2 = (vx0 - vx2) * (ymin - vy2) - (vy0 - vy2) * (xmin - vx2);
 
-    let mut accum = Accum::new();
+    let mut accum = ShapeSums::new();
     for y in ymin..=ymax {
         let mut e0 = row_e0;
         let mut e1 = row_e1;
@@ -115,33 +199,32 @@ pub fn eval_triangle(
         row_e1 += d_e1_dy;
         row_e2 += d_e2_dy;
     }
-    accum.finalize(alpha, palette)
+    accum
 }
 
-/// Per-channel accumulator for the closed-form ΔSSE under alpha-blended overlay.
-struct Accum {
-    s_t: [f64; 3],
-    s_c: [f64; 3],
-    s_t2: [f64; 3],
-    s_c2: [f64; 3],
-    s_tc: [f64; 3],
-    count: u32,
+/// Per-channel sums sufficient to evaluate ΔSSE for any α (and any palette
+/// entry) on a given shape geometry. Public so callers can amortize the
+/// expensive scan once, then evaluate K alpha levels cheaply via
+/// `finalize`. See `circle::fit_primitive` α-sweep for the reference use.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ShapeSums {
+    pub s_t: [f64; 3],
+    pub s_c: [f64; 3],
+    pub s_t2: [f64; 3],
+    pub s_c2: [f64; 3],
+    pub s_tc: [f64; 3],
+    pub count: u32,
 }
 
-impl Accum {
-    fn new() -> Self {
-        Self {
-            s_t: [0.0; 3],
-            s_c: [0.0; 3],
-            s_t2: [0.0; 3],
-            s_c2: [0.0; 3],
-            s_tc: [0.0; 3],
-            count: 0,
-        }
+impl ShapeSums {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     #[inline]
     fn push(&mut self, t: &[f32], c: &[f32]) {
+        #[cfg(feature = "bench-counters")]
+        counters::PIXELS_TOUCHED.with(|c| c.set(c.get() + 1));
         for i in 0..3 {
             let tv = t[i] as f64;
             let cv = c[i] as f64;
@@ -154,7 +237,10 @@ impl Accum {
         self.count += 1;
     }
 
-    fn finalize(&self, alpha: f32, palette: Option<&[f32]>) -> EvalResult {
+    /// Evaluate ΔSSE + optimal color at the given α. Geometry-independent
+    /// (only depends on the sums), so an α-sweep on a fixed geometry can
+    /// reuse the same `ShapeSums` instance instead of re-scanning pixels.
+    pub fn finalize(&self, alpha: f32, palette: Option<&[f32]>) -> EvalResult {
         if self.count == 0 {
             return EvalResult { delta_sse: 0.0, color: [0.0; 3], pidx: 0 };
         }

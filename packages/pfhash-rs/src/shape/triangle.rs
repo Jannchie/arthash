@@ -5,14 +5,22 @@
 //! 17° min-angle gate (absorbs 5-bit grid snap noise) to keep decoded
 //! triangles ≥ 15° — matches Python's discipline.
 
+use super::integral::{collect_triangle_sums_integral, eval_triangle_integral, Integral};
 use super::options::{SearchOptions, Strategy};
 use super::quant::{
     alpha_to_q, aspect_code, q_to_alpha, quant_xy, read_color, write_color,
 };
-use super::raster::{apply_triangle, eval_triangle};
+use super::raster::apply_triangle;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::Codec;
+
+#[inline]
+fn triangle_row_range(verts: [(i32, i32); 3], h: u32) -> (i32, i32) {
+    let ymin = verts[0].1.min(verts[1].1).min(verts[2].1).max(0);
+    let ymax = verts[0].1.max(verts[1].1).max(verts[2].1).min(h as i32 - 1);
+    (ymin, ymax)
+}
 
 #[derive(Clone, Debug)]
 pub struct Triangle {
@@ -67,9 +75,9 @@ fn random_triangle_small(rng: &mut Rng, h: u32, w: u32) -> [(i32, i32); 3] {
     last
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hill_climb_gaussian(
-    target: &[f32],
-    canvas: &[f32],
+    integral: &Integral,
     h: u32,
     w: u32,
     mut verts: [(i32, i32); 3],
@@ -80,8 +88,8 @@ fn hill_climb_gaussian(
     sigma: f64,
     max_age: Option<u32>,
 ) -> ([(i32, i32); 3], f32, [f32; 3], u32) {
-    let res0 = eval_triangle(
-        target, canvas, h as i32, w as i32,
+    let res0 = eval_triangle_integral(
+        integral, h, w,
         verts[0].0, verts[0].1, verts[1].0, verts[1].1, verts[2].0, verts[2].1,
         fixed_alpha, palette,
     );
@@ -115,8 +123,8 @@ fn hill_climb_gaussian(
             }
             continue;
         };
-        let res = eval_triangle(
-            target, canvas, h as i32, w as i32,
+        let res = eval_triangle_integral(
+            integral, h, w,
             cand[0].0, cand[0].1, cand[1].0, cand[1].1, cand[2].0, cand[2].1,
             fixed_alpha, palette,
         );
@@ -139,24 +147,24 @@ fn hill_climb_gaussian(
 }
 
 fn pick_best_alpha(
-    target: &[f32],
-    canvas: &[f32],
+    integral: &Integral,
     h: u32,
     w: u32,
     verts: [(i32, i32); 3],
     alpha_levels: &[f32],
     palette: Option<&[f32]>,
 ) -> (f32, f32, [f32; 3], u32) {
+    // Collect once, finalize K times — geometry is fixed.
+    let sums = collect_triangle_sums_integral(
+        integral, h, w,
+        verts[0].0, verts[0].1, verts[1].0, verts[1].1, verts[2].0, verts[2].1,
+    );
     let mut best_delta = f32::INFINITY;
     let mut best_alpha = alpha_levels[0];
     let mut best_color = [0.0f32; 3];
     let mut best_pidx = 0u32;
     for &a in alpha_levels {
-        let res = eval_triangle(
-            target, canvas, h as i32, w as i32,
-            verts[0].0, verts[0].1, verts[1].0, verts[1].1, verts[2].0, verts[2].1,
-            a, palette,
-        );
+        let res = sums.finalize(a, palette);
         if res.delta_sse < best_delta {
             best_delta = res.delta_sse;
             best_alpha = a;
@@ -211,6 +219,7 @@ fn fit_primitive(
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
+    let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
     let palette = codec.palette_linear();
@@ -235,8 +244,8 @@ fn fit_primitive(
             let mut best_init: Option<[(i32, i32); 3]> = None;
             for _ in 0..search.n_random {
                 let v = random_triangle_small(&mut rng, h, w);
-                let res = eval_triangle(
-                    target, &canvas, h as i32, w as i32,
+                let res = eval_triangle_integral(
+                    &integral, h, w,
                     v[0].0, v[0].1, v[1].0, v[1].1, v[2].0, v[2].1,
                     FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
@@ -249,7 +258,7 @@ fn fit_primitive(
 
             // Stage 2: Gaussian hill climb.
             let (v, d, _c, _p) = hill_climb_gaussian(
-                target, &canvas, h, w, v0,
+                &integral, h, w, v0,
                 FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 hard_cap, &mut rng, sigma, search.hill_climb_max_age,
             );
@@ -262,11 +271,13 @@ fn fit_primitive(
         let (verts, alpha, color, pidx) = match best_verts {
             None => (fallback_verts, null_alpha, bg, 0u32),
             Some(v) => {
-                let (a, _d, c, p) = pick_best_alpha(target, &canvas, h, w, v, &alpha_levels, pal_ref);
+                let (a, _d, c, p) = pick_best_alpha(&integral, h, w, v, &alpha_levels, pal_ref);
                 (v, a, c, p)
             }
         };
         apply_triangle(&mut canvas, h as i32, w as i32, verts, alpha, &color);
+        let (ymin, ymax) = triangle_row_range(verts, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
         triangles.push(Triangle { verts, alpha, color, pidx });
     }
     (bg, triangles)
@@ -289,6 +300,7 @@ fn fit_topk_uniform(
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
+    let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
     let palette = codec.palette_linear();
@@ -327,8 +339,8 @@ fn fit_topk_uniform(
                 ];
                 let a_idx = rng.range(0, alpha_levels.len() as i64) as usize;
                 let alpha = alpha_levels[a_idx];
-                let res = eval_triangle(
-                    target, &canvas, h as i32, w as i32,
+                let res = eval_triangle_integral(
+                    &integral, h, w,
                     v[0].0, v[0].1, v[1].0, v[1].1, v[2].0, v[2].1, alpha, pal_ref,
                 );
                 candidates.push((res.delta_sse, v, alpha, res.color, res.pidx));
@@ -372,8 +384,8 @@ fn fit_topk_uniform(
                         na_idx = ((a_idx as isize + s).rem_euclid(len)) as usize;
                         na = alpha_levels[na_idx];
                     }
-                    let res = eval_triangle(
-                        target, &canvas, h as i32, w as i32,
+                    let res = eval_triangle_integral(
+                        &integral, h, w,
                         nv[0].0, nv[0].1, nv[1].0, nv[1].1, nv[2].0, nv[2].1, na, pal_ref,
                     );
                     if res.delta_sse < best_local_delta {
@@ -415,6 +427,8 @@ fn fit_topk_uniform(
             &mut canvas, h as i32, w as i32,
             chosen.verts, chosen.alpha, &chosen.color,
         );
+        let (ymin, ymax) = triangle_row_range(chosen.verts, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
         triangles.push(chosen);
     }
     (bg, triangles)

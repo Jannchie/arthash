@@ -4,6 +4,7 @@
 //! LSB-first via `bitio`. See SPEC §5.2 / §5.3 / §5.4.
 
 pub mod circle;
+pub mod integral;
 pub mod options;
 pub mod pixel;
 pub mod quant;
