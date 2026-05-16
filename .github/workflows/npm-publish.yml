@@ -46,13 +46,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm 10+ is REQUIRED for npm OIDC Trusted Publishing. pnpm 9's
-      # publish path only reads NODE_AUTH_TOKEN and never attempts the
-      # OIDC token exchange, so it fails with ENEEDAUTH even when a
-      # trusted publisher is configured on npmjs.com.
+      # action-setup reads the pinned pnpm version from the root
+      # package.json `packageManager` field — single source of truth
+      # shared with corepack on contributor machines. pnpm ≥ 10.16 is
+      # required for npm OIDC Trusted Publishing (pnpm 9 silently
+      # falls back to NODE_AUTH_TOKEN and fails with ENEEDAUTH).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:

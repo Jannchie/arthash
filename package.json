@@ -4,7 +4,7 @@
   "private": true,
   "description": "arthash — placeholder-image hash family. Python / TypeScript / Rust SDKs targeting a shared SPEC.",
   "license": "MIT",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@11.1.2",
   "scripts": {
     "test": "pnpm run test:py && pnpm run test:ts && pnpm run test:rs",
     "test:py": "uv run pytest packages/arthash-py/tests",
