@@ -1,0 +1,70 @@
+name: deploy playground
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# allow only one concurrent deploy, queue new ones without cancelling
+# in-progress runs (Pages deploys should complete to avoid half-published state).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/arthash-rs
+            packages/arthash-ts/wasm
+
+      - name: install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: build arthash wasm + ts
+        run: pnpm --filter arthash run build
+
+      - name: build playground
+        env:
+          BASE_URL: /pfhash/
+        run: pnpm --filter @arthash/playground run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/arthash-playground/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
