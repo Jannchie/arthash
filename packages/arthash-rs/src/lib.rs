@@ -6,32 +6,23 @@
 
 //! arthash — placeholder-image hash family (Rust SDK).
 //!
-//! Seven modes share one `Codec` API:
-//!
-//! * `Dct`         — V4 thumbhash-style hash (~21 B). Default codec.
-//! * `Circle`      — SQIP-style overlapping circles.
-//! * `Triangle`    — Primitive-style triangle mosaic.
-//! * `Square`      — Axis-aligned squares (cx, cy, side).
-//! * `Rect`        — Axis-aligned rectangles (cx, cy, w, h).
-//! * `RotatedRect` — Rotated rectangles (cx, cy, w, h, theta).
-//! * `Pixel`       — Retro-palette pixel mosaic.
-//!
-//! The byte format is defined by `docs/SPEC.md`; this crate implements
-//! that specification.
+//! Construct a [`Codec`] via its factory methods, then call [`encode_rgb`] /
+//! [`encode_rgba`] / [`decode`]. All seven modes share the same surface:
 //!
 //! ```ignore
-//! use arthash::{encode_rgb, decode, Codec, ShapeType};
+//! use arthash::{Codec, encode_rgb, decode, EncodeOptions, DecodeOptions};
 //!
-//! // DCT mode (default codec).
-//! let codec = Codec::default();
-//! let bytes = encode_rgb(&rgb_data, w, h, &codec, Default::default());
-//! let (out_w, out_h, rgba) = decode(&bytes, &codec, 256, None, Default::default());
+//! let codec = Codec::dct();                   // or Codec::triangle(64), etc.
+//! let bytes = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+//! let out = decode(&bytes, &codec, DecodeOptions::default());
+//! // out.width / out.height / out.rgba
 //! ```
 //!
 //! Inputs are RAW RGB/RGBA buffers (`&[u8]`) at the encoder's target
-//! resolution. The library does **not** load images or resize them — the
-//! caller supplies the thumbnail (or full image, for DCT at native size
-//! ≤ target_size). Enable the `image-io` feature for convenience helpers.
+//! resolution. The core does NOT load images or resize them — the caller
+//! supplies a thumbnail (`48 px` long-edge for shape modes, `≤ 100 px` for
+//! DCT). Enable the `image-io` feature for the [`encode_image`] convenience
+//! that reads a file path and resizes for you.
 
 pub mod bitio;
 pub mod codec;
@@ -41,7 +32,13 @@ pub mod shape;
 
 mod api;
 
-pub use api::{decode, encode_rgb, encode_rgba, DecodeOptions, EncodeOptions};
-pub use codec::{Codec, ShapeType};
-pub use shape::options::SearchOptions;
-pub use shape::svg::{to_svg, SvgError, SvgOptions};
+pub use api::{decode, encode_rgb, encode_rgba, DecodeOptions, DecodeOutput, EncodeOptions};
+pub use codec::{Codec, CodecError, ColorMode, Palette, Preset, VALID_PALETTE_K};
+#[doc(hidden)]
+pub use codec::{CodecConfig, ShapeType};
+pub use shape::options::{SearchOptions, Strategy};
+pub use shape::pixel::PixelSmooth;
+pub use shape::svg::{to_svg, SvgError, SvgOptions, SvgUnsupported};
+
+#[cfg(feature = "image-io")]
+pub use api::encode_image;

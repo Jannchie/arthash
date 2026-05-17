@@ -15,7 +15,7 @@ use super::raster::{apply_rect, EvalResult};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
-use crate::codec::Codec;
+use crate::codec::CodecConfig as Codec;
 
 /// α held fixed during the shape-only hill-climb.
 const FIXED_HILL_CLIMB_ALPHA: f32 = 0.5;

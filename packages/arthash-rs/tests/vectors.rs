@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use arthash::{
-    decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, ShapeType,
+    decode, encode_rgb, Codec, CodecConfig, DecodeOptions, EncodeOptions, ShapeType,
 };
 
 fn repo_root() -> PathBuf {
@@ -66,7 +66,7 @@ fn build_input(spec: &serde_json::Value) -> (u32, u32, Vec<u8>) {
 
 fn build_codec(spec: &serde_json::Value) -> Codec {
     let shape = ShapeType::from_str(spec["shape"].as_str().unwrap()).unwrap();
-    let mut codec = Codec {
+    let mut cfg = CodecConfig {
         shape,
         n_shapes: spec["n_shapes"].as_u64().unwrap() as u32,
         cx_bits: spec["cx_bits"].as_u64().unwrap() as u32,
@@ -74,7 +74,14 @@ fn build_codec(spec: &serde_json::Value) -> Codec {
         r_bits: spec["r_bits"].as_u64().unwrap() as u32,
         alpha_bits: spec["alpha_bits"].as_u64().unwrap() as u32,
         color_bits: spec["color_bits"].as_u64().unwrap() as u32,
-        ..Codec::default()
+        theta_bits: spec
+            .get("theta_bits")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5) as u32,
+        palette: None,
+        palette_k: None,
+        alpha_levels: None,
+        grid_aspect: None,
     };
     if let Some(pal_hex) = spec.get("palette_hex").and_then(|v| v.as_array()) {
         let mut pal = Vec::with_capacity(pal_hex.len() * 3);
@@ -84,18 +91,18 @@ fn build_codec(spec: &serde_json::Value) -> Codec {
             pal.push(u8::from_str_radix(&s[2..4], 16).unwrap());
             pal.push(u8::from_str_radix(&s[4..6], 16).unwrap());
         }
-        codec.palette = Some(pal);
+        cfg.palette = Some(pal);
         if let Some(k) = spec.get("palette_k").and_then(|v| v.as_u64()) {
-            codec.palette_k = Some(k as usize);
+            cfg.palette_k = Some(k as usize);
         }
     }
     if let Some(alphas) = spec.get("alpha_levels").and_then(|v| v.as_array()) {
-        codec.alpha_levels = Some(alphas.iter().map(|a| a.as_f64().unwrap() as f32).collect());
+        cfg.alpha_levels = Some(alphas.iter().map(|a| a.as_f64().unwrap() as f32).collect());
     }
     if let Some(ga) = spec.get("grid_aspect").and_then(|v| v.as_f64()) {
-        codec.grid_aspect = Some(ga as f32);
+        cfg.grid_aspect = Some(ga as f32);
     }
-    codec
+    Codec::Raw(cfg)
 }
 
 fn load_vectors() -> Vec<serde_json::Value> {
@@ -161,21 +168,21 @@ fn dct_roundtrip_solid_red_100x100() {
     for i in 0..n {
         rgb[i * 3] = 255;
     }
-    let codec = Codec::default();
+    let codec = Codec::dct();
     let hash = encode_rgb(&rgb, 100, 100, &codec, EncodeOptions::default());
     assert!(!hash.is_empty());
     let opts = DecodeOptions { base_size: 64, ..DecodeOptions::default() };
-    let (w, h, rgba) = decode(&hash, &codec, opts);
-    assert!(w > 0 && h > 0);
-    assert_eq!(rgba.len(), (w * h * 4) as usize);
+    let out = decode(&hash, &codec, opts);
+    assert!(out.width > 0 && out.height > 0);
+    assert_eq!(out.rgba.len(), (out.width * out.height * 4) as usize);
     // Most pixels should be reddish.
     let mut red_count = 0u32;
-    for i in 0..(w * h) as usize {
-        if rgba[i * 4] > 200 && rgba[i * 4 + 1] < 80 {
+    for i in 0..(out.width * out.height) as usize {
+        if out.rgba[i * 4] > 200 && out.rgba[i * 4 + 1] < 80 {
             red_count += 1;
         }
     }
-    let total = w * h;
+    let total = out.width * out.height;
     assert!(red_count * 2 > total, "expected mostly red output");
 }
 
@@ -192,14 +199,11 @@ fn pixel_roundtrip_gradient() {
             rgb[p + 2] = 64;
         }
     }
-    let codec = Codec {
-        shape: ShapeType::Pixel,
-        n_shapes: 12,
-        ..Codec::default()
-    };
+    let codec = Codec::pixel(12);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    let out = decode(&hash, &codec, opts);
+    let (out_w, out_h, rgba) = (out.width, out.height, out.rgba);
     assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
     // Sanity: red should increase left→right.
     let mid_y = out_h / 2;
@@ -218,14 +222,11 @@ fn circle_roundtrip_solid() {
         rgb[i * 3 + 1] = 100;
         rgb[i * 3 + 2] = 50;
     }
-    let codec = Codec {
-        shape: ShapeType::Circle,
-        n_shapes: 6,
-        ..Codec::default()
-    };
+    let codec = Codec::circle(6);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    let out = decode(&hash, &codec, opts);
+    let (out_w, out_h, rgba) = (out.width, out.height, out.rgba);
     assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
     // Check center pixel — should be the dominant color.
     let mid = (((out_h / 2) * out_w + out_w / 2) * 4) as usize;
@@ -245,15 +246,12 @@ fn rect_roundtrip_gradient() {
             rgb[p + 2] = 64;
         }
     }
-    let codec = Codec {
-        shape: ShapeType::Rect,
-        n_shapes: 6,
-        ..Codec::default()
-    };
+    let codec = Codec::rect(6);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     assert!(!hash.is_empty());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    let out = decode(&hash, &codec, opts);
+    let (out_w, out_h, rgba) = (out.width, out.height, out.rgba);
     assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
     // Gradient should still go left→right red-ish.
     let mid_y = out_h / 2;
@@ -272,15 +270,12 @@ fn square_roundtrip_solid() {
         rgb[i * 3 + 1] = 100;
         rgb[i * 3 + 2] = 50;
     }
-    let codec = Codec {
-        shape: ShapeType::Square,
-        n_shapes: 6,
-        ..Codec::default()
-    };
+    let codec = Codec::square(6);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     assert!(!hash.is_empty());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    let out = decode(&hash, &codec, opts);
+    let (out_w, out_h, rgba) = (out.width, out.height, out.rgba);
     assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
     let mid = (((out_h / 2) * out_w + out_w / 2) * 4) as usize;
     assert!(rgba[mid] > 150, "expected reddish center, got {}", rgba[mid]);
@@ -299,16 +294,12 @@ fn rotrect_roundtrip_gradient() {
             rgb[p + 2] = 64;
         }
     }
-    let codec = Codec {
-        shape: ShapeType::RotatedRect,
-        n_shapes: 6,
-        ..Codec::default()
-    };
+    let codec = Codec::rotated_rect(6);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     assert!(!hash.is_empty());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
-    assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
+    let out = decode(&hash, &codec, opts);
+    assert_eq!(out.rgba.len(), (out.width * out.height * 4) as usize);
 }
 
 #[test]
@@ -324,14 +315,11 @@ fn triangle_roundtrip_gradient() {
             rgb[p + 2] = 64;
         }
     }
-    let codec = Codec {
-        shape: ShapeType::Triangle,
-        n_shapes: 6,
-        ..Codec::default()
-    };
+    let codec = Codec::triangle(6);
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     assert!(!hash.is_empty());
     let opts = DecodeOptions { base_size: 128, ..DecodeOptions::default() };
-    let (out_w, out_h, rgba) = decode(&hash, &codec, opts);
+    let out = decode(&hash, &codec, opts);
+    let (out_w, out_h, rgba) = (out.width, out.height, out.rgba);
     assert_eq!(rgba.len(), (out_w * out_h * 4) as usize);
 }

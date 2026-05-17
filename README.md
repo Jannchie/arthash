@@ -22,43 +22,58 @@ shape / PIXEL modes can also take an external palette, dropping per-shape colour
 ### Rust
 
 ```rust
-use arthash::{Codec, encode_rgb, decode, EncodeOptions, DecodeOptions};
-let codec = Codec::default();
+use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
+
+// Named preset (recommended)
+let codec = Preset::DetailTriangle.codec();          // triangle, n=64
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
-let (out_w, out_h, rgba) = decode(&hash, &codec, DecodeOptions {
-    base_size: 256, ..Default::default()
-});
+let out = decode(&hash, &codec, DecodeOptions::default());
+// out.width / out.height / out.rgba
+
+// Or build by factory
+let codec = Codec::triangle(64);
+// Codec::dct(), Codec::circle(n), Codec::square(n), Codec::rect(n),
+// Codec::rotated_rect(n), Codec::pixel(n)
 ```
 
 ### Python (PyO3 wheel)
 
 ```python
-from arthash import Codec, ShapeType, encode, decode, to_svg
+from arthash import Codec, Preset, encode, decode, to_svg
 
 # DCT — thumbhash-style blurry placeholder
 hash_bytes = encode("photo.jpg")
-w, h, rgba = decode(hash_bytes, base_size=256)
+w, h, rgba = decode(hash_bytes, base_size=256)   # rgba shape (h, w, 4)
 
-# Shape mode → SVG
-codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=64)
-hash_bytes = encode("photo.jpg", codec, seed=0)
+# Named preset
+codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+hash_bytes = encode("photo.jpg", codec)
 svg = to_svg(hash_bytes, codec, base_size=512, blur=8.0)
+
+# Factory + palette
+from arthash.palettes import PICO8
+codec = Codec.triangle(n=24, palette=PICO8)
+hash_bytes = encode("photo.jpg", codec)
 ```
 
 ### TypeScript (wasm-bindgen, browser / Node)
 
 ```ts
-import { init, encode, decode, toSvg, Shape } from "arthash";
+import { encode, decode, toSvg, codec, Preset, encodeImage } from "arthash";
 
-await init();  // ~70 KB gzip, safe to call repeatedly
+// Wasm loads automatically on first call. Optionally `await init()` to preload.
 
-const opts = { shape: Shape.TRIANGLE, nShapes: 64 };
-const hash = encode(rgbBytes, width, height, opts);
-const { w, h, rgba } = decode(hash, { ...opts, baseSize: 512 });
-const svg = toSvg(hash, { ...opts, baseSize: 512, blur: 8 });
+// Named preset
+const c = codec.preset(Preset.DetailTriangle);   // triangle, n=64
+const hash = await encode(rgbBytes, width, height, c);
+const { w, h, rgba } = await decode(hash, c);
+const svg = await toSvg(hash, c, { baseSize: 512, blur: 8 });
+
+// Browser convenience: load image, resize, encode in one call
+const hash2 = await encodeImage(imageUrlOrBlob, c);
 ```
 
-`Shape` enum: `DCT` / `CIRCLE` / `TRIANGLE` / `SQUARE` / `RECT` / `ROTATED_RECT` / `PIXEL`. See [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md).
+Factories: `codec.dct()` / `.circle({ n })` / `.triangle({ n })` / `.square({ n })` / `.rect({ n })` / `.rotatedRect({ n })` / `.pixel({ n })`. See [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md).
 
 ## Modes & byte counts
 

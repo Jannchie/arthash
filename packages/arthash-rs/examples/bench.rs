@@ -16,9 +16,7 @@
 
 use std::time::Instant;
 
-use arthash::{
-    decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, ShapeType,
-};
+use arthash::{decode, encode_rgb, Codec, DecodeOptions, EncodeOptions};
 
 fn gradient_rgb(w: u32, h: u32) -> Vec<u8> {
     let n = (w * h) as usize;
@@ -85,7 +83,7 @@ fn main() {
     {
         let (w, h) = (100u32, 100u32);
         let rgb = gradient_rgb(w, h);
-        let codec = Codec::default();
+        let codec = Codec::dct();
         let enc_opts = EncodeOptions::default();
 
         let mut hash: Vec<u8> = Vec::new();
@@ -114,22 +112,18 @@ fn main() {
     }
 
     // Shape modes — 48x48 thumbnails.
-    let shapes = [
-        ("circle", ShapeType::Circle, 12u32),
-        ("triangle", ShapeType::Triangle, 12u32),
-        ("pixel", ShapeType::Pixel, 12u32),
+    let shapes: [(&str, fn(u32) -> Codec, u32); 3] = [
+        ("circle", Codec::circle, 12),
+        ("triangle", Codec::triangle, 12),
+        ("pixel", Codec::pixel, 12),
     ];
-    for (name, shape, n_shapes) in shapes {
+    for (name, make, n_shapes) in shapes {
         let (w, h) = (48u32, 48u32);
         let rgb = gradient_rgb(w, h);
-        let codec = Codec {
-            shape,
-            n_shapes,
-            ..Codec::default()
-        };
+        let codec = make(n_shapes);
         let enc_opts = EncodeOptions::default();
 
-        let (warmup, iters) = if matches!(shape, ShapeType::Pixel) {
+        let (warmup, iters) = if name == "pixel" {
             (10, 100)
         } else {
             (3, 15)

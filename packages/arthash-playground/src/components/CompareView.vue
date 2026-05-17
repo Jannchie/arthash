@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { Shape, type Shape as ShapeType } from "arthash";
+import { ImageUp, Image as ImageIcon, Ruler, Zap, Package2, X } from "@lucide/vue";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
 import { COLOR_OPTIONS } from "../pipeline";
@@ -39,21 +40,13 @@ const blur = ref(0);
 const seed = ref(0);
 const colorId = ref<string>("rgb-565");
 
-const advanced = ref<AdvancedConfig>({
-  alphaBits: 3,
-  overrideAspectEnabled: false,
-  overrideAspect: 1,
-});
+const advanced = ref<AdvancedConfig>({ alphaBits: 3 });
 
 const DEBOUNCE_MS = 300;
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
-
-const effectiveAspect = computed(() =>
-  advancedD.value.overrideAspectEnabled ? advancedD.value.overrideAspect : undefined,
-);
 
 watch([baseSizeD, blurD, seedD, advancedD, colorId], () => {
   tileMetrics.value = new Map();
@@ -166,20 +159,27 @@ const gridStyle = computed(() => ({
       </label>
       <div class="spacer" />
       <AdvancedPanel v-model="advanced" />
-      <button class="link" v-if="objectUrl" @click="file = null; objectUrl = ''; dims = null; fileName = ''; tileMetrics = new Map();">clear</button>
+      <button class="link icon-btn" v-if="objectUrl" @click="file = null; objectUrl = ''; dims = null; fileName = ''; tileMetrics = new Map();">
+        <X :size="14" :stroke-width="2" />
+        <span>clear</span>
+      </button>
     </div>
 
     <div class="metrics-row" v-if="objectUrl">
       <div class="metric">
+        <ImageIcon class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">image</span><span class="v">{{ fileName }}</span>
       </div>
       <div class="metric" v-if="dims">
+        <Ruler class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">size</span><span class="v">{{ dims.w }}×{{ dims.h }}</span>
       </div>
       <div class="metric" v-if="aggregate">
+        <Zap class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">fastest enc</span><span class="v">{{ fmtMs(aggregate.fastest) }}</span>
       </div>
       <div class="metric" v-if="aggregate">
+        <Package2 class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">smallest hash</span><span class="v">{{ aggregate.smallest }} B</span>
       </div>
       <div class="spacer" />
@@ -196,8 +196,11 @@ const gridStyle = computed(() => ({
       @drop="onDrop"
       @click="fileInput?.click()"
     >
-      <div class="big">drop an image here</div>
-      <div class="sub">or click to pick · paste from clipboard also works</div>
+      <ImageUp class="drop-icon" :size="48" :stroke-width="1.25" />
+      <div class="drop-text">
+        <div class="big">drop an image here</div>
+        <div class="sub">or click to pick · paste from clipboard also works</div>
+      </div>
       <input ref="fileInput" type="file" accept="image/*" hidden @change="onPick" />
     </label>
     <p v-if="error" class="error">{{ error }}</p>
@@ -221,7 +224,6 @@ const gridStyle = computed(() => ({
         :ready="ready"
         :alpha-bits="advancedD.alphaBits"
         :color-id="colorId"
-        :override-aspect="effectiveAspect"
         @metrics="(m) => onMetrics(v.id, m)"
       />
     </div>

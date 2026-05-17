@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use arthash::{encode_rgb, Codec, EncodeOptions, ShapeType};
+use arthash::{encode_rgb, Codec, ColorMode, EncodeOptions, Palette};
 
 fn gradient_rgb(w: u32, h: u32) -> Vec<u8> {
     let n = (w * h) as usize;
@@ -62,24 +62,19 @@ fn main() {
     let rgb = gradient_rgb(w, h);
     let iters = 11;
 
-    let shapes = [
-        (ShapeType::Circle, "circle"),
-        (ShapeType::Triangle, "triangle"),
-        (ShapeType::Pixel, "pixel"),
+    let shapes: [(fn(u32) -> Codec, &str); 3] = [
+        (Codec::circle, "circle"),
+        (Codec::triangle, "triangle"),
+        (Codec::pixel, "pixel"),
     ];
 
     println!("shape         color-mode          median_ms");
     println!("------------- ------------------- ---------");
 
-    for (shape, name) in shapes {
+    for (make, name) in shapes {
         // Continuous color baselines.
-        for (bits, label) in [(16u32, "RGB-565"), (24, "RGB-888")] {
-            let codec = Codec {
-                shape,
-                n_shapes: 12,
-                color_bits: bits,
-                ..Codec::default()
-            };
+        for (mode, label) in [(ColorMode::Rgb565, "RGB-565"), (ColorMode::Rgb888, "RGB-888")] {
+            let codec = make(12).with_color(mode);
             let ms = time_encode(&rgb, w, h, &codec, iters);
             println!("{:13} {:19} {:9.2}", name, label, ms);
         }
@@ -89,13 +84,8 @@ fn main() {
             (2, 1, 1, "auto-4 (K=16)"),
             (3, 3, 2, "auto-8 (K=256)"),
         ] {
-            let palette = rgb_cube(rb, gb, bb);
-            let codec = Codec {
-                shape,
-                n_shapes: 12,
-                palette: Some(palette),
-                ..Codec::default()
-            };
+            let palette = Palette::new(rgb_cube(rb, gb, bb)).unwrap();
+            let codec = make(12).with_palette(palette);
             let ms = time_encode(&rgb, w, h, &codec, iters);
             println!("{:13} {:19} {:9.2}", name, label, ms);
         }

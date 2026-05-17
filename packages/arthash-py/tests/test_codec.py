@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from arthash import Codec, DEFAULT_CODEC, ShapeType
+from arthash import Codec, DEFAULT_CODEC, Preset, ShapeType
 from arthash.palettes import PICO8
 
 
@@ -164,3 +164,125 @@ def test_codec_is_frozen():
     c = Codec()
     with pytest.raises(Exception):
         c.n_shapes = 99  # type: ignore[misc]
+
+
+# ----------------------------- factory methods -----------------------------
+
+def test_dct_factory():
+    c = Codec.dct()
+    assert c.shape == ShapeType.DCT
+
+
+def test_triangle_factory_sets_n():
+    c = Codec.triangle(64)
+    assert c.shape == ShapeType.TRIANGLE
+    assert c.n_shapes == 64
+
+
+def test_circle_factory_with_palette():
+    c = Codec.circle(8, palette=PICO8)
+    assert c.shape == ShapeType.CIRCLE
+    assert c.is_palette_mode
+
+
+def test_rotated_rect_factory_default_theta_bits_5():
+    c = Codec.rotated_rect(8)
+    assert c.theta_bits == 5
+    c2 = Codec.rotated_rect(8, theta_bits=7)
+    assert c2.theta_bits == 7
+
+
+def test_pixel_factory_grid_aspect():
+    c = Codec.pixel(16, grid_aspect=1.5)
+    assert c.grid_aspect == 1.5
+
+
+def test_preset_detail_triangle_is_n64():
+    c = Codec.preset(Preset.DETAIL_TRIANGLE)
+    assert c.shape == ShapeType.TRIANGLE
+    assert c.n_shapes == 64
+
+
+def test_with_palette_returns_new_codec():
+    c = Codec.triangle(12)
+    assert not c.is_palette_mode
+    c2 = c.with_palette(PICO8)
+    assert c2.is_palette_mode
+    # original unchanged
+    assert not c.is_palette_mode
+
+
+def test_with_color_bits_drops_palette():
+    c = Codec.triangle(12, palette=PICO8)
+    assert c.is_palette_mode
+    c2 = c.with_color_bits(24)
+    assert not c2.is_palette_mode
+    assert c2.color_bits == 24
+
+
+# ----------------------------- top-level shortcuts -----------------------------
+
+def test_top_level_shortcuts_match_preset():
+    from arthash import (
+        tiny_dct, placeholder_triangle, detail_triangle,
+        placeholder_circle, placeholder_pixel,
+    )
+    assert tiny_dct().is_byte_compatible_with(Codec.preset(Preset.TINY_DCT))
+    assert placeholder_triangle().is_byte_compatible_with(
+        Codec.preset(Preset.PLACEHOLDER_TRIANGLE)
+    )
+    assert detail_triangle().is_byte_compatible_with(
+        Codec.preset(Preset.DETAIL_TRIANGLE)
+    )
+    assert placeholder_circle().is_byte_compatible_with(
+        Codec.preset(Preset.PLACEHOLDER_CIRCLE)
+    )
+    assert placeholder_pixel().is_byte_compatible_with(
+        Codec.preset(Preset.PLACEHOLDER_PIXEL)
+    )
+
+
+# ----------------------------- byte compatibility -----------------------------
+
+def test_factory_vs_kwargs_byte_compatible():
+    a = Codec.triangle(24)
+    b = Codec(shape=ShapeType.TRIANGLE, n_shapes=24)
+    assert a.is_byte_compatible_with(b)
+
+
+def test_different_codecs_not_byte_compatible():
+    assert not Codec.triangle(12).is_byte_compatible_with(Codec.triangle(64))
+    assert not Codec.triangle(12).is_byte_compatible_with(Codec.circle(12))
+
+
+def test_palette_byte_compatibility_checks_active_bytes():
+    pal = PICO8
+    a = Codec.circle(8, palette=pal)
+    b = Codec.circle(8, palette=pal)
+    assert a.is_byte_compatible_with(b)
+
+
+# ----------------------------- to_dict / from_dict -----------------------------
+
+def test_to_dict_from_dict_roundtrip_basic():
+    c = Codec.triangle(24)
+    d = c.to_dict()
+    c2 = Codec.from_dict(d)
+    assert c.is_byte_compatible_with(c2)
+
+
+def test_to_dict_from_dict_roundtrip_palette():
+    c = Codec.circle(8, palette=PICO8)
+    d = c.to_dict()
+    assert "palette_hex" in d
+    assert d["palette_k"] == 16
+    c2 = Codec.from_dict(d)
+    assert c.is_byte_compatible_with(c2)
+
+
+def test_to_dict_pixel_with_grid_aspect():
+    c = Codec.pixel(16, grid_aspect=1.5)
+    d = c.to_dict()
+    assert d["grid_aspect"] == 1.5
+    c2 = Codec.from_dict(d)
+    assert c2.grid_aspect == 1.5

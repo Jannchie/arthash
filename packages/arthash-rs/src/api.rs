@@ -1,12 +1,15 @@
 //! Public `encode_rgb` / `encode_rgba` / `decode` API.
 //!
-//! Mirrors Python's `arthash.encode` / `arthash.decode`. Inputs are raw byte
-//! buffers at native size — the caller is responsible for resizing to the
-//! shape thumbnail (`shape::THUMB = 48`) or DCT target size (`≤ 100`)
-//! before calling. See SPEC §1.1: hash + codec is one logical unit.
+//! Mirrors the Python and TypeScript SDKs. Inputs are raw byte buffers at
+//! native size — the caller is responsible for resizing to the shape
+//! thumbnail (`shape::THUMB = 48`) or DCT target size (`≤ 100`) before
+//! calling. See SPEC §1.1: hash + codec is one logical unit.
+//!
+//! For path-based image loading + automatic resize, enable the `image-io`
+//! feature and use [`encode_image`].
 
 use crate::bitio::BitReader;
-use crate::codec::{Codec, ShapeType};
+use crate::codec::{Codec, CodecConfig, ShapeType};
 use crate::colorspace::{linear_to_srgb_u8, srgb_u8_to_linear};
 use crate::shape::circle::{decode_render as circle_decode, encode_circle};
 use crate::shape::pixel::{decode_render as pixel_decode, encode_pixel, PixelSmooth};
@@ -17,28 +20,27 @@ use crate::shape::square::{decode_render as square_decode, encode_square};
 use crate::shape::triangle::{decode_render as triangle_decode, encode_triangle};
 use crate::shape::SearchOptions;
 
-#[derive(Clone, Copy, Debug)]
-#[derive(Default)]
+/// Encoder knobs that affect shape-mode search cost/fidelity. Ignored by
+/// DCT and PIXEL (both deterministic).
+#[derive(Clone, Copy, Debug, Default)]
 pub struct EncodeOptions {
-    /// Used by CIRCLE / TRIANGLE only.
+    /// CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT RNG seed.
     pub seed: u64,
-    /// CIRCLE/TRIANGLE search budget. None ⇒ mode-specific tuned default.
+    /// Hill-climb search budget. `None` ⇒ mode-specific tuned default.
     pub search: Option<SearchOptions>,
 }
 
-
+/// Decode knobs — output size + smoothing.
 #[derive(Clone, Copy, Debug)]
 pub struct DecodeOptions {
+    /// Long-edge pixel target. Default 256.
     pub base_size: u32,
+    /// Override the stored aspect for non-default sizing.
     pub override_aspect: Option<f32>,
+    /// PIXEL-only — `Nearest` (default) or `Bilinear`.
     pub pixel_smooth: PixelSmooth,
-    /// Supersample factor for SHAPE-mode decoding. Renders the canvas at
-    /// `aa × base_size`, then box-downsamples to the requested size — giving
-    /// sub-pixel coverage at shape edges. Useful when callers can't bump
-    /// `base_size` (fixed output target) but still want smooth edges. The
-    /// factor is per-axis, so total samples per output pixel = `aa²`. `1` =
-    /// no AA, default — for most cases raising `base_size` is the cheaper
-    /// path to smoothness. DCT / PIXEL ignore this.
+    /// Shape-mode supersample factor (per-axis; total samples per output
+    /// pixel = `aa²`). `1` = off (default). Ignored by DCT/PIXEL.
     pub aa: u32,
 }
 
@@ -53,92 +55,102 @@ impl Default for DecodeOptions {
     }
 }
 
-/// Convert flat RGB u8 → flat linear-RGB f32 of same length.
+/// What [`decode`] returns. Named fields so callers don't have to remember
+/// tuple positions.
+#[derive(Clone, Debug)]
+pub struct DecodeOutput {
+    pub width: u32,
+    pub height: u32,
+    /// Row-major RGBA bytes (length `4 · width · height`).
+    pub rgba: Vec<u8>,
+}
+
 fn rgb_u8_to_linear_flat(rgb: &[u8]) -> Vec<f32> {
     rgb.iter().map(|&c| srgb_u8_to_linear(c)).collect()
 }
 
-/// Encode raw RGB at `(w, h)`. For DCT mode, alpha defaults to 255.
+/// Encode raw RGB at `(w, h)`. Alpha is treated as 255 for DCT.
 ///
-/// * `w`, `h`: thumbnail dimensions in pixels. For shape modes, callers
-///   should resize to `shape::THUMB` long-edge first. For DCT, ≤ 100.
+/// * `w`, `h`: pixel dimensions. For shape modes, callers should resize to
+///   `shape::THUMB = 48` long-edge first. For DCT, `≤ 100`.
 /// * `rgb`: row-major flat `(h, w, 3)` u8 sRGB, length `h*w*3`.
 pub fn encode_rgb(rgb: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
-    match codec.shape {
+    let cfg = codec.to_config();
+    encode_rgb_cfg(rgb, w, h, &cfg, opts)
+}
+
+/// Encode raw RGBA at `(w, h)`. For shape modes the alpha is ignored
+/// (caller should composite over an opaque background first if needed).
+pub fn encode_rgba(rgba: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
+    let cfg = codec.to_config();
+    if matches!(cfg.shape, ShapeType::Dct) {
+        return crate::dct::encode_dct(w, h, rgba);
+    }
+    // Composite over white into RGB, then encode.
+    let n = (w * h) as usize;
+    let mut rgb = vec![0u8; n * 3];
+    for i in 0..n {
+        let a = rgba[i * 4 + 3] as f32 / 255.0;
+        let inv = 1.0 - a;
+        for c in 0..3 {
+            let v = a * (rgba[i * 4 + c] as f32) + inv * 255.0;
+            rgb[i * 3 + c] = v.clamp(0.0, 255.0) as u8;
+        }
+    }
+    encode_rgb_cfg(&rgb, w, h, &cfg, opts)
+}
+
+fn encode_rgb_cfg(rgb: &[u8], w: u32, h: u32, cfg: &CodecConfig, opts: EncodeOptions) -> Vec<u8> {
+    match cfg.shape {
         ShapeType::Dct => {
-            // Opaque fast path: avoids the alpha extraction + premultiplication
-            // passes and the per-pixel powf(2.4) in srgb→linear.
+            // Opaque fast path: skips alpha extraction + premultiplication.
             crate::dct::encode_dct_rgb_opaque(w, h, rgb)
         }
         _ => {
             let target_lin = rgb_u8_to_linear_flat(rgb);
-            let search_owned;
             let search = match opts.search {
                 Some(s) => s,
-                None => match codec.shape {
-                    ShapeType::Triangle => {
-                        search_owned = SearchOptions::triangle_default();
-                        search_owned
-                    }
-                    _ => {
-                        search_owned = SearchOptions::default();
-                        search_owned
-                    }
+                None => match cfg.shape {
+                    ShapeType::Triangle => SearchOptions::triangle_default(),
+                    _ => SearchOptions::default(),
                 },
             };
-            match codec.shape {
-                ShapeType::Circle => encode_circle(&target_lin, h, w, w, h, codec, opts.seed, &search),
+            match cfg.shape {
+                ShapeType::Circle => {
+                    encode_circle(&target_lin, h, w, w, h, cfg, opts.seed, &search)
+                }
                 ShapeType::Triangle => {
-                    encode_triangle(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                    encode_triangle(&target_lin, h, w, w, h, cfg, opts.seed, &search)
                 }
                 ShapeType::Square => {
-                    encode_square(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                    encode_square(&target_lin, h, w, w, h, cfg, opts.seed, &search)
                 }
-                ShapeType::Rect => {
-                    encode_rect(&target_lin, h, w, w, h, codec, opts.seed, &search)
-                }
+                ShapeType::Rect => encode_rect(&target_lin, h, w, w, h, cfg, opts.seed, &search),
                 ShapeType::RotatedRect => {
-                    encode_rotrect(&target_lin, h, w, w, h, codec, opts.seed, &search)
+                    encode_rotrect(&target_lin, h, w, w, h, cfg, opts.seed, &search)
                 }
-                ShapeType::Pixel => encode_pixel(&target_lin, h, w, w, h, codec),
+                ShapeType::Pixel => encode_pixel(&target_lin, h, w, w, h, cfg),
                 ShapeType::Dct => unreachable!(),
             }
         }
     }
 }
 
-/// Encode raw RGBA at `(w, h)`. Same semantics as `encode_rgb` but with an
-/// alpha channel. For shape modes the alpha is currently ignored (composite
-/// the image over white if it has transparency).
-pub fn encode_rgba(rgba: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
-    match codec.shape {
-        ShapeType::Dct => crate::dct::encode_dct(w, h, rgba),
-        _ => {
-            // Composite over white into RGB then encode.
-            let n = (w * h) as usize;
-            let mut rgb = vec![0u8; n * 3];
-            for i in 0..n {
-                let a = rgba[i * 4 + 3] as f32 / 255.0;
-                let inv = 1.0 - a;
-                for c in 0..3 {
-                    let v = a * (rgba[i * 4 + c] as f32) + inv * 255.0;
-                    rgb[i * 3 + c] = v.clamp(0.0, 255.0) as u8;
-                }
-            }
-            encode_rgb(&rgb, w, h, codec, opts)
-        }
-    }
+/// Decode hash bytes to RGBA pixels.
+pub fn decode(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> DecodeOutput {
+    let cfg = codec.to_config();
+    let (w, h, rgba) = decode_cfg(hash, &cfg, opts);
+    DecodeOutput { width: w, height: h, rgba }
 }
 
-/// Decode hash bytes → `(width, height, rgba_u8_flat)`.
-pub fn decode(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
-    match codec.shape {
+fn decode_cfg(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
+    match cfg.shape {
         ShapeType::Dct => crate::dct::decode_dct(hash, opts.base_size, opts.override_aspect),
-        _ => decode_shape(hash, codec, opts),
+        _ => decode_shape(hash, cfg, opts),
     }
 }
 
-fn decode_shape(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
+fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
     let mut br = BitReader::new(hash);
     let a_code = br.read(8);
     let quant_aspect = aspect_from_code(a_code);
@@ -155,18 +167,13 @@ fn decode_shape(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, V
         )
     };
 
-    if matches!(codec.shape, ShapeType::Pixel) {
-        let rgb = pixel_decode(&mut br, codec, w, h, quant_aspect, opts.pixel_smooth);
+    if matches!(cfg.shape, ShapeType::Pixel) {
+        let rgb = pixel_decode(&mut br, cfg, w, h, quant_aspect, opts.pixel_smooth);
         return (w, h, rgb_to_rgba(&rgb, w, h));
     }
 
-    // Render at `ss × (w, h)` then box-downsample to (w, h) so shape edges
-    // get sub-pixel coverage. The shape decoder reads quantized coords and
-    // rebuilds pixel positions from the canvas dimensions, so simply passing
-    // `(ww, hh) = (w·ss, h·ss)` proportionally scales every shape — no
-    // codec changes needed.
     let ss = opts.aa.max(1);
-    let bg = read_color(&mut br, codec);
+    let bg = read_color(&mut br, cfg);
     let (ww, hh) = (w * ss, h * ss);
     let mut canvas = vec![0.0f32; (ww * hh * 3) as usize];
     for i in 0..(ww * hh) as usize {
@@ -174,17 +181,14 @@ fn decode_shape(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> (u32, u32, V
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
-    match codec.shape {
-        ShapeType::Circle => circle_decode(&mut br, codec, ww, hh, &mut canvas),
-        ShapeType::Triangle => triangle_decode(&mut br, codec, ww, hh, &mut canvas),
-        ShapeType::Square => square_decode(&mut br, codec, ww, hh, &mut canvas),
-        ShapeType::Rect => rect_decode(&mut br, codec, ww, hh, &mut canvas),
-        ShapeType::RotatedRect => rotrect_decode(&mut br, codec, ww, hh, &mut canvas),
+    match cfg.shape {
+        ShapeType::Circle => circle_decode(&mut br, cfg, ww, hh, &mut canvas),
+        ShapeType::Triangle => triangle_decode(&mut br, cfg, ww, hh, &mut canvas),
+        ShapeType::Square => square_decode(&mut br, cfg, ww, hh, &mut canvas),
+        ShapeType::Rect => rect_decode(&mut br, cfg, ww, hh, &mut canvas),
+        ShapeType::RotatedRect => rotrect_decode(&mut br, cfg, ww, hh, &mut canvas),
         _ => unreachable!(),
     }
-    // Box-downsample (ww × hh) → (w × h) in linear-RGB, then convert sRGB once.
-    // Linear-space averaging is the correct way to combine pixel coverage
-    // — sRGB-space averaging would over-darken on edge transitions.
     let mut canvas_lin = vec![0.0f32; (w * h * 3) as usize];
     if ss == 1 {
         canvas_lin.copy_from_slice(&canvas);
@@ -230,4 +234,57 @@ fn rgb_to_rgba(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
         rgba[i * 4 + 3] = 255;
     }
     rgba
+}
+
+// ---------------------------------------------------------------------------
+// Convenience image-loading entry (feature `image-io`)
+// ---------------------------------------------------------------------------
+
+/// Load an image from disk, resize its long edge to the codec's encoder
+/// target (`100` for DCT, `48` for shape/PIXEL), and encode. Requires the
+/// `image-io` feature.
+#[cfg(feature = "image-io")]
+pub fn encode_image(
+    path: impl AsRef<std::path::Path>,
+    codec: &Codec,
+    opts: EncodeOptions,
+) -> Result<Vec<u8>, image::ImageError> {
+    use image::imageops::FilterType;
+    use image::ImageReader;
+
+    let cfg = codec.to_config();
+    let target = match cfg.shape {
+        ShapeType::Dct => 100,
+        _ => crate::shape::THUMB,
+    };
+
+    let img = ImageReader::open(path.as_ref())?
+        .with_guessed_format()?
+        .decode()?;
+    let (w0, h0) = (img.width(), img.height());
+    let (w, h) = fit_long_edge(w0, h0, target);
+    let resized = if (w, h) == (w0, h0) {
+        img
+    } else {
+        img.resize_exact(w, h, FilterType::Lanczos3)
+    };
+    let rgb = resized.to_rgb8();
+    Ok(encode_rgb_cfg(&rgb, w, h, &cfg, opts))
+}
+
+#[cfg(feature = "image-io")]
+fn fit_long_edge(w: u32, h: u32, target: u32) -> (u32, u32) {
+    if w == 0 || h == 0 {
+        return (w.max(1), h.max(1));
+    }
+    if w.max(h) <= target {
+        return (w, h);
+    }
+    if w >= h {
+        let new_h = ((target as u64 * h as u64) / w as u64).max(1) as u32;
+        (target, new_h)
+    } else {
+        let new_w = ((target as u64 * w as u64) / h as u64).max(1) as u32;
+        (new_w, target)
+    }
 }

@@ -8,12 +8,10 @@
 //! lets Python keep ownership of validation + derived properties.
 
 use numpy::PyArray1;
-use arthash::shape::options::Strategy;
-use arthash::shape::pixel::PixelSmooth;
-use arthash::shape::SearchOptions;
 use arthash::{
     decode as rs_decode, encode_rgb as rs_encode_rgb, encode_rgba as rs_encode_rgba,
-    to_svg as rs_to_svg, Codec, DecodeOptions, EncodeOptions, ShapeType, SvgOptions,
+    to_svg as rs_to_svg, Codec, CodecConfig, DecodeOptions, EncodeOptions, PixelSmooth,
+    SearchOptions, ShapeType, Strategy, SvgOptions,
 };
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
@@ -47,50 +45,63 @@ fn parse_strategy(s: &str) -> PyResult<Strategy> {
 }
 
 fn codec_from_dict(d: Option<&Bound<'_, PyDict>>) -> PyResult<Codec> {
-    let mut codec = Codec::default();
-    let Some(d) = d else { return Ok(codec) };
+    let mut cfg = CodecConfig {
+        shape: ShapeType::Dct,
+        n_shapes: 12,
+        cx_bits: 5,
+        cy_bits: 5,
+        r_bits: 4,
+        alpha_bits: 3,
+        color_bits: 16,
+        theta_bits: 5,
+        palette: None,
+        palette_k: None,
+        alpha_levels: None,
+        grid_aspect: None,
+    };
+    let Some(d) = d else { return Ok(Codec::Raw(cfg)) };
 
     if let Some(v) = d.get_item("shape")? {
-        codec.shape = parse_shape(v.extract::<String>()?.as_str())?;
+        cfg.shape = parse_shape(v.extract::<String>()?.as_str())?;
     }
     if let Some(v) = d.get_item("n_shapes")? {
-        codec.n_shapes = v.extract()?;
+        cfg.n_shapes = v.extract()?;
     }
     if let Some(v) = d.get_item("cx_bits")? {
-        codec.cx_bits = v.extract()?;
+        cfg.cx_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("cy_bits")? {
-        codec.cy_bits = v.extract()?;
+        cfg.cy_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("r_bits")? {
-        codec.r_bits = v.extract()?;
+        cfg.r_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("alpha_bits")? {
-        codec.alpha_bits = v.extract()?;
+        cfg.alpha_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("color_bits")? {
-        codec.color_bits = v.extract()?;
+        cfg.color_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("theta_bits")? {
-        codec.theta_bits = v.extract()?;
+        cfg.theta_bits = v.extract()?;
     }
     if let Some(v) = d.get_item("palette")? {
         let pal: Vec<u8> = v.extract()?;
-        codec.palette = Some(pal);
+        cfg.palette = Some(pal);
     }
     if let Some(v) = d.get_item("palette_k")? {
-        codec.palette_k = Some(v.extract()?);
+        cfg.palette_k = Some(v.extract()?);
     }
     if let Some(v) = d.get_item("alpha_levels")? {
         let levels: Vec<f32> = v.extract()?;
-        codec.alpha_levels = Some(levels);
+        cfg.alpha_levels = Some(levels);
     }
     if let Some(v) = d.get_item("grid_aspect")? {
         if !v.is_none() {
-            codec.grid_aspect = Some(v.extract()?);
+            cfg.grid_aspect = Some(v.extract()?);
         }
     }
-    Ok(codec)
+    Ok(Codec::Raw(cfg))
 }
 
 fn search_from_dict(d: Option<&Bound<'_, PyDict>>) -> PyResult<Option<SearchOptions>> {
@@ -157,7 +168,7 @@ fn encode_rgba<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest"))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1))]
 fn decode<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -165,22 +176,23 @@ fn decode<'py>(
     base_size: u32,
     override_aspect: Option<f32>,
     pixel_smooth: &str,
+    aa: u32,
 ) -> PyResult<(u32, u32, Bound<'py, PyBytes>)> {
     let codec = codec_from_dict(codec)?;
     let opts = DecodeOptions {
         base_size,
         override_aspect,
         pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
-        aa: 1,
+        aa: aa.max(1),
     };
-    let (w, h, rgba) = py.detach(|| rs_decode(hash, &codec, opts));
-    Ok((w, h, PyBytes::new(py, &rgba)))
+    let out = py.detach(|| rs_decode(hash, &codec, opts));
+    Ok((out.width, out.height, PyBytes::new(py, &out.rgba)))
 }
 
 /// Same as `decode` but returns the RGBA as a numpy ndarray to spare a copy
 /// when callers will reshape immediately.
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest"))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1))]
 fn decode_to_numpy<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -188,16 +200,17 @@ fn decode_to_numpy<'py>(
     base_size: u32,
     override_aspect: Option<f32>,
     pixel_smooth: &str,
+    aa: u32,
 ) -> PyResult<(u32, u32, Bound<'py, PyArray1<u8>>)> {
     let codec = codec_from_dict(codec)?;
     let opts = DecodeOptions {
         base_size,
         override_aspect,
         pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
-        aa: 1,
+        aa: aa.max(1),
     };
-    let (w, h, rgba) = py.detach(|| rs_decode(hash, &codec, opts));
-    Ok((w, h, PyArray1::from_vec(py, rgba)))
+    let out = py.detach(|| rs_decode(hash, &codec, opts));
+    Ok((out.width, out.height, PyArray1::from_vec(py, out.rgba)))
 }
 
 #[pyfunction]

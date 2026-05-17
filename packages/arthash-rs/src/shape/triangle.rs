@@ -13,7 +13,7 @@ use super::quant::{
 use super::raster::apply_triangle;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
-use crate::codec::Codec;
+use crate::codec::CodecConfig as Codec;
 
 #[inline]
 fn triangle_row_range(verts: [(i32, i32); 3], h: u32) -> (i32, i32) {

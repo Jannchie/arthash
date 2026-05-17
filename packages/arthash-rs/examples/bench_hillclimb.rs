@@ -26,8 +26,7 @@
 use std::time::Instant;
 
 use arthash::shape::raster::counters;
-use arthash::shape::SearchOptions;
-use arthash::{decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, ShapeType};
+use arthash::{decode, encode_rgb, Codec, DecodeOptions, EncodeOptions, SearchOptions};
 
 const W: u32 = 48;
 const H: u32 = 48;
@@ -97,16 +96,16 @@ struct TimedRun {
     min_us: f64,
 }
 
-fn search_for(shape: ShapeType) -> SearchOptions {
-    let mut s = match shape {
-        ShapeType::Triangle => SearchOptions::triangle_default(),
-        _ => SearchOptions::default(),
+fn search_for(shape_name: &str) -> SearchOptions {
+    let mut s = if shape_name == "triangle" {
+        SearchOptions::triangle_default()
+    } else {
+        SearchOptions::default()
     };
-    // Sweep-friendly overrides for ablation runs. Defaults inherit from the
-    // SDK unless the env var is set.
-    let key = match shape {
-        ShapeType::Triangle => "BENCH_TRI_N_RANDOM",
-        _ => "BENCH_CIR_N_RANDOM",
+    let key = if shape_name == "triangle" {
+        "BENCH_TRI_N_RANDOM"
+    } else {
+        "BENCH_CIR_N_RANDOM"
     };
     if let Ok(v) = std::env::var(key) {
         if let Ok(n) = v.parse::<u32>() {
@@ -134,14 +133,14 @@ fn reconstruct_mse(rgb: &[u8], w: u32, h: u32, codec: &Codec, search: SearchOpti
     let opts = EncodeOptions { seed: 0, search: Some(search) };
     let hash = encode_rgb(rgb, w, h, codec, opts);
     let dopts = DecodeOptions { base_size: w.max(h), ..DecodeOptions::default() };
-    let (dw, dh, rgba) = decode(&hash, codec, dopts);
-    debug_assert_eq!((dw, dh), (w, h));
+    let out = decode(&hash, codec, dopts);
+    debug_assert_eq!((out.width, out.height), (w, h));
     let n = (w * h) as usize;
     let mut sse = 0.0f64;
     for i in 0..n {
         for ch in 0..3 {
             let t = srgb_to_linear(rgb[i * 3 + ch]) as f64;
-            let r = srgb_to_linear(rgba[i * 4 + ch]) as f64;
+            let r = srgb_to_linear(out.rgba[i * 4 + ch]) as f64;
             let d = t - r;
             sse += d * d;
         }
@@ -192,19 +191,19 @@ fn main() {
         ("quadrants", quadrants_rgb(W, H)),
         ("noise", noise_rgb(W, H)),
     ];
-    let shapes: Vec<(&str, ShapeType)> = vec![
-        ("circle", ShapeType::Circle),
-        ("triangle", ShapeType::Triangle),
-        ("square", ShapeType::Square),
-        ("rect", ShapeType::Rect),
-        ("rotrect", ShapeType::RotatedRect),
+    let shapes: Vec<(&str, fn(u32) -> Codec)> = vec![
+        ("circle", Codec::circle),
+        ("triangle", Codec::triangle),
+        ("square", Codec::square),
+        ("rect", Codec::rect),
+        ("rotrect", Codec::rotated_rect),
     ];
 
     let mut lines: Vec<String> = Vec::new();
     for (img_name, rgb) in &images {
-        for (shape_name, shape) in &shapes {
-            let codec = Codec { shape: *shape, n_shapes: N_SHAPES, ..Codec::default() };
-            let search = search_for(*shape);
+        for (shape_name, make) in &shapes {
+            let codec = make(N_SHAPES);
+            let search = search_for(shape_name);
             let enc_opts = EncodeOptions { seed: 0, search: Some(search) };
 
             // Eval-count snapshot (deterministic given seed). Done first so

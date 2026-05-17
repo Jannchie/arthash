@@ -3,18 +3,16 @@ extension to the Python-friendly API expected by callers (PIL/path/ndarray
 inputs, dataclass codec, numpy outputs).
 
 Public API:
-    encode(image, codec=DEFAULT_CODEC, *, seed=0, target_size=100, search=None) -> bytes
+    encode(image, codec=DEFAULT_CODEC, *, seed=0, target_size=None, search=None) -> bytes
     decode(hash_bytes, codec=DEFAULT_CODEC, *, base_size=256, override_aspect=None,
-           aa=True, pixel_smooth="nearest") -> (w, h, pixels)
+           pixel_smooth="nearest") -> (w, h, rgba_ndarray)
     to_svg(hash_bytes, codec=DEFAULT_CODEC, *, base_size=256, override_aspect=None,
            blur=0.0) -> str
 
 Return type of `decode`:
-    DCT mode   → pixels: bytes (raw RGBA buffer of length 4*w*h)
-    shape mode → pixels: np.ndarray of shape (h, w, 3) RGB uint8
-
-`aa` is accepted for backward compatibility but ignored (the Rust core
-always uses anti-aliased shape rasterization).
+    Always `(w, h, np.ndarray (h, w, 4) RGBA uint8)`. Alpha is 255 for every
+    codec except DCT-with-alpha; the unified shape lets callers write the
+    same downstream code regardless of codec mode.
 """
 
 from __future__ import annotations
@@ -29,6 +27,7 @@ from . import _native
 from ._codec import DEFAULT_CODEC, Codec, ShapeType
 from ._search import SearchOptions
 
+# Encoder-side thumbnail targets (search-quality knobs, not byte-format).
 DCT_THUMB = 100
 SHAPE_THUMB = 48
 
@@ -36,11 +35,7 @@ ImageInput = Union[str, Path, PILImage.Image, np.ndarray]
 
 
 def _load_rgb_thumb(image: ImageInput, target_size: int) -> Tuple[np.ndarray, int, int]:
-    """(image, target) → (rgb_array (h, w, 3) uint8, w_orig, h_orig).
-
-    The image is resized so `max(w, h) == target_size` using Lanczos. If
-    already smaller, it's returned at its native size.
-    """
+    """(image, target) → (rgb_array (h, w, 3) uint8, w_orig, h_orig)."""
     if isinstance(image, (str, Path)):
         with PILImage.open(image) as im:
             im = im.convert("RGB")
@@ -70,7 +65,7 @@ def encode(
     codec: Codec = DEFAULT_CODEC,
     *,
     seed: int = 0,
-    target_size: int = DCT_THUMB,
+    target_size: Optional[int] = None,
     search: Optional[SearchOptions] = None,
 ) -> bytes:
     """Encode an image to a placeholder hash under the given Codec.
@@ -78,13 +73,17 @@ def encode(
     The same Codec value MUST be passed to `decode` — the byte stream is NOT
     self-describing. See docs/SPEC.md for byte layouts.
 
+    `target_size` overrides the encoder thumbnail long-edge. `None` ⇒ the
+    codec-natural default (100 for DCT, 48 for shape / PIXEL).
+
     `search` (a SearchOptions instance) controls the per-shape search budget
-    for CIRCLE/TRIANGLE modes. Ignored for DCT/PIXEL. None ⇒ Rust default.
+    for CIRCLE/TRIANGLE/SQUARE/RECT/ROTATED_RECT. Ignored for DCT/PIXEL.
     """
     if not isinstance(codec, Codec):
         raise TypeError(f"codec must be a Codec instance; got {type(codec).__name__}")
 
-    target = target_size if codec.shape == ShapeType.DCT else SHAPE_THUMB
+    default_target = DCT_THUMB if codec.shape == ShapeType.DCT else SHAPE_THUMB
+    target = default_target if target_size is None else int(target_size)
     arr, _w_orig, _h_orig = _load_rgb_thumb(image, target)
     h, w = arr.shape[:2]
     rgb_bytes = arr.tobytes()
@@ -101,12 +100,16 @@ def decode(
     *,
     base_size: int = 256,
     override_aspect: Optional[float] = None,
-    aa: bool = True,  # noqa: ARG001 — accepted for API parity, ignored by Rust core
     pixel_smooth: str = "nearest",
-):
-    """Decode hash bytes to a preview image at `base_size` long-edge.
+    aa: int = 1,
+) -> Tuple[int, int, np.ndarray]:
+    """Decode hash bytes to an RGBA preview at `base_size` long-edge.
 
-    DCT returns bytes (raw RGBA); shape modes return a (h, w, 3) RGB ndarray.
+    Returns `(width, height, rgba_ndarray)` where `rgba_ndarray.shape == (h, w, 4)`
+    uint8. Alpha is 255 for every codec mode except DCT-with-alpha.
+
+    `aa` (shape-mode supersample factor, 1 = off). `pixel_smooth` is
+    `"nearest"` (default) or `"bilinear"` — PIXEL only.
     """
     if not isinstance(codec, Codec):
         raise TypeError(f"codec must be a Codec instance; got {type(codec).__name__}")
@@ -118,14 +121,10 @@ def decode(
         int(base_size),
         override_aspect,
         pixel_smooth,
+        int(aa),
     )
-
-    if codec.shape == ShapeType.DCT:
-        return w, h, rgba_bytes
-
-    # Shape modes historically returned (h, w, 3) RGB.
-    arr = np.frombuffer(rgba_bytes, dtype=np.uint8).reshape(h, w, 4)
-    return w, h, np.ascontiguousarray(arr[..., :3])
+    arr = np.frombuffer(rgba_bytes, dtype=np.uint8).reshape(h, w, 4).copy()
+    return w, h, arr
 
 
 def to_svg(

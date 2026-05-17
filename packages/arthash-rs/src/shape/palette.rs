@@ -235,14 +235,14 @@ fn build_lut(palette: &[f32], k: usize, side: u32) -> VoxelLut {
 }
 
 /// Convenience: build a `PaletteIndex` from `codec.palette_linear()` if any.
-pub fn from_codec(codec: &crate::codec::Codec) -> Option<PaletteIndex> {
+pub fn from_codec(codec: &crate::codec::CodecConfig) -> Option<PaletteIndex> {
     codec.palette_linear().map(PaletteIndex::build)
 }
 
 /// One-shot nearest-neighbor lookup over a codec's palette without building
 /// (and never amortizing) a LUT. Use when a single `nearest` query is all
 /// that's needed — e.g. picking the bg palette index in `encode_*`.
-pub fn nearest_in_codec(codec: &crate::codec::Codec, color: [f32; 3]) -> Option<u32> {
+pub fn nearest_in_codec(codec: &crate::codec::CodecConfig, color: [f32; 3]) -> Option<u32> {
     let pal = codec.palette_linear()?;
     let k = pal.len() / 3;
     let mut best_k = 0u32;

@@ -13,7 +13,7 @@ use super::raster::{apply_circle, EvalResult};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
-use crate::codec::Codec;
+use crate::codec::CodecConfig as Codec;
 
 /// Range of rows touched by a circle of radius `r` centered at `cy`, clamped
 /// to `[0, h-1]`. Used to update the integral image after `apply_circle`.

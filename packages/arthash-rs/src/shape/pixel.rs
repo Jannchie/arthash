@@ -6,7 +6,7 @@
 
 use super::quant::{aspect_code, aspect_from_code, read_color, write_color};
 use crate::bitio::{BitReader, BitWriter};
-use crate::codec::Codec;
+use crate::codec::CodecConfig as Codec;
 use crate::colorspace::linear_to_srgb_u8;
 
 #[derive(Clone, Debug)]

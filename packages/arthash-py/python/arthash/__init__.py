@@ -12,35 +12,87 @@ Seven modes share one Codec API:
 
 Quick start:
 
-    from arthash import encode, decode, Codec, ShapeType
+    from arthash import encode, decode, detail_triangle
 
-    hash_bytes = encode("photo.jpg")
-    w, h, rgba = decode(hash_bytes, base_size=256)
+    hash_bytes = encode("photo.jpg", detail_triangle())
+    w, h, rgba = decode(hash_bytes, detail_triangle(), base_size=512)
 
-    codec = Codec(shape=ShapeType.CIRCLE, n_shapes=12)
-    hash_bytes = encode("photo.jpg", codec)
-    w, h, rgb = decode(hash_bytes, codec, base_size=256)
+Or use the lower-level explicit Codec construction:
+
+    from arthash import Codec, Preset
+
+    codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+    codec = Codec.triangle(n=24)
 
 See docs/SPEC.md for the byte-format contract. The heavy work happens in
 the bundled Rust extension; this Python layer owns input adaptation,
-Codec validation, and the historical return-type contract.
+Codec validation, and the unified return-type contract.
 """
 
 from . import palettes
 from .__about__ import __version__
 from ._api import decode, encode, to_svg
-from ._codec import DEFAULT_CODEC, Codec, ShapeType
+from ._codec import DEFAULT_CODEC, Codec, Preset, ShapeType
 from ._search import DEFAULT_SEARCH, SearchOptions
+
+
+# ---------- top-level preset shortcuts ----------
+# These mirror Preset.* but spare you the `Codec.preset(Preset.X)` ceremony
+# for the common case of "just give me the recommended codec for this slot".
+
+def tiny_dct() -> Codec:
+    """V4 thumbhash-style placeholder (~21 B). Smallest, blurriest."""
+    return Codec.preset(Preset.TINY_DCT)
+
+
+def placeholder_triangle() -> Codec:
+    """12-triangle mosaic, ~77 B. Lightweight SVG-friendly placeholder."""
+    return Codec.preset(Preset.PLACEHOLDER_TRIANGLE)
+
+
+def detail_triangle() -> Codec:
+    """64-triangle mosaic, ~395 B. Playground default — recognisable preview."""
+    return Codec.preset(Preset.DETAIL_TRIANGLE)
+
+
+def placeholder_circle() -> Codec:
+    """12-circle mosaic, ~53 B. SQIP-style overlapping circles."""
+    return Codec.preset(Preset.PLACEHOLDER_CIRCLE)
+
+
+def placeholder_pixel() -> Codec:
+    """16-cell PIXEL mosaic, ~33 B. Lo-fi mosaic look."""
+    return Codec.preset(Preset.PLACEHOLDER_PIXEL)
+
+
+def medium_triangle() -> Codec:
+    """24-triangle mosaic, ~150 B. Middle ground between Placeholder and Detail."""
+    return Codec.preset(Preset.MEDIUM_TRIANGLE)
+
+
+def detail_circle() -> Codec:
+    """64-circle mosaic, ~267 B. Detail-level circular brush feel."""
+    return Codec.preset(Preset.DETAIL_CIRCLE)
+
 
 __all__ = [
     "__version__",
     "Codec",
     "DEFAULT_CODEC",
     "DEFAULT_SEARCH",
+    "Preset",
     "SearchOptions",
     "ShapeType",
     "decode",
     "encode",
     "palettes",
     "to_svg",
+    # preset shortcuts
+    "tiny_dct",
+    "placeholder_triangle",
+    "placeholder_circle",
+    "placeholder_pixel",
+    "medium_triangle",
+    "detail_triangle",
+    "detail_circle",
 ]

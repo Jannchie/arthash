@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { Waterfall } from "vue-wf";
 import { Shape, type Shape as ShapeType } from "arthash";
+import { Zap, Cpu, Package2, LayoutGrid, Loader2 } from "@lucide/vue";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
 import { DEMO_IMAGES } from "../demo";
@@ -22,11 +23,7 @@ const useSvg = ref(true);
 const cols = ref(8);
 const colorId = ref<string>("rgb-565");
 
-const advanced = ref<AdvancedConfig>({
-  alphaBits: 3,
-  overrideAspectEnabled: false,
-  overrideAspect: 1,
-});
+const advanced = ref<AdvancedConfig>({ alphaBits: 3 });
 
 const DEBOUNCE_MS = 300;
 const nShapesD = refDebounced(nShapes, DEBOUNCE_MS);
@@ -35,9 +32,6 @@ const blurD = refDebounced(blur, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 
-const effectiveAspect = computed(() =>
-  advancedD.value.overrideAspectEnabled ? advancedD.value.overrideAspect : undefined,
-);
 const items = computed(() => DEMO_IMAGES.map((d) => ({ width: d.w, height: d.h })));
 
 const tileMetrics = ref(new Map<number, { encodeMs: number; decodeMs: number; hashBytes: number }>());
@@ -141,15 +135,19 @@ function fmtMs(ms: number) {
 
     <div class="metrics-row">
       <div class="metric">
+        <Zap class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">avg encode</span><span class="v">{{ aggregate ? fmtMs(aggregate.avgEncode) : "—" }}</span>
       </div>
       <div class="metric">
+        <Cpu class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">avg decode</span><span class="v">{{ aggregate ? fmtMs(aggregate.avgDecode) : "—" }}</span>
       </div>
       <div class="metric">
+        <Package2 class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">hash size</span><span class="v">{{ aggregate ? aggregate.size : "—" }}</span>
       </div>
       <div class="metric">
+        <LayoutGrid class="metric-icon" :size="13" :stroke-width="1.75" />
         <span class="k">tiles</span><span class="v">{{ aggregate ? `${aggregate.n}/${DEMO_IMAGES.length}` : `0/${DEMO_IMAGES.length}` }}</span>
       </div>
       <div class="spacer" />
@@ -157,6 +155,7 @@ function fmtMs(ms: number) {
     </div>
 
     <div v-if="!allEncoded" class="encoding-progress">
+      <Loader2 class="spin" :size="22" :stroke-width="1.5" />
       <div class="encoding-progress-text">
         encoding {{ settledCount }} / {{ DEMO_IMAGES.length }}
       </div>
@@ -194,7 +193,6 @@ function fmtMs(ms: number) {
           :ready="ready"
           :alpha-bits="advancedD.alphaBits"
           :color-id="colorId"
-          :override-aspect="effectiveAspect"
           @metrics="(v) => onTileMetrics(i, v)"
         />
       </Waterfall>

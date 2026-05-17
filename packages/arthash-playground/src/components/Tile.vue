@@ -21,7 +21,6 @@ interface Props {
   // cx/cy/r bit widths are derived from baseSize in runPipeline.
   alphaBits?: number;
   colorId?: string;
-  overrideAspect?: number;
 }
 
 const props = defineProps<Props>();
@@ -80,7 +79,6 @@ async function run() {
       seed: props.seed,
       alphaBits: props.alphaBits,
       colorId: props.colorId,
-      overrideAspect: props.overrideAspect,
       useSvg: props.useSvg,
     });
     if (token !== runToken) return;
@@ -121,7 +119,6 @@ watch(
     props.useSvg,
     props.alphaBits,
     props.colorId,
-    props.overrideAspect,
   ],
   () => {
     void run();

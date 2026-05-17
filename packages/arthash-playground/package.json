@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "arthash": "workspace:*",
+    "@lucide/vue": "^1.16.0",
     "@vueuse/core": "^14.3.0",
+    "arthash": "workspace:*",
     "vue": "^3.5.13",
     "vue-wf": "^0.8.2"
   },

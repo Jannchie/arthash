@@ -24,7 +24,7 @@ def test_pixel_continuous_roundtrip(rgb_random_seed42):
     assert len(h) == codec.bytes_total()
     w, hh, arr = decode(h, codec, base_size=64)
     assert isinstance(arr, np.ndarray)
-    assert arr.shape == (hh, w, 3)
+    assert arr.shape == (hh, w, 4)
     assert arr.dtype == np.uint8
 
 
@@ -48,7 +48,7 @@ def test_circle_continuous_roundtrip(rgb_random_seed42):
     h = encode(rgb_random_seed42, codec, seed=0)
     assert len(h) == codec.bytes_total()
     w, hh, arr = decode(h, codec, base_size=64)
-    assert arr.shape == (hh, w, 3)
+    assert arr.shape == (hh, w, 4)
     assert arr.dtype == np.uint8
 
 
@@ -82,7 +82,7 @@ def test_triangle_continuous_roundtrip(rgb_random_seed42):
     h = encode(rgb_random_seed42, codec, seed=0)
     assert len(h) == codec.bytes_total()
     w, hh, arr = decode(h, codec, base_size=64)
-    assert arr.shape == (hh, w, 3)
+    assert arr.shape == (hh, w, 4)
     assert arr.dtype == np.uint8
 
 
@@ -104,7 +104,7 @@ def test_rect_family_continuous_roundtrip(rgb_random_seed42, shape):
     h = encode(rgb_random_seed42, codec, seed=0)
     assert len(h) == codec.bytes_total()
     w, hh, arr = decode(h, codec, base_size=64)
-    assert arr.shape == (hh, w, 3)
+    assert arr.shape == (hh, w, 4)
     assert arr.dtype == np.uint8
 
 
@@ -138,7 +138,7 @@ def test_pixel_decode_smooth_modes(rgb_random_seed42, smooth):
     codec = Codec(shape=ShapeType.PIXEL, n_shapes=12, palette=PICO8)
     h = encode(rgb_random_seed42, codec)
     w, hh, arr = decode(h, codec, base_size=64, pixel_smooth=smooth)
-    assert arr.shape == (hh, w, 3)
+    assert arr.shape == (hh, w, 4)
 
 
 def test_pixel_decode_invalid_smooth_raises(rgb_random_seed42):

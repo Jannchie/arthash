@@ -29,7 +29,7 @@ use super::rect::decode_rect_at;
 use super::rotrect::decode_rotrect_at;
 use super::square::decode_square_at;
 use crate::bitio::BitReader;
-use crate::codec::{Codec, ShapeType};
+use crate::codec::{Codec, CodecConfig, ShapeType};
 use crate::colorspace::linear_to_srgb_u8;
 use std::fmt::Write as _;
 
@@ -58,27 +58,46 @@ impl Default for SvgOptions {
     }
 }
 
+/// Identifier for SVG-unsupported codec modes. Public-facing tag without
+/// exposing internal shape enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SvgUnsupported {
+    Dct,
+    Pixel,
+    Other,
+}
+
+impl SvgUnsupported {
+    pub(crate) fn from(shape: ShapeType) -> Self {
+        match shape {
+            ShapeType::Dct => SvgUnsupported::Dct,
+            ShapeType::Pixel => SvgUnsupported::Pixel,
+            _ => SvgUnsupported::Other,
+        }
+    }
+}
+
 /// Errors returned by [`to_svg`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SvgError {
-    /// The codec's `shape` is not one of the SVG-supported modes
-    /// (CIRCLE / TRIANGLE).
-    UnsupportedShape(ShapeType),
+    /// The codec's mode is not one of the SVG-supported modes
+    /// (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT).
+    UnsupportedShape(SvgUnsupported),
 }
 
 impl std::fmt::Display for SvgError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SvgError::UnsupportedShape(s) => match s {
-                ShapeType::Dct => f.write_str(
+                SvgUnsupported::Dct => f.write_str(
                     "DCT mode has no natural SVG primitive representation. \
                      Use decode() to get raster pixels.",
                 ),
-                ShapeType::Pixel => f.write_str(
+                SvgUnsupported::Pixel => f.write_str(
                     "PIXEL mode SVG would be a grid of <rect> elements, \
                      not meaningfully smaller than a base64-encoded raster.",
                 ),
-                _ => write!(f, "SVG output not supported for shape {:?}", s),
+                SvgUnsupported::Other => f.write_str("SVG output not supported for this codec"),
             },
         }
     }
@@ -141,7 +160,7 @@ fn opacity_attr(alpha: f32) -> String {
     }
 }
 
-fn circle_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+fn circle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
     let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
@@ -169,7 +188,7 @@ fn circle_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut 
     }
 }
 
-fn triangle_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+fn triangle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
     let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
@@ -211,7 +230,7 @@ fn triangle_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mu
     }
 }
 
-fn rect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+fn rect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     for _ in 0..codec.n_shapes {
         let (cx, cy, rw, rh, color, alpha) = decode_rect_at(br, codec, w, h);
         let x = cx - rw / 2;
@@ -227,7 +246,7 @@ fn rect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut St
     }
 }
 
-fn square_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+fn square_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     for _ in 0..codec.n_shapes {
         let (cx, cy, s, color, alpha) = decode_square_at(br, codec, w, h);
         let x = cx - s / 2;
@@ -243,7 +262,7 @@ fn square_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut 
     }
 }
 
-fn rotrect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut String) {
+fn rotrect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     for _ in 0..codec.n_shapes {
         let (cx, cy, rw, rh, theta_deg, color, alpha) = decode_rotrect_at(br, codec, w, h);
         let x = cx - rw / 2;
@@ -266,15 +285,16 @@ fn rotrect_elements(br: &mut BitReader, codec: &Codec, w: u32, h: u32, out: &mut
 /// # Errors
 /// Returns [`SvgError::UnsupportedShape`] for DCT and PIXEL codecs.
 pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<String, SvgError> {
+    let cfg = codec.to_config();
     if !matches!(
-        codec.shape,
+        cfg.shape,
         ShapeType::Circle
             | ShapeType::Triangle
             | ShapeType::Square
             | ShapeType::Rect
             | ShapeType::RotatedRect
     ) {
-        return Err(SvgError::UnsupportedShape(codec.shape));
+        return Err(SvgError::UnsupportedShape(SvgUnsupported::from(cfg.shape)));
     }
 
     let mut br = BitReader::new(hash_bytes);
@@ -292,18 +312,18 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
         )
     };
 
-    let bg = read_color(&mut br, codec);
+    let bg = read_color(&mut br, &cfg);
     let bg_hex = color_to_hex(&bg);
 
     // Background as a path: `M0 0h{W}v{H}H0z` traces the rect in 4 cmds.
     // Saves vs `<rect width=W height=H>` because attribute names are longer.
     let mut body = format!("<path fill=\"{}\" d=\"M0 0h{}v{}H0z\"/>", bg_hex, w, h);
-    match codec.shape {
-        ShapeType::Circle => circle_elements(&mut br, codec, w, h, &mut body),
-        ShapeType::Triangle => triangle_elements(&mut br, codec, w, h, &mut body),
-        ShapeType::Square => square_elements(&mut br, codec, w, h, &mut body),
-        ShapeType::Rect => rect_elements(&mut br, codec, w, h, &mut body),
-        ShapeType::RotatedRect => rotrect_elements(&mut br, codec, w, h, &mut body),
+    match cfg.shape {
+        ShapeType::Circle => circle_elements(&mut br, &cfg, w, h, &mut body),
+        ShapeType::Triangle => triangle_elements(&mut br, &cfg, w, h, &mut body),
+        ShapeType::Square => square_elements(&mut br, &cfg, w, h, &mut body),
+        ShapeType::Rect => rect_elements(&mut br, &cfg, w, h, &mut body),
+        ShapeType::RotatedRect => rotrect_elements(&mut br, &cfg, w, h, &mut body),
         _ => unreachable!(),
     }
 
@@ -387,11 +407,7 @@ mod tests {
 
     #[test]
     fn circle_round_trip_parses() {
-        let codec = Codec {
-            shape: ShapeType::Circle,
-            n_shapes: 4,
-            ..Codec::default()
-        };
+        let codec = Codec::circle(4);
         let rgb = solid_rgb(48, 48, [180, 90, 40]);
         let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
         let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
@@ -404,7 +420,7 @@ mod tests {
 
     #[test]
     fn rect_round_trip_parses() {
-        let codec = Codec { shape: ShapeType::Rect, n_shapes: 3, ..Codec::default() };
+        let codec = Codec::rect(3);
         let rgb = solid_rgb(48, 48, [60, 120, 200]);
         let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
         let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
@@ -416,7 +432,7 @@ mod tests {
 
     #[test]
     fn square_round_trip_parses() {
-        let codec = Codec { shape: ShapeType::Square, n_shapes: 3, ..Codec::default() };
+        let codec = Codec::square(3);
         let rgb = solid_rgb(48, 48, [60, 120, 200]);
         let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
         let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
@@ -432,7 +448,7 @@ mod tests {
 
     #[test]
     fn rotrect_round_trip_parses() {
-        let codec = Codec { shape: ShapeType::RotatedRect, n_shapes: 3, ..Codec::default() };
+        let codec = Codec::rotated_rect(3);
         let rgb = solid_rgb(48, 48, [60, 120, 200]);
         let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
         let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
@@ -443,11 +459,7 @@ mod tests {
 
     #[test]
     fn triangle_round_trip_parses() {
-        let codec = Codec {
-            shape: ShapeType::Triangle,
-            n_shapes: 3,
-            ..Codec::default()
-        };
+        let codec = Codec::triangle(3);
         let rgb = solid_rgb(48, 48, [60, 120, 200]);
         let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
         let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
@@ -458,11 +470,7 @@ mod tests {
 
     #[test]
     fn blur_wraps_in_filter() {
-        let codec = Codec {
-            shape: ShapeType::Circle,
-            n_shapes: 2,
-            ..Codec::default()
-        };
+        let codec = Codec::circle(2);
         let bytes = encode_rgb(
             &solid_rgb(48, 48, [200, 200, 200]),
             48,
@@ -489,17 +497,14 @@ mod tests {
         let codec = Codec::default();
         let bytes = vec![0u8; 32];
         let err = to_svg(&bytes, &codec, SvgOptions::default()).unwrap_err();
-        assert_eq!(err, SvgError::UnsupportedShape(ShapeType::Dct));
+        assert_eq!(err, SvgError::UnsupportedShape(SvgUnsupported::Dct));
     }
 
     #[test]
     fn pixel_returns_unsupported() {
-        let codec = Codec {
-            shape: ShapeType::Pixel,
-            ..Codec::default()
-        };
+        let codec = Codec::pixel(12);
         let bytes = vec![0u8; 32];
         let err = to_svg(&bytes, &codec, SvgOptions::default()).unwrap_err();
-        assert_eq!(err, SvgError::UnsupportedShape(ShapeType::Pixel));
+        assert_eq!(err, SvgError::UnsupportedShape(SvgUnsupported::Pixel));
     }
 }

@@ -1,7 +1,7 @@
 //! Field-level encode/decode helpers. SPEC §4.2 / §4.3 / §4.5 / §4.8.
 
 use crate::bitio::{BitReader, BitWriter};
-use crate::codec::Codec;
+use crate::codec::CodecConfig as Codec;
 use crate::colorspace::{linear_to_srgb_u8, srgb_u8_to_linear};
 
 // --- aspect (SPEC §4.2) ---

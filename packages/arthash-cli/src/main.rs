@@ -11,7 +11,7 @@ use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgb, RgbImage};
 use arthash::{
     decode as pf_decode, encode_rgb, to_svg as pf_to_svg, Codec, DecodeOptions, EncodeOptions,
-    ShapeType, SvgOptions,
+    Preset, SvgOptions,
 };
 use std::fs;
 use std::io::{self, Cursor, Read, Write};
@@ -110,21 +110,40 @@ enum Cmd {
 
 #[derive(clap::Args, Clone)]
 struct CodecArgs {
-    /// Shape mode.
+    /// Named preset (e.g. `detail-triangle`, `placeholder-circle`).
+    /// Overrides `--shape` / `--n-shapes` when set.
+    #[arg(long, value_enum, conflicts_with_all = ["shape", "n_shapes"])]
+    preset: Option<PresetArg>,
+    /// Shape mode. Ignored when `--preset` is given.
     #[arg(long, value_enum, default_value_t = ShapeArg::Dct)]
     shape: ShapeArg,
-    /// Number of shapes (CIRCLE / TRIANGLE / PIXEL).
+    /// Number of shapes (all shape modes; ignored for DCT).
     #[arg(short = 'n', long = "n-shapes", default_value_t = 12)]
     n_shapes: u32,
 }
 
 impl CodecArgs {
     fn to_codec(&self) -> Codec {
-        Codec {
-            shape: self.shape.to_shape_type(),
-            n_shapes: self.n_shapes,
-            ..Codec::default()
+        if let Some(p) = self.preset {
+            return p.to_preset().codec();
         }
+        match self.shape {
+            ShapeArg::Dct => Codec::dct(),
+            ShapeArg::Circle => Codec::circle(self.n_shapes),
+            ShapeArg::Triangle => Codec::triangle(self.n_shapes),
+            ShapeArg::Square => Codec::square(self.n_shapes),
+            ShapeArg::Rect => Codec::rect(self.n_shapes),
+            ShapeArg::RotatedRect => Codec::rotated_rect(self.n_shapes),
+            ShapeArg::Pixel => Codec::pixel(self.n_shapes),
+        }
+    }
+
+    fn is_dct(&self) -> bool {
+        matches!(self.to_codec(), Codec::Dct)
+    }
+
+    fn supports_svg(&self) -> bool {
+        !matches!(self.to_codec(), Codec::Dct | Codec::Pixel { .. })
     }
 }
 
@@ -133,16 +152,41 @@ enum ShapeArg {
     Dct,
     Circle,
     Triangle,
+    Square,
+    Rect,
+    #[value(name = "rotrect", alias = "rotated-rect")]
+    RotatedRect,
     Pixel,
 }
 
-impl ShapeArg {
-    fn to_shape_type(self) -> ShapeType {
+#[derive(ValueEnum, Clone, Copy)]
+enum PresetArg {
+    #[value(name = "tiny-dct")]
+    TinyDct,
+    #[value(name = "placeholder-triangle")]
+    PlaceholderTriangle,
+    #[value(name = "placeholder-circle")]
+    PlaceholderCircle,
+    #[value(name = "placeholder-pixel")]
+    PlaceholderPixel,
+    #[value(name = "medium-triangle")]
+    MediumTriangle,
+    #[value(name = "detail-triangle")]
+    DetailTriangle,
+    #[value(name = "detail-circle")]
+    DetailCircle,
+}
+
+impl PresetArg {
+    fn to_preset(self) -> Preset {
         match self {
-            ShapeArg::Dct => ShapeType::Dct,
-            ShapeArg::Circle => ShapeType::Circle,
-            ShapeArg::Triangle => ShapeType::Triangle,
-            ShapeArg::Pixel => ShapeType::Pixel,
+            PresetArg::TinyDct => Preset::TinyDct,
+            PresetArg::PlaceholderTriangle => Preset::PlaceholderTriangle,
+            PresetArg::PlaceholderCircle => Preset::PlaceholderCircle,
+            PresetArg::PlaceholderPixel => Preset::PlaceholderPixel,
+            PresetArg::MediumTriangle => Preset::MediumTriangle,
+            PresetArg::DetailTriangle => Preset::DetailTriangle,
+            PresetArg::DetailCircle => Preset::DetailCircle,
         }
     }
 }
@@ -208,10 +252,7 @@ fn cmd_encode(
     seed: u64,
 ) -> Result<()> {
     let codec = codec_args.to_codec();
-    let target = match codec.shape {
-        ShapeType::Dct => DCT_TARGET,
-        _ => SHAPE_TARGET,
-    };
+    let target = if codec_args.is_dct() { DCT_TARGET } else { SHAPE_TARGET };
     let (rgb, w, h) =
         load_and_resize(input, target).with_context(|| format!("loading {}", input.display()))?;
 
@@ -231,18 +272,18 @@ fn cmd_decode(
     let codec = codec_args.to_codec();
     let hash = read_hash(input, format)?;
 
-    let (w, h, rgba) = pf_decode(
+    let out = pf_decode(
         &hash,
         &codec,
         DecodeOptions { base_size: size, ..Default::default() },
     );
 
     // RGBA → RGB for PNG output (alpha is always 255 in current decode output).
-    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
-    for px in rgba.chunks_exact(4) {
+    let mut rgb = Vec::with_capacity((out.width * out.height * 3) as usize);
+    for px in out.rgba.chunks_exact(4) {
         rgb.extend_from_slice(&px[..3]);
     }
-    let img: RgbImage = ImageBuffer::<Rgb<u8>, _>::from_raw(w, h, rgb)
+    let img: RgbImage = ImageBuffer::<Rgb<u8>, _>::from_raw(out.width, out.height, rgb)
         .context("decoded buffer size mismatch")?;
     img.save(output).with_context(|| format!("writing {}", output.display()))?;
     Ok(())
@@ -288,16 +329,11 @@ fn cmd_thumb(
     let resolved = format.resolve(output);
 
     // Reject SVG up-front for unsupported shapes (matches `to_svg`'s contract).
-    if resolved == ThumbFormat::Svg
-        && !matches!(codec.shape, ShapeType::Circle | ShapeType::Triangle)
-    {
-        bail!("svg output only supports --shape circle or triangle");
+    if resolved == ThumbFormat::Svg && !codec_args.supports_svg() {
+        bail!("svg output is not supported for DCT or PIXEL codecs");
     }
 
-    let target = match codec.shape {
-        ShapeType::Dct => DCT_TARGET,
-        _ => SHAPE_TARGET,
-    };
+    let target = if codec_args.is_dct() { DCT_TARGET } else { SHAPE_TARGET };
     let (rgb, w, h) =
         load_and_resize(input, target).with_context(|| format!("loading {}", input.display()))?;
 
@@ -317,16 +353,16 @@ fn cmd_thumb(
         return Ok(());
     }
 
-    let (ow, oh, rgba) = pf_decode(
+    let out = pf_decode(
         &hash,
         &codec,
         DecodeOptions { base_size: size, ..Default::default() },
     );
-    let mut rgb_out = Vec::with_capacity((ow * oh * 3) as usize);
-    for px in rgba.chunks_exact(4) {
+    let mut rgb_out = Vec::with_capacity((out.width * out.height * 3) as usize);
+    for px in out.rgba.chunks_exact(4) {
         rgb_out.extend_from_slice(&px[..3]);
     }
-    let img: RgbImage = ImageBuffer::<Rgb<u8>, _>::from_raw(ow, oh, rgb_out)
+    let img: RgbImage = ImageBuffer::<Rgb<u8>, _>::from_raw(out.width, out.height, rgb_out)
         .context("decoded buffer size mismatch")?;
     let dyn_img = DynamicImage::ImageRgb8(img);
 

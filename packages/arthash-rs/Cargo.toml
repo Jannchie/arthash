@@ -23,12 +23,16 @@ image-io = ["dep:image"]
 # per-pixel-touched). Used by examples/bench_hillclimb.rs to attribute
 # hill-climb cost; zero-cost when off.
 bench-counters = []
+# Derive serde Serialize/Deserialize on Codec / Palette / ColorMode / Preset
+# so codec metadata can be persisted (e.g. as a JSON column alongside hashes).
+serde = ["dep:serde"]
 
 [dependencies]
 image = { version = "0.25", optional = true, default-features = false, features = [
     "png", "jpeg",
 ] }
 matrixmultiply = "0.3"
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1"

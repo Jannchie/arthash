@@ -1,11 +1,14 @@
 import {
-  encode as pfEncode,
-  decode as pfDecode,
-  toSvg as pfToSvg,
+  encodeSync as pfEncode,
+  decodeSync as pfDecode,
+  toSvgSync as pfToSvg,
+  codec as makeCodec,
   Shape,
   type Shape as ShapeType,
+  type Codec,
   type EncodeOptions,
   type DecodeOptions,
+  type RawCodecSpec,
 } from "arthash";
 
 export const DCT_THUMB = 100;
@@ -351,11 +354,14 @@ export interface RunResult {
   decodeMs: number;
 }
 
-export interface RunOpts extends EncodeOptions, DecodeOptions {
+export interface RunOpts {
   shape: ShapeType;
+  nShapes?: number;
   baseSize: number;
   seed: number;
   blur: number;
+  /** Override (rare) — advanced panel knob. */
+  alphaBits?: number;
   /** ID of an entry in COLOR_OPTIONS. */
   colorId?: string;
   /** Hint that the caller will display SVG output. When true and the shape
@@ -364,27 +370,27 @@ export interface RunOpts extends EncodeOptions, DecodeOptions {
   useSvg?: boolean;
 }
 
-function codecFields(opts: RunOpts) {
-  // Only emit fields the caller actually set so SDK defaults still apply.
-  const out: Record<string, unknown> = { shape: opts.shape };
-  if (opts.nShapes !== undefined) out.nShapes = opts.nShapes;
-
-  // Position / radius bit widths are derived from base — base is the single
-  // "precision budget" knob, and smaller base shrinks the hash.
+/** Build a codec from playground RunOpts using the raw spec escape hatch —
+ *  we need fine-grained bit-width control that the named factories don't
+ *  expose (alpha_bits slider, base-size-derived cx/cy/r). */
+function buildCodec(opts: RunOpts): Codec {
   const auto = coordBitsForBase(opts.baseSize);
-  out.cxBits = opts.cxBits ?? auto.cxBits;
-  out.cyBits = opts.cyBits ?? auto.cyBits;
-  out.rBits = opts.rBits ?? auto.rBits;
-  if (opts.alphaBits !== undefined) out.alphaBits = opts.alphaBits;
-
+  const spec: RawCodecSpec = {
+    shape: opts.shape,
+    nShapes: opts.nShapes,
+    cxBits: auto.cxBits,
+    cyBits: auto.cyBits,
+    rBits: auto.rBits,
+    alphaBits: opts.alphaBits,
+  };
   const option = getColorOption(opts.colorId ?? "rgb-565");
   if (option.palette) {
-    out.palette = paletteToBytes(option.palette);
-    out.paletteK = option.palette.colors.length;
+    spec.palette = paletteToBytes(option.palette);
+    spec.paletteK = option.palette.colors.length;
   } else if (option.colorBits !== undefined) {
-    out.colorBits = option.colorBits;
+    spec.colorBits = option.colorBits;
   }
-  return out;
+  return makeCodec.raw(spec);
 }
 
 export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
@@ -404,25 +410,15 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
     optsEff.nShapes = gw * gh;
   }
 
-  const codec = codecFields(optsEff);
+  const codec = buildCodec(optsEff);
+  const encOpts: EncodeOptions = { seed: opts.seed };
 
   const t0 = performance.now();
-  const hash = pfEncode(rgb, w, h, { ...codec, seed: opts.seed } as EncodeOptions);
+  const hash = pfEncode(rgb, w, h, codec, encOpts);
   const encodeMs = performance.now() - t0;
 
-  const decodeArgs: DecodeOptions = {
-    ...codec,
-    baseSize: opts.baseSize,
-  };
-  if (opts.overrideAspect !== undefined && opts.overrideAspect > 0) {
-    decodeArgs.overrideAspect = opts.overrideAspect;
-  }
+  const decodeArgs: DecodeOptions = { baseSize: opts.baseSize };
 
-  // Decode strategy:
-  //   * SVG mode for hash-driven shapes (everything but PIXEL): skip raster.
-  //   * SVG mode for PIXEL: decode at a small fixed size — `pixelToSvg` only
-  //     reads one pixel per cell, so resolution past `max(gw, gh)` is wasted.
-  //   * Otherwise: full decode at baseSize.
   const wantsSvg = opts.useSvg === true && supportsSvg(opts.shape);
   const skipRaster = wantsSvg && opts.shape !== Shape.PIXEL;
   const rasterArgs: DecodeOptions = wantsSvg && opts.shape === Shape.PIXEL
@@ -430,13 +426,10 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
     : decodeArgs;
 
   let decoded: { w: number; h: number; rgba: Uint8Array } | undefined;
-  // `decodeMs` is the end-to-end cost from `hash` to a display-ready
-  // representation. SVG mode adds SVG-generation time on top of (mini)
-  // raster decode; non-SVG mode just times raster decode.
   let decodeMs = 0;
   if (!skipRaster) {
     const t1 = performance.now();
-    decoded = pfDecode(hash, rasterArgs);
+    decoded = pfDecode(hash, codec, rasterArgs);
     decodeMs = performance.now() - t1;
   }
 
@@ -444,15 +437,10 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   if (supportsSvg(opts.shape)) {
     const tSvg0 = performance.now();
     if (opts.shape === Shape.PIXEL) {
-      // `decoded` is guaranteed by the branching above when SVG is wanted.
       svg = pixelToSvg(decoded!, pixelGW, pixelGH, opts.blur);
     } else {
       try {
-        svg = pfToSvg(hash, { ...decodeArgs, blur: opts.blur });
-        // Force the SVG to stretch into the tile rather than letterbox — the
-        // decoded viewBox's aspect can differ from the tile's CSS aspect by a
-        // pixel of rounding (most visible at small `base`), which otherwise
-        // leaves a thin white bar.
+        svg = pfToSvg(hash, codec, { ...decodeArgs, blur: opts.blur });
         if (svg && !/preserveAspectRatio=/.test(svg)) {
           svg = svg.replace(/<svg\b/, '<svg preserveAspectRatio="none"');
         }
@@ -463,11 +451,9 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
     if (svg) decodeMs += performance.now() - tSvg0;
   }
 
-  // SVG generation failed unexpectedly. Fall back to a raster decode so the
-  // tile shows the canvas placeholder instead of an empty box.
   if (skipRaster && svg === null) {
     const t1 = performance.now();
-    decoded = pfDecode(hash, decodeArgs);
+    decoded = pfDecode(hash, codec, decodeArgs);
     decodeMs = performance.now() - t1;
   }
 

@@ -33,8 +33,9 @@ def test_dct_roundtrip_solid_red(rgb_solid_red):
     w, h, rgba = decode(hash_bytes, base_size=64)
     # Square input → square output at base_size long-edge
     assert w == 64 and h == 64
-    # rgba is a raw RGBA byte buffer
-    assert len(rgba) == 4 * w * h
+    # rgba is an ndarray shaped (h, w, 4)
+    assert rgba.shape == (h, w, 4)
+    assert rgba.dtype == np.uint8
 
 
 def test_dct_roundtrip_gradient(rgb_gradient):
@@ -43,7 +44,7 @@ def test_dct_roundtrip_gradient(rgb_gradient):
     # Source is 100×60 wide ≈ aspect 1.67 → w = 128, h = round(128/1.67) ≈ 77
     assert w == 128
     assert 70 <= h <= 84
-    assert len(rgba) == 4 * w * h
+    assert rgba.shape == (h, w, 4)
 
 
 def test_dct_roundtrip_reproduces_color(rgb_solid_red):
@@ -51,10 +52,9 @@ def test_dct_roundtrip_reproduces_color(rgb_solid_red):
     survives intact through encode/decode."""
     hash_bytes = encode(rgb_solid_red)
     w, h, rgba = decode(hash_bytes, base_size=32)
-    arr = np.frombuffer(rgba, dtype=np.uint8).reshape(h, w, 4)
-    r_mean = arr[..., 0].mean()
-    g_mean = arr[..., 1].mean()
-    b_mean = arr[..., 2].mean()
+    r_mean = rgba[..., 0].mean()
+    g_mean = rgba[..., 1].mean()
+    b_mean = rgba[..., 2].mean()
     assert r_mean > 200, f"red channel should dominate for solid-red input, got {r_mean:.1f}"
     assert g_mean < 50 and b_mean < 50, "green/blue should be minimal"
 

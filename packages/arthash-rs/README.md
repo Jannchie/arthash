@@ -25,26 +25,50 @@ Status: **functional, conformance-tested against the cross-language vectors at
 ## Quick start
 
 ```rust
-use arthash::{Codec, ShapeType, encode_rgb, decode, EncodeOptions, DecodeOptions};
+use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
 
 let rgb: Vec<u8> = /* row-major H*W*3 sRGB u8 */;
-let codec = Codec::default();  // DCT, 12 shapes, 5/5 bit coords...
+
+// Build a codec via the factory methods …
+let codec = Codec::triangle(64);
+// … or pick a named preset
+let codec = Preset::DetailTriangle.codec();
 
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
 
-let (out_w, out_h, rgba) = decode(&hash, &codec, DecodeOptions {
+let out = decode(&hash, &codec, DecodeOptions {
     base_size: 256,
     ..Default::default()
 });
+// out.width / out.height / out.rgba (length 4·width·height)
 ```
+
+### Codec factories
+
+`Codec::dct()`, `Codec::circle(n)`, `Codec::triangle(n)`, `Codec::square(n)`,
+`Codec::rect(n)`, `Codec::rotated_rect(n)`, `Codec::pixel(n)`. Each variant
+ignores fields that don't apply to its mode. Use builders to customize:
+
+```rust
+use arthash::{Codec, ColorMode, Palette};
+
+let palette = Palette::from_rgb(&[[0,0,0], /* … */]).unwrap();
+let codec = Codec::triangle(24).with_palette(palette);
+let codec = Codec::pixel(16).with_color(ColorMode::Rgb888).with_grid_aspect(1.5);
+```
+
+### Loading images
+
+The core crate takes raw RGB/RGBA buffers. Enable the `image-io` feature for
+a `encode_image(path, codec, opts)` convenience that reads + resizes for you.
 
 ### Input expectations
 
 The crate takes **already-thumbnailed** pixel buffers. For shape modes that
-means resize to `arthash::shape::THUMB = 48` long-edge before calling. For
-DCT, ≤ 100 long-edge. The crate does **not** load images or resize — that
-keeps the core dependency-free. An optional `image-io` feature bundles the
-`image` crate for path-based loading.
+means resize to `48` long-edge before calling. For DCT, `≤ 100` long-edge.
+The crate does **not** load images or resize — that keeps the core
+dependency-free. The optional `image-io` feature bundles the `image` crate
+for path-based loading via `encode_image(path, codec, opts)`.
 
 ## Conformance
 

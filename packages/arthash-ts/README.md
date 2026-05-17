@@ -5,36 +5,46 @@ wasm-bindgen — same byte-format contract, same algorithms, no Node native
 modules. Works in browser and Node ≥ 18.
 
 ```ts
-import { init, encode, decode, toSvg, Shape } from "arthash";
+import { encode, decode, toSvg, codec, Preset, encodeImage } from "arthash";
 
-await init();  // load the wasm module (~70 KB gzip)
+// Wasm loads automatically on first call. Pre-load with `await init()` if you
+// want to control timing (e.g. before a tight render loop).
 
-const hash = encode(rgbBytes, width, height, {
-  shape: Shape.CIRCLE,
-  nShapes: 12,
-});
-
-const { w, h, rgba } = decode(hash, { shape: Shape.CIRCLE, nShapes: 12 });
-
-const svg = toSvg(hash, { shape: Shape.CIRCLE, nShapes: 12, blur: 12 });
+// Named preset
+const c = codec.preset(Preset.DetailTriangle);       // triangle, n=64
+const hash = await encode(rgbBytes, width, height, c);
+const { w, h, rgba } = await decode(hash, c);
+const svg = await toSvg(hash, c, { blur: 12 });
 // → inline-ready: '<svg xmlns="..." viewBox="...">...</svg>'
+
+// Browser convenience — load + resize + encode in one call
+const hash2 = await encodeImage(imageUrlOrBlob, c);
+
+// Hot path? Synchronous variants assume `await init()` has completed.
+import { encodeSync, decodeSync, toSvgSync, init } from "arthash";
+await init();
+const fastHash = encodeSync(rgbBytes, width, height, c);
 ```
 
-## Shape modes
+## Codec factories
 
-All variants in `Shape` are wired up to the wasm core:
+```ts
+codec.dct()
+codec.circle({ n: 12 })
+codec.triangle({ n: 64 })
+codec.square({ n: 12 })
+codec.rect({ n: 12 })
+codec.rotatedRect({ n: 12, thetaBits: 5 })
+codec.pixel({ n: 16 })
 
-| Mode                | Look                                                |
-|---------------------|-----------------------------------------------------|
-| `Shape.DCT`         | thumbhash-style blurry placeholder (default codec). |
-| `Shape.CIRCLE`      | SQIP-style overlapping circles.                     |
-| `Shape.TRIANGLE`    | Primitive-style triangle mosaic.                    |
-| `Shape.SQUARE`      | Axis-aligned squares (cx, cy, side).                |
-| `Shape.RECT`        | Axis-aligned rectangles (cx, cy, w, h).             |
-| `Shape.ROTATED_RECT`| Rotated rectangles — `thetaBits` tunes angle steps. |
-| `Shape.PIXEL`       | Retro-palette pixel mosaic.                         |
+// Switch to palette color
+codec.withPalette(codec.triangle({ n: 24 }), { bytes: paletteBytes })
 
-`toSvg` supports CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT;
+// Low-level escape hatch for advanced control
+codec.raw({ shape: "triangle", nShapes: 12, alphaBits: 2, colorBits: 24 })
+```
+
+`toSvg` supports `circle` / `triangle` / `square` / `rect` / `rotrect`;
 DCT and PIXEL have no natural SVG primitive form and throw.
 
 ## Build
