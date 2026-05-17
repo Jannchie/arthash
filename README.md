@@ -10,7 +10,15 @@
 
 > **English** · [中文](./README.zh-CN.md)
 
-A compact placeholder-image hash — 17 B to 400 B per image, enough to render a recognisable preview while the real image loads.
+A compact placeholder-image hash with a distinctive, artistic look — 17 B to 400 B per image, enough to render a stylised yet recognisable preview while the real image loads.
+
+<p align="center">
+  <img src="./docs/site/public/preview.png" alt="arthash preview gallery — DCT, triangle, circle, square, rect, rotated rect, and pixel modes side by side">
+</p>
+
+<p align="center">
+  <b><a href="https://arthash.jannchie.com">▶ Try it live — arthash.jannchie.com</a></b>
+</p>
 
 Written in Rust at the core. Python and TypeScript share the same Rust code (via PyO3 wheel / wasm-bindgen), and hashes produced by any one binding decode on any other.
 
@@ -95,7 +103,7 @@ Factories: `codec.dct()` / `.circle({ n })` / `.triangle({ n })` / `.square({ n 
 | `ROTATED_RECT` | rotated rectangles, SVG out        |         66 |        339 |
 | `TRIANGLE`     | triangle mosaic, SVG out           |         77 |        395 |
 
-The playground default is `TRIANGLE n=64 / baseSize 512 / RGB-565`, a reasonable starting point. If you need smaller bytes, lower `n` (n=24 → 150 B, n=12 → 77 B). For a specific visual style, swap in a palette. For minimum size plus a blurry look, switch to DCT (≤ 24 B).
+The [online playground](https://arthash.jannchie.com) defaults to `TRIANGLE n=64 / baseSize 512 / RGB-565`, a reasonable starting point. If you need smaller bytes, lower `n` (n=24 → 150 B, n=12 → 77 B). For a specific visual style, swap in a palette. For minimum size plus a blurry look, switch to DCT (≤ 24 B).
 
 ## Relation to thumbhash and sqip
 

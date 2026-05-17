@@ -10,7 +10,15 @@
 
 > [English](./README.md) · **中文**
 
-用 17 B 到 400 B 描述一张图，足以渲染出一张可辨识的占位图，等真图加载完再替换。
+用 17 B 到 400 B 描述一张图，自带辨识度极高的艺术化视觉风格，足以渲染出一张有质感且可辨识的占位图，等真图加载完再替换。
+
+<p align="center">
+  <img src="./docs/site/public/preview.png" alt="arthash 预览效果 — DCT、triangle、circle、square、rect、rotated rect、pixel 多种模式并排展示">
+</p>
+
+<p align="center">
+  <b><a href="https://arthash.jannchie.com">▶ 在线体验 — arthash.jannchie.com</a></b>
+</p>
 
 核心用 Rust 写，Python 和 TypeScript 共用同一份 Rust 代码（PyO3 wheel / wasm-bindgen），任何一端编出来的 hash 都能互通。
 
@@ -95,7 +103,7 @@ const hash2 = await encodeImage(imageUrlOrBlob, c);
 | `ROTATED_RECT` | 旋转矩形，输出 SVG           |        66 |       339 |
 | `TRIANGLE`     | 三角形马赛克，输出 SVG       |        77 |       395 |
 
-playground 默认 `TRIANGLE n=64 / baseSize 512 / RGB-565`，是一个比较合理的起点。对大小敏感就调低 `n`（n=24 → 150 B，n=12 → 77 B）；想要特定视觉风格就换调色板；想要极致小体积加模糊感就上 DCT（≤ 24 B）。
+[在线 playground](https://arthash.jannchie.com) 默认 `TRIANGLE n=64 / baseSize 512 / RGB-565`，是一个比较合理的起点。对大小敏感就调低 `n`（n=24 → 150 B，n=12 → 77 B）；想要特定视觉风格就换调色板；想要极致小体积加模糊感就上 DCT（≤ 24 B）。
 
 ## 与 thumbhash / sqip 的关系
 

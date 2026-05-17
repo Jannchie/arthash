@@ -56,6 +56,22 @@ def test_triangle_svg_structure(rgb_random_seed42):
         assert d.endswith("z"), f"path d must close with z, got {d!r}"
 
 
+def test_pixel_svg_structure(rgb_random_seed42):
+    codec = Codec(shape=ShapeType.PIXEL, n_shapes=12)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    svg = to_svg(h, codec, base_size=256)
+
+    root = _parse(svg)
+    assert _strip_ns(root.tag) == "svg"
+    assert root.attrib["viewBox"].startswith("0 0 ")
+
+    # PIXEL has no background path — the cell grid fills the viewBox.
+    children = list(root)
+    assert len(children) > 0
+    for c in children:
+        assert _strip_ns(c.tag) == "rect"
+
+
 def test_circle_palette_svg_structure(rgb_random_seed42):
     """Palette mode should produce identical structural SVG to continuous."""
     codec = Codec(shape=ShapeType.CIRCLE, n_shapes=8, palette=PICO8)
@@ -116,11 +132,6 @@ def test_dct_raises(rgb_random_seed42):
         to_svg(h, Codec())
 
 
-def test_pixel_raises(rgb_random_seed42):
-    codec = Codec(shape=ShapeType.PIXEL, n_shapes=12)
-    h = encode(rgb_random_seed42, codec)
-    with pytest.raises(NotImplementedError, match="PIXEL mode"):
-        to_svg(h, codec)
 
 
 # ----------------------------- override_aspect -----------------------------
