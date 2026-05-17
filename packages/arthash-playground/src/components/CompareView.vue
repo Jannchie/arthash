@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
-import { Shape, type Shape as ShapeType } from "arthash";
+import { Preset, Shape, type Shape as ShapeType } from "arthash";
 import { ImageUp, Image as ImageIcon, Ruler, Zap, Package2, X } from "@lucide/vue";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
@@ -20,21 +20,22 @@ interface Variant {
   useSvg: boolean;
 }
 
-// A curated comparison set covering all four shape families plus a small
-// n_shapes sweep within Circle (the cheapest, most-used mode).
+// One column per built-in `Preset` from `arthash`. Triangle / Circle / Pixel
+// each have three size tiers; DCT is the single non-shape mode (no SVG path).
+// Kept in Preset declaration order so the byte budget grows left → right.
 const VARIANTS: Variant[] = [
-  { id: "dct",          label: "DCT",              shape: Shape.DCT,          nShapes: 0,  useSvg: false },
-  { id: "circle-12",    label: "Circle · n=12",    shape: Shape.CIRCLE,       nShapes: 12, useSvg: true  },
-  { id: "circle-24",    label: "Circle · n=24",    shape: Shape.CIRCLE,       nShapes: 24, useSvg: true  },
-  { id: "triangle-12",  label: "Triangle · n=12",  shape: Shape.TRIANGLE,     nShapes: 12, useSvg: true  },
-  { id: "triangle-24",  label: "Triangle · n=24",  shape: Shape.TRIANGLE,     nShapes: 24, useSvg: true  },
-  { id: "square-12",    label: "Square · n=12",    shape: Shape.SQUARE,       nShapes: 12, useSvg: true  },
-  { id: "rect-12",      label: "Rect · n=12",      shape: Shape.RECT,         nShapes: 12, useSvg: true  },
-  { id: "rotrect-12",   label: "RotRect · n=12",   shape: Shape.ROTATED_RECT, nShapes: 12, useSvg: true  },
-  { id: "pixel-12",     label: "Pixel · n=12",     shape: Shape.PIXEL,        nShapes: 12, useSvg: true  },
+  { id: Preset.TinyDct,             label: "Tiny · DCT",         shape: Shape.DCT,      nShapes: 0,  useSvg: false },
+  { id: Preset.PlaceholderTriangle, label: "Placeholder · △12",  shape: Shape.TRIANGLE, nShapes: 12, useSvg: true  },
+  { id: Preset.PlaceholderCircle,   label: "Placeholder · ○12",  shape: Shape.CIRCLE,   nShapes: 12, useSvg: true  },
+  { id: Preset.PlaceholderPixel,    label: "Placeholder · ▦16",  shape: Shape.PIXEL,    nShapes: 16, useSvg: true  },
+  { id: Preset.MediumTriangle,      label: "Medium · △24",       shape: Shape.TRIANGLE, nShapes: 24, useSvg: true  },
+  { id: Preset.MediumCircle,        label: "Medium · ○24",       shape: Shape.CIRCLE,   nShapes: 24, useSvg: true  },
+  { id: Preset.MediumPixel,         label: "Medium · ▦24",       shape: Shape.PIXEL,    nShapes: 24, useSvg: true  },
+  { id: Preset.DetailTriangle,      label: "Detail · △64",       shape: Shape.TRIANGLE, nShapes: 64, useSvg: true  },
+  { id: Preset.DetailCircle,        label: "Detail · ○64",       shape: Shape.CIRCLE,   nShapes: 64, useSvg: true  },
+  { id: Preset.DetailPixel,         label: "Detail · ▦64",       shape: Shape.PIXEL,    nShapes: 64, useSvg: true  },
 ];
 
-const cols = ref(4);
 const baseSize = ref(512);
 const blur = ref(0);
 const seed = ref(0);
@@ -125,10 +126,13 @@ function fmtMs(ms: number) {
   return ms >= 100 ? `${ms.toFixed(0)} ms` : ms >= 10 ? `${ms.toFixed(1)} ms` : `${ms.toFixed(2)} ms`;
 }
 
+// Show every preset side-by-side on a single row. Tiles shrink to fit the
+// viewport width — at narrow widths each tile gets tiny but the comparison
+// stays apples-to-apples (no wrapping ⇒ no visual reordering).
 const gridStyle = computed(() => ({
   display: "grid",
-  gridTemplateColumns: `repeat(${cols.value}, minmax(0, 1fr))`,
-  gap: "14px",
+  gridTemplateColumns: `repeat(${VARIANTS.length}, minmax(0, 1fr))`,
+  gap: "8px",
 }));
 </script>
 
@@ -146,10 +150,6 @@ const gridStyle = computed(() => ({
       <label class="ctl">
         <span>seed</span>
         <input type="number" min="0" max="999999" step="1" v-model.number="seed" />
-      </label>
-      <label class="ctl">
-        <span>cols</span>
-        <input type="number" min="2" max="6" step="1" v-model.number="cols" />
       </label>
       <label class="ctl">
         <span>color</span>

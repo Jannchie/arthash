@@ -22,6 +22,10 @@
     "playground:build": "pnpm run build:ts && pnpm --filter @arthash/playground run build",
     "playground:preview": "pnpm --filter @arthash/playground run preview",
 
+    "docs": "pnpm --filter @arthash/docs run dev",
+    "docs:build": "pnpm --filter @arthash/docs run build",
+    "docs:preview": "pnpm --filter @arthash/docs run preview",
+
     "lint": "pnpm run lint:py && pnpm run lint:rs",
     "lint:py": "uv run ruff check packages/arthash-py",
     "lint:rs": "cargo clippy --manifest-path packages/arthash-rs/Cargo.toml -- -D warnings",

@@ -185,29 +185,39 @@ function shapeArea(el: SVGGraphicsElement): number {
   }
 }
 
-function clearReveal() {
-  for (const el of svgChildren()) {
-    el.style.transition = "";
-    el.style.transitionDelay = "";
-    el.style.opacity = "";
+/** Children sorted largest first, so index 0 is the background path and
+ *  index N-1 is the smallest detail shape. */
+function rankedChildren(): SVGGraphicsElement[] {
+  return svgChildren()
+    .map((el) => ({ el, area: shapeArea(el) }))
+    .sort((a, b) => b.area - a.area)
+    .map((x) => x.el);
+}
+
+/** Stagger opacity across `ranked`. `reverse=false` plays biggest → smallest
+ *  (used to fade the cover out on hover-in); `reverse=true` plays smallest →
+ *  biggest (used to fade it back on hover-out, so the background is the very
+ *  last thing to reappear). */
+function applyStagger(ranked: SVGGraphicsElement[], opacity: "0" | "1", reverse: boolean) {
+  const n = ranked.length;
+  if (n === 0) return;
+  const span = Math.max(0, REVEAL_TOTAL_MS - REVEAL_PER_SHAPE_MS);
+  for (let i = 0; i < n; i++) {
+    const slot = reverse ? n - 1 - i : i;
+    const delay = n <= 1 ? 0 : (span * slot) / (n - 1);
+    const el = ranked[i];
+    el.style.transition = `opacity ${REVEAL_PER_SHAPE_MS}ms ease-out`;
+    el.style.transitionDelay = `${delay.toFixed(1)}ms`;
+    el.style.opacity = opacity;
   }
 }
 
 function applyReveal() {
-  const children = svgChildren();
-  if (children.length === 0) return;
-  const ranked = children
-    .map((el) => ({ el, area: shapeArea(el) }))
-    .sort((a, b) => b.area - a.area);
-  const n = ranked.length;
-  const span = Math.max(0, REVEAL_TOTAL_MS - REVEAL_PER_SHAPE_MS);
-  for (let i = 0; i < n; i++) {
-    const { el } = ranked[i];
-    const delay = n <= 1 ? 0 : (span * i) / (n - 1);
-    el.style.transition = `opacity ${REVEAL_PER_SHAPE_MS}ms ease-out`;
-    el.style.transitionDelay = `${delay.toFixed(1)}ms`;
-    el.style.opacity = "0";
-  }
+  applyStagger(rankedChildren(), "0", false);
+}
+
+function clearReveal() {
+  applyStagger(rankedChildren(), "1", true);
 }
 
 function onMouseEnter() {

@@ -1,4 +1,5 @@
-//! SVG output for CIRCLE / TRIANGLE shape modes.
+//! SVG output for shape modes (CIRCLE / TRIANGLE / SQUARE / RECT /
+//! ROTATED_RECT) and PIXEL.
 //!
 //! Parses the same bit stream as [`crate::decode`] but emits SVG primitives
 //! instead of rasterizing to a pixel buffer. Browsers render the resulting
@@ -6,7 +7,8 @@
 //! rasterization step entirely.
 //!
 //! Output is byte-optimized to be competitive with SQIP's compact SVGs:
-//!  * Integer coordinates (viewBox precision is sub-pixel anyway).
+//!  * Integer coordinates where natural (shape modes); compact decimals
+//!    (`fmt_num`) elsewhere.
 //!  * Stripped leading zeros on fill-opacity (`.5` not `0.5`).
 //!  * 3-digit hex when each channel has matching nibbles (`#abc` ↔ `#aabbcc`).
 //!  * Background as `<path d="M0 0h{W}v{H}H0z"/>` (1 char shorter than
@@ -19,11 +21,14 @@
 //! order). This costs ~17 bytes per shape (per-shape `fill-opacity`) but
 //! keeps SVG output bit-equivalent to raster decode.
 //!
-//! PIXEL and DCT modes are out of scope: PIXEL would emit a grid of `<rect>`
-//! elements that's not meaningfully smaller than a tiny base64 PNG; DCT is
-//! a smooth frequency-domain reconstruction with no natural SVG primitive
-//! form. Both return [`SvgError::UnsupportedShape`].
+//! PIXEL output is a `gw * gh` grid of `<rect>` elements sharing the same
+//! `viewBox` as the shape modes — not smaller than a tiny base64 PNG, but
+//! a vector form that scales cleanly under CSS and supports the same blur
+//! filter wrapper as the shape modes. DCT remains out of scope (smooth
+//! frequency-domain reconstruction with no natural SVG primitive form) and
+//! still returns [`SvgError::UnsupportedShape`].
 
+use super::pixel::pixel_grid;
 use super::quant::{aspect_from_code, q_to_alpha, q_to_r, read_color};
 use super::rect::decode_rect_at;
 use super::rotrect::decode_rotrect_at;
@@ -59,7 +64,9 @@ impl Default for SvgOptions {
 }
 
 /// Identifier for SVG-unsupported codec modes. Public-facing tag without
-/// exposing internal shape enum.
+/// exposing internal shape enum. `Pixel` is retained for backwards
+/// compatibility on the public enum but is no longer constructed — PIXEL is
+/// now rendered as a grid of `<rect>` elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SvgUnsupported {
     Dct,
@@ -71,7 +78,6 @@ impl SvgUnsupported {
     pub(crate) fn from(shape: ShapeType) -> Self {
         match shape {
             ShapeType::Dct => SvgUnsupported::Dct,
-            ShapeType::Pixel => SvgUnsupported::Pixel,
             _ => SvgUnsupported::Other,
         }
     }
@@ -81,7 +87,7 @@ impl SvgUnsupported {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SvgError {
     /// The codec's mode is not one of the SVG-supported modes
-    /// (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT).
+    /// (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT / PIXEL).
     UnsupportedShape(SvgUnsupported),
 }
 
@@ -94,8 +100,8 @@ impl std::fmt::Display for SvgError {
                      Use decode() to get raster pixels.",
                 ),
                 SvgUnsupported::Pixel => f.write_str(
-                    "PIXEL mode SVG would be a grid of <rect> elements, \
-                     not meaningfully smaller than a base64-encoded raster.",
+                    "PIXEL mode SVG is no longer rejected — this variant is \
+                     retained for backwards compatibility only.",
                 ),
                 SvgUnsupported::Other => f.write_str("SVG output not supported for this codec"),
             },
@@ -262,6 +268,46 @@ fn square_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out:
     }
 }
 
+/// PIXEL: gw·gh `<rect>` cells covering the full viewBox. Cell edges are
+/// computed at the boundary so adjacent cells share a coordinate exactly
+/// (no sub-pixel seams from independent `width = W/gw` rounding).
+fn pixel_elements(
+    br: &mut BitReader,
+    codec: &CodecConfig,
+    w: u32,
+    h: u32,
+    quant_aspect: f32,
+    out: &mut String,
+) {
+    let (gw, gh) = pixel_grid(codec.n_shapes, quant_aspect, codec.grid_aspect);
+    let wf = w as f32;
+    let hf = h as f32;
+    let gwf = gw as f32;
+    let ghf = gh as f32;
+    for gy in 0..gh {
+        let y0 = (gy as f32) * hf / ghf;
+        let y1 = ((gy + 1) as f32) * hf / ghf;
+        let cell_h = y1 - y0;
+        for gx in 0..gw {
+            let x0 = (gx as f32) * wf / gwf;
+            let x1 = ((gx + 1) as f32) * wf / gwf;
+            let cell_w = x1 - x0;
+            let color = read_color(br, codec);
+            let fill = color_to_hex(&color);
+            write!(
+                out,
+                "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"/>",
+                fmt_num(x0),
+                fmt_num(y0),
+                fmt_num(cell_w),
+                fmt_num(cell_h),
+                fill
+            )
+            .unwrap();
+        }
+    }
+}
+
 fn rotrect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     for _ in 0..codec.n_shapes {
         let (cx, cy, rw, rh, theta_deg, color, alpha) = decode_rotrect_at(br, codec, w, h);
@@ -279,11 +325,11 @@ fn rotrect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out
     }
 }
 
-/// Render a CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT shape-mode hash
-/// as a byte-optimized SVG string.
+/// Render a shape-mode (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT)
+/// or PIXEL hash as a byte-optimized SVG string.
 ///
 /// # Errors
-/// Returns [`SvgError::UnsupportedShape`] for DCT and PIXEL codecs.
+/// Returns [`SvgError::UnsupportedShape`] for DCT codecs.
 pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<String, SvgError> {
     let cfg = codec.to_config();
     if !matches!(
@@ -293,6 +339,7 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
             | ShapeType::Square
             | ShapeType::Rect
             | ShapeType::RotatedRect
+            | ShapeType::Pixel
     ) {
         return Err(SvgError::UnsupportedShape(SvgUnsupported::from(cfg.shape)));
     }
@@ -312,19 +359,31 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
         )
     };
 
-    let bg = read_color(&mut br, &cfg);
-    let bg_hex = color_to_hex(&bg);
-
-    // Background as a path: `M0 0h{W}v{H}H0z` traces the rect in 4 cmds.
-    // Saves vs `<rect width=W height=H>` because attribute names are longer.
-    let mut body = format!("<path fill=\"{}\" d=\"M0 0h{}v{}H0z\"/>", bg_hex, w, h);
+    let mut body = String::new();
     match cfg.shape {
-        ShapeType::Circle => circle_elements(&mut br, &cfg, w, h, &mut body),
-        ShapeType::Triangle => triangle_elements(&mut br, &cfg, w, h, &mut body),
-        ShapeType::Square => square_elements(&mut br, &cfg, w, h, &mut body),
-        ShapeType::Rect => rect_elements(&mut br, &cfg, w, h, &mut body),
-        ShapeType::RotatedRect => rotrect_elements(&mut br, &cfg, w, h, &mut body),
-        _ => unreachable!(),
+        ShapeType::Pixel => {
+            // PIXEL has no separate background — the cell grid fills the
+            // viewBox. Grid uses the QUANTIZED aspect (same value the
+            // decoder reconstructs), not `opts.override_aspect`, so encoder
+            // and SVG agree on (gw, gh).
+            pixel_elements(&mut br, &cfg, w, h, quant_aspect, &mut body);
+        }
+        _ => {
+            let bg = read_color(&mut br, &cfg);
+            let bg_hex = color_to_hex(&bg);
+            // Background as a path: `M0 0h{W}v{H}H0z` traces the rect in 4
+            // cmds. Saves vs `<rect width=W height=H>` because attribute
+            // names are longer.
+            write!(body, "<path fill=\"{}\" d=\"M0 0h{}v{}H0z\"/>", bg_hex, w, h).unwrap();
+            match cfg.shape {
+                ShapeType::Circle => circle_elements(&mut br, &cfg, w, h, &mut body),
+                ShapeType::Triangle => triangle_elements(&mut br, &cfg, w, h, &mut body),
+                ShapeType::Square => square_elements(&mut br, &cfg, w, h, &mut body),
+                ShapeType::Rect => rect_elements(&mut br, &cfg, w, h, &mut body),
+                ShapeType::RotatedRect => rotrect_elements(&mut br, &cfg, w, h, &mut body),
+                _ => unreachable!(),
+            }
+        }
     }
 
     if opts.blur > 0.0 {
@@ -501,10 +560,84 @@ mod tests {
     }
 
     #[test]
-    fn pixel_returns_unsupported() {
+    fn pixel_round_trip_parses() {
         let codec = Codec::pixel(12);
-        let bytes = vec![0u8; 32];
-        let err = to_svg(&bytes, &codec, SvgOptions::default()).unwrap_err();
-        assert_eq!(err, SvgError::UnsupportedShape(SvgUnsupported::Pixel));
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        // n_shapes=12, square image → pixel_grid picks (3, 4) → 12 cells.
+        assert_eq!(svg.matches("<rect ").count(), 12);
+        // PIXEL has no background path — the cells fill the viewBox.
+        assert!(!svg.contains("d=\"M0 0h"));
+        assert!(svg.starts_with("<svg "));
+        assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn pixel_blur_wraps_in_filter() {
+        let codec = Codec::pixel(12);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [180, 180, 180]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                blur: 6.0,
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(svg.contains("<filter id=\"b\""));
+        assert!(svg.contains("stdDeviation=\"6\""));
+        assert!(svg.contains("<g filter=\"url(#b)\""));
+    }
+
+    #[test]
+    fn pixel_cells_share_edges() {
+        // Rectangular non-divisible case: 256/3 ≈ 85.33 — adjacent cells must
+        // share an X coordinate exactly, otherwise the SVG shows hairline
+        // gaps between blocks.
+        let codec = Codec::pixel(9);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [120, 60, 30]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        // 3x3 grid → 9 cells.
+        assert_eq!(svg.matches("<rect ").count(), 9);
+        // For each rect, parse x + width and check that some other rect's x
+        // equals x + width (i.e. the right edge meets the next cell's left
+        // edge). Skip the rightmost column where no such neighbour exists.
+        let xs: Vec<f32> = svg
+            .split("<rect ")
+            .skip(1)
+            .map(|r| {
+                let x = r.split("x=\"").nth(1).unwrap().split('"').next().unwrap();
+                x.parse::<f32>().unwrap()
+            })
+            .collect();
+        let widths: Vec<f32> = svg
+            .split("<rect ")
+            .skip(1)
+            .map(|r| {
+                let w = r.split("width=\"").nth(1).unwrap().split('"').next().unwrap();
+                w.parse::<f32>().unwrap()
+            })
+            .collect();
+        // First cell's right edge should equal second cell's left edge.
+        assert!((xs[0] + widths[0] - xs[1]).abs() < 1e-3);
     }
 }

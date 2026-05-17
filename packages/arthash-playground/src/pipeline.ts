@@ -248,59 +248,6 @@ export function squareCellGrid(nTarget: number, aspect: number): [number, number
   return best;
 }
 
-function hex2(v: number) { return v.toString(16).padStart(2, "0"); }
-
-/** Render PIXEL mode as a mosaic SVG. Each cell becomes one <rect>; Y edges
- *  fall on .5 so they antialias into a single pixel row, giving the soft
- *  seams the reference layout has. Outer cells extend a full cell beyond the
- *  viewport so blur (if any) fades naturally at the edges. */
-function pixelToSvg(
-  decoded: { w: number; h: number; rgba: Uint8Array },
-  gw: number,
-  gh: number,
-  blur: number,
-): string {
-  const W = decoded.w, H = decoded.h;
-  // Cell size in viewport units. Integer math + .5 Y offsets match the
-  // reference's `M-40-39.5h76v76h-76z` style.
-  const cellW = W / gw;
-  const cellH = H / gh;
-  const parts: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`,
-  ];
-  if (blur > 0) {
-    parts.push(
-      `<defs><filter id="b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs>`,
-      `<g filter="url(#b)">`,
-    );
-  }
-  for (let gy = 0; gy < gh; gy++) {
-    const isFirstY = gy === 0;
-    const isLastY = gy === gh - 1;
-    const yTop = (isFirstY ? -cellH : (gy * cellH)) + 0.5;
-    const yEnd = (isLastY ? (H + cellH) : ((gy + 1) * cellH)) + 0.5;
-    const h = yEnd - yTop;
-    for (let gx = 0; gx < gw; gx++) {
-      const isFirstX = gx === 0;
-      const isLastX = gx === gw - 1;
-      const xLeft = isFirstX ? -cellW : (gx * cellW);
-      const xEnd = isLastX ? (W + cellW) : ((gx + 1) * cellW);
-      const w = xEnd - xLeft;
-      // Sample the decoded RGBA at the cell center.
-      const sx = Math.min(W - 1, Math.max(0, Math.floor((gx + 0.5) * W / gw)));
-      const sy = Math.min(H - 1, Math.max(0, Math.floor((gy + 0.5) * H / gh)));
-      const i = (sy * W + sx) * 4;
-      const color = `#${hex2(decoded.rgba[i])}${hex2(decoded.rgba[i + 1])}${hex2(decoded.rgba[i + 2])}`;
-      parts.push(
-        `<rect x="${xLeft}" y="${yTop}" width="${w}" height="${h}" fill="${color}"/>`,
-      );
-    }
-  }
-  if (blur > 0) parts.push(`</g>`);
-  parts.push(`</svg>`);
-  return parts.join("");
-}
-
 export function fitLongEdge(w: number, h: number, target: number) {
   if (w <= 0 || h <= 0) return { w: Math.max(1, w), h: Math.max(1, h) };
   if (Math.max(w, h) <= target) return { w, h };
@@ -365,8 +312,9 @@ export interface RunOpts {
   /** ID of an entry in COLOR_OPTIONS. */
   colorId?: string;
   /** Hint that the caller will display SVG output. When true and the shape
-   *  has a hash-driven SVG renderer (anything but PIXEL), the raster decode
-   *  is skipped — saves an O(base²) pass per tile in Gallery / Compare. */
+   *  has a hash-driven SVG renderer (everything `supportsSvg` returns true
+   *  for), the raster decode is skipped — saves an O(base²) pass per tile in
+   *  Gallery / Compare. */
   useSvg?: boolean;
 }
 
@@ -400,13 +348,10 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   // PIXEL: pre-derive the grid so cells come out square. Override n_shapes
   // to gw·gh — the codec's own pixel_grid will redrive the same (gw, gh)
   // because the ratio matches the image aspect.
-  let pixelGW = 0, pixelGH = 0;
   const optsEff = { ...opts };
   if (opts.shape === Shape.PIXEL) {
     const srcAspect = img.naturalWidth / Math.max(1, img.naturalHeight);
     const [gw, gh] = squareCellGrid(opts.nShapes ?? 12, srcAspect);
-    pixelGW = gw;
-    pixelGH = gh;
     optsEff.nShapes = gw * gh;
   }
 
@@ -420,38 +365,30 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   const decodeArgs: DecodeOptions = { baseSize: opts.baseSize };
 
   const wantsSvg = opts.useSvg === true && supportsSvg(opts.shape);
-  const skipRaster = wantsSvg && opts.shape !== Shape.PIXEL;
-  const rasterArgs: DecodeOptions = wantsSvg && opts.shape === Shape.PIXEL
-    ? { ...decodeArgs, baseSize: Math.max(pixelGW, pixelGH) * 2 || 64 }
-    : decodeArgs;
 
   let decoded: { w: number; h: number; rgba: Uint8Array } | undefined;
   let decodeMs = 0;
-  if (!skipRaster) {
+  if (!wantsSvg) {
     const t1 = performance.now();
-    decoded = pfDecode(hash, codec, rasterArgs);
+    decoded = pfDecode(hash, codec, decodeArgs);
     decodeMs = performance.now() - t1;
   }
 
   let svg: string | null = null;
   if (supportsSvg(opts.shape)) {
     const tSvg0 = performance.now();
-    if (opts.shape === Shape.PIXEL) {
-      svg = pixelToSvg(decoded!, pixelGW, pixelGH, opts.blur);
-    } else {
-      try {
-        svg = pfToSvg(hash, codec, { ...decodeArgs, blur: opts.blur });
-        if (svg && !/preserveAspectRatio=/.test(svg)) {
-          svg = svg.replace(/<svg\b/, '<svg preserveAspectRatio="none"');
-        }
-      } catch {
-        svg = null;
+    try {
+      svg = pfToSvg(hash, codec, { ...decodeArgs, blur: opts.blur });
+      if (svg && !/preserveAspectRatio=/.test(svg)) {
+        svg = svg.replace(/<svg\b/, '<svg preserveAspectRatio="none"');
       }
+    } catch {
+      svg = null;
     }
     if (svg) decodeMs += performance.now() - tSvg0;
   }
 
-  if (skipRaster && svg === null) {
+  if (wantsSvg && svg === null) {
     const t1 = performance.now();
     decoded = pfDecode(hash, codec, decodeArgs);
     decodeMs = performance.now() - t1;
