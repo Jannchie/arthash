@@ -75,6 +75,8 @@ const hash2 = await encodeImage(imageUrlOrBlob, c);
 
 Factories: `codec.dct()` / `.circle({ n })` / `.triangle({ n })` / `.square({ n })` / `.rect({ n })` / `.rotatedRect({ n })` / `.pixel({ n })`. See [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md).
 
+**Frontend footprint**: ~67 KB brotli / ~93 KB gzip for the wasm core on first load (HTTP-cached after), then ~6 KB of SDK in your bundle. The wasm is monolithic — it ships every codec mode plus the hill-climb encoder, not a decode-only build (a decode-only build would shave ~15–20 KB brotli; [open an issue](https://github.com/Jannchie/arthash/issues) if you need it). Full breakdown in [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md#footprint).
+
 ## Modes & byte counts
 
 | Mode           | Look                               | n=12 bytes | n=64 bytes |

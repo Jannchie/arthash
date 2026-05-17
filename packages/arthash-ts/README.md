@@ -47,6 +47,29 @@ codec.raw({ shape: "triangle", nShapes: 12, alphaBits: 2, colorBits: 24 })
 `toSvg` supports `circle` / `triangle` / `square` / `rect` / `rotrect`;
 DCT and PIXEL have no natural SVG primitive form and throw.
 
+## Footprint
+
+A single monolithic wasm carries every codec (encode + decode + hill-climb
+search + SVG render). The wire cost on a cold load:
+
+| Artifact                              |    raw |  gzip | brotli |
+| ------------------------------------- | -----: | ----: | -----: |
+| `arthash_wasm_bg.wasm` (core)         | 218 KB | 82 KB |  67 KB |
+| `arthash_wasm.js` (wasm-bindgen glue) |  14 KB |  4 KB |   3 KB |
+| `dist/index.js` + `palettes.js` (SDK) |  21 KB |  7 KB |   6 KB |
+| **Total over the wire**               | 253 KB | 93 KB |  76 KB |
+
+The wasm is fetched once and HTTP-cached across sessions; the JS portion
+is tree-shakeable, so importing only `decode` lets your bundler drop the
+`encode` / `toSvg` / `encodeImage` paths from the SDK (wasm exports stay
+intact). For frontends that only render placeholders, this means **one
+~67 KB brotli download up-front, then ~6 KB of SDK code in your bundle**.
+
+A separate decode-only wasm (hill-climb search + encoder feature-gated out,
+estimated ~45–55 KB brotli) would shave another ~15–20 KB off the first
+paint. Not implemented yet — [open an issue](https://github.com/Jannchie/arthash/issues)
+if your use case needs it.
+
 ## Build
 
 Requires the Rust toolchain (with the `wasm32-unknown-unknown` target) and

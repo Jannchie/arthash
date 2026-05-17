@@ -75,6 +75,8 @@ const hash2 = await encodeImage(imageUrlOrBlob, c);
 
 工厂方法：`codec.dct()` / `.circle({ n })` / `.triangle({ n })` / `.square({ n })` / `.rect({ n })` / `.rotatedRect({ n })` / `.pixel({ n })`。详见 [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md)。
 
+**前端体积**：wasm 核心首次加载 ~67 KB brotli / ~93 KB gzip（HTTP 缓存后免下载），SDK 进 bundle ~6 KB。wasm 是单体的——所有 codec 模式 + hill-climb 编码器都打包在一起，不是 decode-only 构建（如做 decode-only 还可再省 ~15–20 KB brotli，有需求请 [开 issue](https://github.com/Jannchie/arthash/issues)）。完整拆分见 [`packages/arthash-ts/README.md`](./packages/arthash-ts/README.md#footprint)。
+
 ## 模式 & 字节数
 
 | 模式           | 视觉效果                     | n=12 字节 | n=64 字节 |

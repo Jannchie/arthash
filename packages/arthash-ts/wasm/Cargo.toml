@@ -12,8 +12,11 @@ crate-type = ["cdylib"]
 [dependencies]
 arthash = { path = "../../arthash-rs" }
 wasm-bindgen = "0.2"
-serde = { version = "1", features = ["derive"] }
-serde-wasm-bindgen = "0.6"
+# Hand-rolled JS-object parsing via `js_sys::Reflect`. Dropping
+# `serde-wasm-bindgen` + `serde_derive` here saves ~40 KB raw wasm at the
+# cost of ~50 lines of boilerplate in lib.rs — see `parse_codec` /
+# `parse_search`. Add a serde dep back if the option surface grows.
+js-sys = "0.3"
 
 [profile.release]
 # opt-level = 3 prioritises speed over size. arthash wasm stays well under
