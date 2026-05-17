@@ -49,8 +49,6 @@ jobs:
         run: pnpm --filter arthash run build
 
       - name: build playground
-        env:
-          BASE_URL: /arthash/
         run: pnpm --filter @arthash/playground run build
 
       - uses: actions/configure-pages@v5

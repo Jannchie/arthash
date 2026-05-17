@@ -10,12 +10,23 @@ export default defineConfig({
   lastUpdated: true,
 
   head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
-    ["meta", { name: "theme-color", content: "#0284c7" }],
+    ["link", { rel: "icon", type: "image/png", href: "/icon.png" }],
+    ["meta", { name: "theme-color", content: "#0c4a6e" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:title", content: "arthash" }],
+    ["meta", {
+      property: "og:description",
+      content: "A compact placeholder-image hash — 17 B to 400 B per image.",
+    }],
+    ["meta", { property: "og:image", content: "/og.png" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:image", content: "/og.png" }],
   ],
 
   themeConfig: {
-    logo: "/logo.svg",
+    logo: "/icon.png",
     socialLinks: [{ icon: "github", link: GITHUB }],
     search: { provider: "local" },
   },

@@ -1,6 +1,12 @@
-# arthash
+<p align="center">
+  <img src="./docs/site/public/icon.png" width="128" height="128" alt="arthash">
+</p>
 
-[![CodeTime Badge](https://shields.jannchie.com/endpoint?style=social&color=0284c7&url=https%3A%2F%2Fcodetime.dev%2Fv3%2Fusers%2Fshield%3Fuid%3D2%26tag%3Darthash)](https://codetime.dev)
+<h1 align="center">arthash</h1>
+
+<p align="center">
+  <a href="https://codetime.dev"><img src="https://shields.jannchie.com/endpoint?style=social&color=0284c7&url=https%3A%2F%2Fcodetime.dev%2Fv3%2Fusers%2Fshield%3Fuid%3D2%26tag%3Darthash" alt="CodeTime Badge"></a>
+</p>
 
 > [English](./README.md) · **中文**
 
