@@ -1,0 +1,214 @@
+# Rust API
+
+Crate: [`arthash`](https://crates.io/crates/arthash). The canonical
+implementation — Python and TypeScript bindings call the same code.
+
+```rust
+use arthash::{
+    Codec, Preset,
+    encode_rgb, encode_rgba, decode, to_svg,
+    EncodeOptions, DecodeOptions, SvgRenderOptions,
+    SearchOptions, SearchStrategy,
+    Palette,
+};
+```
+
+## Top-level functions
+
+### `encode_rgb(rgb, width, height, codec, opts) -> Vec<u8>`
+
+```rust
+pub fn encode_rgb(
+    rgb: &[u8],
+    width: u32,
+    height: u32,
+    codec: &Codec,
+    opts: EncodeOptions,
+) -> Vec<u8>;
+```
+
+Row-major RGB, 3 bytes per pixel; length must equal `3 * width * height`.
+
+### `encode_rgba(rgba, width, height, codec, opts) -> Vec<u8>`
+
+As above for RGBA input. Shape modes composite alpha over white internally.
+
+### `decode(hash, codec, opts) -> DecodeResult`
+
+```rust
+pub struct DecodeResult {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,     // row-major, 4 bytes per pixel
+}
+
+pub fn decode(
+    hash: &[u8],
+    codec: &Codec,
+    opts: DecodeOptions,
+) -> DecodeResult;
+```
+
+### `to_svg(hash, codec, opts) -> String`
+
+```rust
+pub fn to_svg(
+    hash: &[u8],
+    codec: &Codec,
+    opts: SvgRenderOptions,
+) -> String;
+```
+
+Only supports shape modes (`CIRCLE`, `TRIANGLE`, `SQUARE`, `RECT`,
+`ROTATED_RECT`). Returns `Err` for `DCT` / `PIXEL`.
+
+## Options
+
+```rust
+pub struct EncodeOptions {
+    pub seed: u64,                       // default 0
+    pub search: Option<SearchOptions>,   // override search budget
+}
+
+pub struct DecodeOptions {
+    pub base_size: u32,                  // default 256
+    pub override_aspect: Option<f32>,
+    pub aa: Option<u32>,                 // shape supersample (1 / 2 / 4)
+    pub pixel_smooth: Option<PixelSmooth>,
+}
+
+pub struct SvgRenderOptions {
+    pub base_size: u32,                  // default 256
+    pub override_aspect: Option<f32>,
+    pub blur: f32,                       // Gaussian stdDeviation; 0 = off
+}
+
+pub enum PixelSmooth { Nearest, Bilinear }
+```
+
+All structs implement `Default`.
+
+## Codec
+
+```rust
+pub enum Codec {
+    Dct,
+    Circle    { n: u32, color: ColorMode },
+    Triangle  { n: u32, color: ColorMode },
+    Square    { n: u32, color: ColorMode },
+    Rect      { n: u32, color: ColorMode },
+    RotRect   { n: u32, theta_bits: u32, color: ColorMode },
+    Pixel     { n: u32, grid_aspect: Option<f32>, color: ColorMode },
+    Raw       { spec: RawCodecSpec },
+}
+
+pub enum ColorMode {
+    Rgb565,
+    Rgb888,
+    Palette(Palette),
+}
+```
+
+### Factory methods
+
+```rust
+Codec::dct()
+Codec::circle(n)
+Codec::triangle(n)
+Codec::square(n)
+Codec::rect(n)
+Codec::rotated_rect(n)
+Codec::pixel(n)
+Codec::raw(spec)
+```
+
+All shape factories default to `ColorMode::Rgb565`. Wrap in `with_palette` to
+switch:
+
+```rust
+let c = Codec::triangle(24).with_palette(Palette::from_hex(&[...]).unwrap());
+```
+
+### Methods
+
+| Method                          | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `codec.bytes_total()`           | Total hash bytes                         |
+| `codec.is_palette_mode()`       | `bool`                                   |
+| `codec.with_palette(p)`         | Clone with palette colour                |
+
+## Preset
+
+```rust
+pub enum Preset {
+    TinyDct,
+    PlaceholderTriangle, PlaceholderCircle, PlaceholderPixel,
+    MediumTriangle, MediumCircle, MediumPixel,
+    DetailTriangle, DetailCircle, DetailPixel,
+}
+
+impl Preset {
+    pub fn codec(self) -> Codec;
+}
+```
+
+## Palette
+
+```rust
+pub struct Palette {
+    pub bytes: Vec<u8>,    // flat row-major sRGB
+    pub k: u32,            // = bytes.len() / 3, must be a power of 2 in [2, 1024]
+}
+
+impl Palette {
+    pub fn from_rgb(colors: &[[u8; 3]]) -> Result<Self, PaletteError>;
+    pub fn from_hex(hexes: &[&str]) -> Result<Self, PaletteError>;
+}
+```
+
+## Search options
+
+Affect encoder cost / quality only — the resulting hash is byte-format
+identical.
+
+```rust
+pub struct SearchOptions {
+    pub strategy: SearchStrategy,
+    pub n_random: u32,
+    pub n_topk: u32,
+    pub hill_climb_steps: u32,
+    pub hill_climb_max_age: Option<u32>,
+    pub n_attempts: u32,
+}
+
+pub enum SearchStrategy { Primitive, TopkUniform }
+```
+
+## Example
+
+```rust
+use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
+
+fn main() {
+    let (w, h, rgb) = load_rgb("photo.jpg");
+
+    // Smallest — DCT, ~21 B
+    let codec = Codec::dct();
+    let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+    println!("{} bytes", hash.len());
+
+    // Named preset
+    let codec = Preset::DetailTriangle.codec();
+    let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
+    let out = decode(&hash, &codec, DecodeOptions { base_size: 512, ..Default::default() });
+    write_png("placeholder.png", &out.rgba, out.width, out.height);
+}
+```
+
+## SPEC conformance
+
+The byte format is pinned in
+[`docs/SPEC.md`](https://github.com/Jannchie/arthash/blob/main/docs/SPEC.md).
+The Rust crate is the reference implementation: a conformance vector lives in
+`packages/arthash-rs/tests/vectors.rs` and is also checked from the Python and
+TypeScript test suites against `docs/test-vectors/`.

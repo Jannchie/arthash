@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { Shape as ShapeType } from "arthash";
 import { awaitEncodeSlot, fmtMs, loadImage, runPipeline, toHex } from "../pipeline";
 
@@ -28,6 +28,8 @@ const emit = defineEmits<{ (e: "metrics", v: { encodeMs: number; decodeMs: numbe
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const imgEl = ref<HTMLImageElement | null>(null);
+const svgWrapper = ref<HTMLDivElement | null>(null);
+const isHovering = ref(false);
 const status = ref<"idle" | "loading" | "encoding" | "ready" | "error">("idle");
 const error = ref<string>("");
 const encodeMs = ref(0);
@@ -145,14 +147,104 @@ const rootStyle = computed(() => {
 const canvasStyle = computed(() =>
   props.blur > 0 ? { filter: `blur(${props.blur}px)` } : {},
 );
+
+// On hover (SVG mode), reveal the original image instantly behind the SVG
+// and fade out each SVG shape over ~1s — biggest first (the background path
+// is by definition the largest), so the cover dissolves from broad strokes
+// down to small details.
+const REVEAL_TOTAL_MS = 1000;
+const REVEAL_PER_SHAPE_MS = 220;
+
+function svgChildren(): SVGGraphicsElement[] {
+  const wrap = svgWrapper.value;
+  if (!wrap) return [];
+  const svgEl = wrap.querySelector("svg");
+  if (!svgEl) return [];
+  const out: SVGGraphicsElement[] = [];
+  for (const node of Array.from(svgEl.children)) {
+    const tag = node.tagName.toLowerCase();
+    if (tag === "defs" || tag === "filter") continue;
+    // Blur path wraps the shapes in <g filter="url(#b)">. Recurse one level.
+    if (tag === "g") {
+      for (const inner of Array.from((node as SVGGElement).children)) {
+        out.push(inner as SVGGraphicsElement);
+      }
+    } else {
+      out.push(node as SVGGraphicsElement);
+    }
+  }
+  return out;
+}
+
+function shapeArea(el: SVGGraphicsElement): number {
+  try {
+    const b = el.getBBox();
+    return b.width * b.height;
+  } catch {
+    return 0;
+  }
+}
+
+function clearReveal() {
+  for (const el of svgChildren()) {
+    el.style.transition = "";
+    el.style.transitionDelay = "";
+    el.style.opacity = "";
+  }
+}
+
+function applyReveal() {
+  const children = svgChildren();
+  if (children.length === 0) return;
+  const ranked = children
+    .map((el) => ({ el, area: shapeArea(el) }))
+    .sort((a, b) => b.area - a.area);
+  const n = ranked.length;
+  const span = Math.max(0, REVEAL_TOTAL_MS - REVEAL_PER_SHAPE_MS);
+  for (let i = 0; i < n; i++) {
+    const { el } = ranked[i];
+    const delay = n <= 1 ? 0 : (span * i) / (n - 1);
+    el.style.transition = `opacity ${REVEAL_PER_SHAPE_MS}ms ease-out`;
+    el.style.transitionDelay = `${delay.toFixed(1)}ms`;
+    el.style.opacity = "0";
+  }
+}
+
+function onMouseEnter() {
+  isHovering.value = true;
+  if (!showSvg.value) return;
+  applyReveal();
+}
+
+function onMouseLeave() {
+  isHovering.value = false;
+  if (!showSvg.value) return;
+  clearReveal();
+}
+
+// If the SVG content updates while hovered, re-apply the staggered fade.
+// v-html re-renders blow away any inline styles we set, so we need to
+// reapply once Vue has flushed the new DOM.
+watch(svg, () => {
+  if (isHovering.value && showSvg.value) {
+    nextTick(applyReveal);
+  }
+});
 </script>
 
 <template>
-  <figure class="tile" :data-status="status" :style="rootStyle">
+  <figure
+    class="tile"
+    :data-status="status"
+    :data-mode="showSvg ? 'svg' : 'raster'"
+    :style="rootStyle"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
+  >
     <div v-if="label" class="badge">{{ label }}</div>
     <div class="tile-layers">
       <!-- decoded placeholder -->
-      <div v-if="showSvg" class="layer placeholder svg-layer" v-html="svg" />
+      <div v-if="showSvg" ref="svgWrapper" class="layer placeholder svg-layer" v-html="svg" />
       <canvas v-else ref="canvas" class="layer placeholder canvas-layer" :style="canvasStyle" />
 
       <!-- full-resolution original revealed on hover -->

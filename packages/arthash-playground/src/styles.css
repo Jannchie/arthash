@@ -361,10 +361,14 @@ button.icon-btn {
   object-fit: cover;
 }
 
-/* Hover reveals the original by fading the placeholder out. */
+/* Hover reveals the original behind the placeholder.
+   - Raster mode: the canvas placeholder fades out over ~180ms.
+   - SVG mode: the original snaps in instantly and the SVG dissolves shape
+     by shape via JS (see Tile.vue applyReveal), largest first, over ~1s. */
 .tile .original { object-fit: cover; opacity: 0; }
 .tile:hover .original { opacity: 1; }
-.tile:hover .placeholder { opacity: 0; }
+.tile[data-mode="raster"]:hover .placeholder { opacity: 0; }
+.tile[data-mode="svg"]:hover .original { transition: none; }
 
 .tile .pending, .tile .error-pane {
   display: flex;

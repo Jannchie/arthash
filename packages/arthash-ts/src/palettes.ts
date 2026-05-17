@@ -17,7 +17,7 @@
  * See https://lospec.com for many more palettes.
  */
 
-import { palette, type Palette } from "./index.js";
+import { palette, type Palette } from "./palette.js";
 
 const h = (...hexes: string[]): Palette => palette.fromHex(hexes);
 

@@ -1,6 +1,7 @@
 packages:
   - "packages/arthash-ts"
   - "packages/arthash-playground"
+  - "docs/site"
   - "bench/js-cross"
   - "bench/sqip"
   - "bench/thumbhash-js"
