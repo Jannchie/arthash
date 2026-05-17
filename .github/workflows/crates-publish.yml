@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: node scripts/check-versions.mjs "${GITHUB_REF_NAME}"
 
   # ------------------------------------------------------------------
@@ -38,16 +38,26 @@ jobs:
         run: cargo test --manifest-path packages/arthash-rs/Cargo.toml --release
 
   # ------------------------------------------------------------------
-  # release: only on a `v*` tag, after version-check + tests pass.
+  # release: publishes after version-check + tests pass.
   # Uses crates.io Trusted Publishing (OIDC, no API token).
   # Set up the pending publisher at:
   #   https://crates.io/crates/arthash/settings (or "pending" before
   #   first upload).
+  #
+  # Runs on tag push (version-check enforces alignment) and on
+  # workflow_dispatch (version-check is skipped because the tag-shape
+  # guard above wouldn't apply; we still gate on the test job).
+  # `always() && (success || skipped)` is the standard pattern for
+  # "soft" upstream deps in GitHub Actions — a plain `needs:` would
+  # propagate the skip and cancel this job too.
   # ------------------------------------------------------------------
   release:
     name: publish to crates.io
     needs: [version-check, test]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      always() &&
+      (needs.version-check.result == 'success' || needs.version-check.result == 'skipped') &&
+      needs.test.result == 'success'
     runs-on: ubuntu-latest
     environment:
       name: crates-io

@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: node scripts/check-versions.mjs "${GITHUB_REF_NAME}"
 
   # ------------------------------------------------------------------
@@ -119,15 +119,27 @@ jobs:
           python -m pytest packages/arthash-py/tests/ -v
 
   # ------------------------------------------------------------------
-  # release: only on a `py-v*` tag, after wheels + sdist + tests pass.
+  # release: publishes after wheels + sdist + tests pass.
   # Uses PyPI Trusted Publishing (OIDC, no API token).
   # Set up at https://pypi.org/manage/project/arthash/settings/publishing/
   # (or "pending publisher" before first upload).
+  #
+  # Runs on tag push (version-check enforces alignment) and on
+  # workflow_dispatch (version-check is skipped because the tag-shape
+  # guard above wouldn't apply; we still gate on the build/test jobs).
+  # `always() && (success || skipped)` is the standard pattern for
+  # "soft" upstream deps in GitHub Actions — a plain `needs:` would
+  # propagate the skip and cancel this job too.
   # ------------------------------------------------------------------
   release:
     name: publish to PyPI
     needs: [version-check, wheels, sdist, test]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      always() &&
+      (needs.version-check.result == 'success' || needs.version-check.result == 'skipped') &&
+      needs.wheels.result == 'success' &&
+      needs.sdist.result == 'success' &&
+      needs.test.result == 'success'
     runs-on: ubuntu-latest
     environment:
       name: pypi
