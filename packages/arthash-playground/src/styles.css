@@ -147,13 +147,11 @@ select:disabled, input:disabled { opacity: 0.4; cursor: not-allowed; }
   flex-wrap: wrap;
   font-size: 12px;
 }
-.controls-row + .metrics-row,
-.controls-row + .wf,
-.metrics-row + .wf,
-.metrics-row + .variants,
-.metrics-row + .drop,
-.controls-row + .drop,
-.controls-row + .variants {
+/* Hairline divider between every top-level section inside a view —
+   controls rows, metrics row, gallery / variants / drop / stage / error.
+   Keeps every tab visually segmented like Gallery without having to list
+   each pairing explicitly. */
+.view > * + * {
   border-top: 1px solid var(--line);
 }
 
@@ -275,6 +273,53 @@ button.icon-btn {
   min-height: 0;
   padding: 16px 22px 24px;
 }
+
+/* ---------- animate stage ---------- */
+
+.animate-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 22px 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  justify-items: center;
+}
+.animate-frame {
+  position: relative;
+  margin: 0;
+  width: 100%;
+  max-width: min(560px, 44vw);
+  background: #111317;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.animate-cap {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 3px 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+.animate-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.animate-canvas.canvas-layer { image-rendering: auto; object-fit: cover; }
+.animate-canvas.svg-layer svg { width: 100%; height: 100%; display: block; }
+.animate-canvas.original-img { object-fit: cover; }
 
 /* ---------- drop zone (compare empty state) ---------- */
 

@@ -5,7 +5,8 @@ import { Preset, Shape, type Shape as ShapeType } from "arthash";
 import { ImageUp, Image as ImageIcon, Ruler, Zap, Package2, X } from "@lucide/vue";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
-import { COLOR_OPTIONS } from "../pipeline";
+import SearchControls from "./SearchControls.vue";
+import { COLOR_OPTIONS, DEFAULT_SEARCH, type SearchConfig } from "../pipeline";
 
 interface Props {
   ready: boolean;
@@ -42,14 +43,16 @@ const seed = ref(0);
 const colorId = ref<string>("rgb-565");
 
 const advanced = ref<AdvancedConfig>({ alphaBits: 3 });
+const search = ref<SearchConfig>({ ...DEFAULT_SEARCH });
 
 const DEBOUNCE_MS = 300;
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
+const searchD = refDebounced(search, DEBOUNCE_MS);
 
-watch([baseSizeD, blurD, seedD, advancedD, colorId], () => {
+watch([baseSizeD, blurD, seedD, advancedD, colorId, searchD], () => {
   tileMetrics.value = new Map();
 }, { deep: true });
 
@@ -157,6 +160,7 @@ const gridStyle = computed(() => ({
           <option v-for="o in COLOR_OPTIONS" :key="o.id" :value="o.id">{{ o.label }}</option>
         </select>
       </label>
+      <SearchControls v-model="search" />
       <div class="spacer" />
       <AdvancedPanel v-model="advanced" />
       <button class="link icon-btn" v-if="objectUrl" @click="file = null; objectUrl = ''; dims = null; fileName = ''; tileMetrics = new Map();">
@@ -224,6 +228,7 @@ const gridStyle = computed(() => ({
         :ready="ready"
         :alpha-bits="advancedD.alphaBits"
         :color-id="colorId"
+        :search="v.shape === 'dct' ? undefined : searchD"
         @metrics="(m) => onMetrics(v.id, m)"
       />
     </div>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { init as initArthash } from "arthash";
-import { Hash, LayoutGrid, Columns2, Loader2, CircleCheck, TriangleAlert } from "@lucide/vue";
+import { Hash, LayoutGrid, Columns2, Film, Loader2, CircleCheck, TriangleAlert } from "@lucide/vue";
 import GalleryView from "./components/GalleryView.vue";
 import CompareView from "./components/CompareView.vue";
+import AnimationView from "./components/AnimationView.vue";
 
-type TabId = "gallery" | "compare";
+type TabId = "gallery" | "compare" | "animate";
 const tab = ref<TabId>("gallery");
 
 const ready = ref(false);
@@ -32,6 +33,10 @@ onMounted(async () => {
         <button :class="{ active: tab === 'gallery' }" @click="tab = 'gallery'">
           <LayoutGrid :size="14" :stroke-width="1.75" />
           <span>Gallery</span>
+        </button>
+        <button :class="{ active: tab === 'animate' }" @click="tab = 'animate'">
+          <Film :size="14" :stroke-width="1.75" />
+          <span>Animate</span>
         </button>
         <button :class="{ active: tab === 'compare' }" @click="tab = 'compare'">
           <Columns2 :size="14" :stroke-width="1.75" />
@@ -68,5 +73,6 @@ onMounted(async () => {
 
     <GalleryView v-show="tab === 'gallery'" :ready="ready" />
     <CompareView v-show="tab === 'compare'" :ready="ready" />
+    <AnimationView v-show="tab === 'animate'" :ready="ready" />
   </div>
 </template>

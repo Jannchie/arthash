@@ -6,15 +6,16 @@ import { Shape, type Shape as ShapeType } from "arthash";
 import { Zap, Cpu, Package2, LayoutGrid, Loader2 } from "@lucide/vue";
 import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
+import SearchControls from "./SearchControls.vue";
 import { DEMO_IMAGES } from "../demo";
-import { COLOR_OPTIONS, supportsSvg } from "../pipeline";
+import { COLOR_OPTIONS, DEFAULT_SEARCH, supportsSvg, type SearchConfig } from "../pipeline";
 
 interface Props {
   ready: boolean;
 }
 defineProps<Props>();
 
-const shape = ref<ShapeType>(Shape.TRIANGLE);
+const shape = ref<ShapeType>(Shape.RECT);
 const nShapes = ref(64);
 const baseSize = ref(512);
 const blur = ref(0);
@@ -24,6 +25,7 @@ const cols = ref(8);
 const colorId = ref<string>("rgb-565");
 
 const advanced = ref<AdvancedConfig>({ alphaBits: 3 });
+const search = ref<SearchConfig>({ ...DEFAULT_SEARCH });
 
 const DEBOUNCE_MS = 300;
 const nShapesD = refDebounced(nShapes, DEBOUNCE_MS);
@@ -31,6 +33,7 @@ const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
+const searchD = refDebounced(search, DEBOUNCE_MS);
 
 const items = computed(() => DEMO_IMAGES.map((d) => ({ width: d.w, height: d.h })));
 
@@ -66,7 +69,7 @@ function onTileMetrics(i: number, v: { encodeMs: number; decodeMs: number; hashB
 }
 
 watch(
-  [shape, nShapesD, baseSizeD, blurD, seedD, useSvg, advancedD, colorId],
+  [shape, nShapesD, baseSizeD, blurD, seedD, useSvg, advancedD, colorId, searchD],
   () => {
     tileMetrics.value = new Map();
     tileSettled.value = new Set();
@@ -75,13 +78,13 @@ watch(
 );
 
 const shapeOptions: Array<{ value: ShapeType; label: string }> = [
-  { value: Shape.DCT, label: "DCT" },
-  { value: Shape.CIRCLE, label: "Circle" },
-  { value: Shape.TRIANGLE, label: "Triangle" },
-  { value: Shape.SQUARE, label: "Square" },
   { value: Shape.RECT, label: "Rect" },
   { value: Shape.ROTATED_RECT, label: "RotRect" },
+  { value: Shape.SQUARE, label: "Square" },
+  { value: Shape.CIRCLE, label: "Circle" },
+  { value: Shape.TRIANGLE, label: "Triangle" },
   { value: Shape.PIXEL, label: "Pixel" },
+  { value: Shape.DCT, label: "DCT" },
 ];
 
 function fmtMs(ms: number) {
@@ -129,6 +132,7 @@ function fmtMs(ms: number) {
           <option v-for="o in COLOR_OPTIONS" :key="o.id" :value="o.id">{{ o.label }}</option>
         </select>
       </label>
+      <SearchControls v-model="search" :disabled="shape === 'dct'" />
       <div class="spacer" />
       <AdvancedPanel v-model="advanced" />
     </div>
@@ -193,6 +197,7 @@ function fmtMs(ms: number) {
           :ready="ready"
           :alpha-bits="advancedD.alphaBits"
           :color-id="colorId"
+          :search="searchD"
           @metrics="(v) => onTileMetrics(i, v)"
         />
       </Waterfall>

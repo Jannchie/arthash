@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { Shape as ShapeType } from "arthash";
-import { awaitEncodeSlot, fmtMs, loadImage, runPipeline, toHex } from "../pipeline";
+import { awaitEncodeSlot, fmtMs, loadImage, runPipeline, toHex, type SearchConfig } from "../pipeline";
 
 interface Props {
   src: string;
@@ -21,6 +21,7 @@ interface Props {
   // cx/cy/r bit widths are derived from baseSize in runPipeline.
   alphaBits?: number;
   colorId?: string;
+  search?: SearchConfig;
 }
 
 const props = defineProps<Props>();
@@ -82,6 +83,7 @@ async function run() {
       alphaBits: props.alphaBits,
       colorId: props.colorId,
       useSvg: props.useSvg,
+      search: props.search,
     });
     if (token !== runToken) return;
     encodeMs.value = res.encodeMs;
@@ -121,6 +123,10 @@ watch(
     props.useSvg,
     props.alphaBits,
     props.colorId,
+    props.search?.strategy,
+    props.search?.nRandom,
+    props.search?.hillClimbMaxAge,
+    props.search?.nAttempts,
   ],
   () => {
     void run();

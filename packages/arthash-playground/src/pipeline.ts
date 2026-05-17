@@ -9,7 +9,24 @@ import {
   type EncodeOptions,
   type DecodeOptions,
   type RawCodecSpec,
+  type SearchOptions,
 } from "arthash";
+
+/** Subset of `SearchOptions` we surface on the playground toolbar. `null` /
+ *  omitted values fall back to the codec's per-mode tuned defaults. */
+export interface SearchConfig {
+  strategy: "primitive" | "topk_uniform";
+  nRandom: number;
+  hillClimbMaxAge: number;
+  nAttempts: number;
+}
+
+export const DEFAULT_SEARCH: SearchConfig = {
+  strategy: "primitive",
+  nRandom: 64,
+  hillClimbMaxAge: 30,
+  nAttempts: 4,
+};
 
 export const DCT_THUMB = 100;
 export const SHAPE_THUMB = 48;
@@ -316,6 +333,8 @@ export interface RunOpts {
    *  for), the raster decode is skipped — saves an O(base²) pass per tile in
    *  Gallery / Compare. */
   useSvg?: boolean;
+  /** Hill-climb search knobs. Ignored by DCT (which has no hill-climb). */
+  search?: SearchConfig;
 }
 
 /** Build a codec from playground RunOpts using the raw spec escape hatch —
@@ -357,6 +376,15 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
 
   const codec = buildCodec(optsEff);
   const encOpts: EncodeOptions = { seed: opts.seed };
+  if (opts.search && opts.shape !== Shape.DCT) {
+    const s: SearchOptions = {
+      strategy: opts.search.strategy,
+      nRandom: opts.search.nRandom,
+      hillClimbMaxAge: opts.search.hillClimbMaxAge,
+      nAttempts: opts.search.nAttempts,
+    };
+    encOpts.search = s;
+  }
 
   const t0 = performance.now();
   const hash = pfEncode(rgb, w, h, codec, encOpts);
