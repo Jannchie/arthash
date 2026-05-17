@@ -226,11 +226,17 @@ pub enum Preset {
     PlaceholderPixel,
     /// 24-triangle mosaic, ~150 B. Middle ground between Placeholder and Detail.
     MediumTriangle,
+    /// 24-circle mosaic, ~102 B. Middle ground with circular brush feel.
+    MediumCircle,
+    /// 24-cell PIXEL mosaic, ~49 B. Medium lo-fi mosaic.
+    MediumPixel,
     /// 64-triangle mosaic, ~395 B. The playground default — recognisable
     /// preview at request-time generation cost.
     DetailTriangle,
     /// 64-circle mosaic, ~267 B. Detail level with circular brush feel.
     DetailCircle,
+    /// 64-cell PIXEL mosaic, ~129 B. Detail-level lo-fi mosaic.
+    DetailPixel,
 }
 
 impl Preset {
@@ -241,8 +247,11 @@ impl Preset {
             Preset::PlaceholderCircle => Codec::circle(12),
             Preset::PlaceholderPixel => Codec::pixel(16),
             Preset::MediumTriangle => Codec::triangle(24),
+            Preset::MediumCircle => Codec::circle(24),
+            Preset::MediumPixel => Codec::pixel(24),
             Preset::DetailTriangle => Codec::triangle(64),
             Preset::DetailCircle => Codec::circle(64),
+            Preset::DetailPixel => Codec::pixel(64),
         }
     }
 
@@ -254,8 +263,11 @@ impl Preset {
             Preset::PlaceholderCircle,
             Preset::PlaceholderPixel,
             Preset::MediumTriangle,
+            Preset::MediumCircle,
+            Preset::MediumPixel,
             Preset::DetailTriangle,
             Preset::DetailCircle,
+            Preset::DetailPixel,
         ]
     }
 
@@ -267,8 +279,11 @@ impl Preset {
             Preset::PlaceholderCircle => "placeholder_circle",
             Preset::PlaceholderPixel => "placeholder_pixel",
             Preset::MediumTriangle => "medium_triangle",
+            Preset::MediumCircle => "medium_circle",
+            Preset::MediumPixel => "medium_pixel",
             Preset::DetailTriangle => "detail_triangle",
             Preset::DetailCircle => "detail_circle",
+            Preset::DetailPixel => "detail_pixel",
         }
     }
 

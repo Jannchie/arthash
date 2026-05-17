@@ -49,8 +49,11 @@ class Preset(str, enum.Enum):
     PLACEHOLDER_CIRCLE = "placeholder_circle"
     PLACEHOLDER_PIXEL = "placeholder_pixel"
     MEDIUM_TRIANGLE = "medium_triangle"
+    MEDIUM_CIRCLE = "medium_circle"
+    MEDIUM_PIXEL = "medium_pixel"
     DETAIL_TRIANGLE = "detail_triangle"
     DETAIL_CIRCLE = "detail_circle"
+    DETAIL_PIXEL = "detail_pixel"
 
 
 VALID_PALETTE_K = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024}
@@ -190,10 +193,16 @@ class Codec:
             return cls.pixel(16)
         if p == Preset.MEDIUM_TRIANGLE:
             return cls.triangle(24)
+        if p == Preset.MEDIUM_CIRCLE:
+            return cls.circle(24)
+        if p == Preset.MEDIUM_PIXEL:
+            return cls.pixel(24)
         if p == Preset.DETAIL_TRIANGLE:
             return cls.triangle(64)
         if p == Preset.DETAIL_CIRCLE:
             return cls.circle(64)
+        if p == Preset.DETAIL_PIXEL:
+            return cls.pixel(64)
         raise ValueError(f"unknown preset: {p}")
 
     # ---------- byte-compatibility check ----------
@@ -287,6 +296,15 @@ class Codec:
     # ---------- validation ----------
 
     def __post_init__(self) -> None:
+        # `frozen=True` makes Codec hashable + immutable so callers can use it
+        # as a dict key or share across threads, but the trade-off is that we
+        # can't assign to `self.x = …` here. The official dataclass idiom for
+        # post-init normalization is `object.__setattr__(self, name, value)`
+        # (see Python docs § dataclasses → "frozen instances"). We use it
+        # below to (a) coerce `shape: str → ShapeType`, (b) fill `palette_k`
+        # from the palette length when omitted, (c) fill `alpha_levels` from
+        # `alpha_bits` when omitted. Downstream code reads these fields
+        # expecting derived values, not user-supplied None.
         if isinstance(self.shape, str):
             object.__setattr__(self, "shape", ShapeType(self.shape))
 

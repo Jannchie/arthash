@@ -171,10 +171,16 @@ enum PresetArg {
     PlaceholderPixel,
     #[value(name = "medium-triangle")]
     MediumTriangle,
+    #[value(name = "medium-circle")]
+    MediumCircle,
+    #[value(name = "medium-pixel")]
+    MediumPixel,
     #[value(name = "detail-triangle")]
     DetailTriangle,
     #[value(name = "detail-circle")]
     DetailCircle,
+    #[value(name = "detail-pixel")]
+    DetailPixel,
 }
 
 impl PresetArg {
@@ -185,8 +191,11 @@ impl PresetArg {
             PresetArg::PlaceholderCircle => Preset::PlaceholderCircle,
             PresetArg::PlaceholderPixel => Preset::PlaceholderPixel,
             PresetArg::MediumTriangle => Preset::MediumTriangle,
+            PresetArg::MediumCircle => Preset::MediumCircle,
+            PresetArg::MediumPixel => Preset::MediumPixel,
             PresetArg::DetailTriangle => Preset::DetailTriangle,
             PresetArg::DetailCircle => Preset::DetailCircle,
+            PresetArg::DetailPixel => Preset::DetailPixel,
         }
     }
 }

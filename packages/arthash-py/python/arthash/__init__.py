@@ -70,9 +70,24 @@ def medium_triangle() -> Codec:
     return Codec.preset(Preset.MEDIUM_TRIANGLE)
 
 
+def medium_circle() -> Codec:
+    """24-circle mosaic, ~102 B. Middle ground with circular brush feel."""
+    return Codec.preset(Preset.MEDIUM_CIRCLE)
+
+
+def medium_pixel() -> Codec:
+    """24-cell PIXEL mosaic, ~49 B. Medium lo-fi mosaic."""
+    return Codec.preset(Preset.MEDIUM_PIXEL)
+
+
 def detail_circle() -> Codec:
     """64-circle mosaic, ~267 B. Detail-level circular brush feel."""
     return Codec.preset(Preset.DETAIL_CIRCLE)
+
+
+def detail_pixel() -> Codec:
+    """64-cell PIXEL mosaic, ~129 B. Detail-level lo-fi mosaic."""
+    return Codec.preset(Preset.DETAIL_PIXEL)
 
 
 __all__ = [
@@ -93,6 +108,9 @@ __all__ = [
     "placeholder_circle",
     "placeholder_pixel",
     "medium_triangle",
+    "medium_circle",
+    "medium_pixel",
     "detail_triangle",
     "detail_circle",
+    "detail_pixel",
 ]

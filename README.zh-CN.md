@@ -10,10 +10,10 @@
 
 ## 它能替代什么
 
-| 你现在用                | 换成 arthash 的            | 主要收益                                                    |
-| ----------------------- | -------------------------- | ----------------------------------------------------------- |
-| blurhash / thumbhash    | `DCT` 模式                 | 同字节数 PSNR 高 0.4 dB；JS 端 encode 1.9× / decode 1.4×    |
-| sqip（primitive 部分）  | `TRIANGLE` / `CIRCLE` 模式 | 体积 1/9 – 1/16；编码 50–67× 快；能在浏览器原生 wasm 跑    |
+| 你现在用               | 换成 arthash 的            | 主要收益                                                 |
+| ---------------------- | -------------------------- | -------------------------------------------------------- |
+| blurhash / thumbhash   | `DCT` 模式                 | 同字节数 PSNR 高 0.4 dB；JS 端 encode 1.9× / decode 1.4× |
+| sqip（primitive 部分） | `TRIANGLE` / `CIRCLE` 模式 | 体积 1/9 – 1/16；编码 50–67× 快；能在浏览器原生 wasm 跑  |
 
 shape / PIXEL 模式还可以接收外部调色板，把颜色字段压成 4 bit；同时画面自然带上调色板的视觉风格（品牌色、复古、莫兰迪等）。
 
@@ -77,15 +77,15 @@ const hash2 = await encodeImage(imageUrlOrBlob, c);
 
 ## 模式 & 字节数
 
-| 模式           | 视觉效果                  | n=12 字节 | n=64 字节 |
-| -------------- | ------------------------- | --------: | --------: |
-| `DCT`          | 模糊缩略图（thumbhash 同类）|    17–24  |        —  |
-| `PIXEL`        | 调色板像素马赛克           |        25 |       129 |
-| `CIRCLE`       | 叠加圆，输出 SVG           |        53 |       267 |
-| `SQUARE`       | 轴对齐方块，输出 SVG       |        53 |       267 |
-| `RECT`         | 轴对齐矩形，输出 SVG       |        59 |       299 |
-| `ROTATED_RECT` | 旋转矩形，输出 SVG         |        66 |       339 |
-| `TRIANGLE`     | 三角形马赛克，输出 SVG     |        77 |       395 |
+| 模式           | 视觉效果                     | n=12 字节 | n=64 字节 |
+| -------------- | ---------------------------- | --------: | --------: |
+| `DCT`          | 模糊缩略图（thumbhash 同类） |     17–24 |         — |
+| `PIXEL`        | 调色板像素马赛克             |        25 |       129 |
+| `CIRCLE`       | 叠加圆，输出 SVG             |        53 |       267 |
+| `SQUARE`       | 轴对齐方块，输出 SVG         |        53 |       267 |
+| `RECT`         | 轴对齐矩形，输出 SVG         |        59 |       299 |
+| `ROTATED_RECT` | 旋转矩形，输出 SVG           |        66 |       339 |
+| `TRIANGLE`     | 三角形马赛克，输出 SVG       |        77 |       395 |
 
 playground 默认 `TRIANGLE n=64 / baseSize 512 / RGB-565`，是一个比较合理的起点。对大小敏感就调低 `n`（n=24 → 150 B，n=12 → 77 B）；想要特定视觉风格就换调色板；想要极致小体积加模糊感就上 DCT（≤ 24 B）。
 
@@ -97,19 +97,19 @@ playground 默认 `TRIANGLE n=64 / baseSize 512 / RGB-565`，是一个比较合�
 
 ### 特性对比
 
-| 特性                             |     arthash      |   thumbhash       |          sqip           |
-| -------------------------------- | :--------------: | :--------------: | :---------------------: |
-| DCT 模糊缩略图（17–24 B）        |        ✅         |        ✅         |            ❌            |
-| 几何原语 SVG                     |   ✅ 5 种         |        ❌         |        ✅ 多种插件        |
-| 像素马赛克                       |        ✅         |        ❌         |            ❌            |
-| 外部调色板（颜色压到 4 bit）     |        ✅         |        ❌         |            ❌            |
-| Potrace 风格描边 SVG             |        ❌         |        ❌         | ✅ `sqip-plugin-potrace` |
-| WebP 输出                        |        ❌         |        ❌         |     ✅ 部分插件支持       |
-| 解码到任意尺寸                   |        ✅         | ⚠️ 默认 ~32 px    |     ✅（SVG 矢量）        |
-| Web / 浏览器 wasm                |        ✅         |    ✅ 纯 JS       |   ❌（依赖 Go 子进程）   |
-| Python 绑定                      |   ✅ PyO3 wheel   | ⚠️ 纯 Python 慢 80× |          ❌            |
-| Rust crate                       |        ✅         |        ✅         |            ❌            |
-| 部署形态                         |  请求期 / 构建期  |  请求期 / 构建期  |       仅构建期          |
+| 特性                         |     arthash     |     thumbhash      |          sqip           |
+| ---------------------------- | :-------------: | :----------------: | :---------------------: |
+| DCT 模糊缩略图（17–24 B）    |        ✅        |         ✅          |            ❌            |
+| 几何原语 SVG                 |     ✅ 5 种      |         ❌          |       ✅ 多种插件        |
+| 像素马赛克                   |        ✅        |         ❌          |            ❌            |
+| 外部调色板（颜色压到 4 bit） |        ✅        |         ❌          |            ❌            |
+| Potrace 风格描边 SVG         |        ❌        |         ❌          | ✅ `sqip-plugin-potrace` |
+| WebP 输出                    |        ❌        |         ❌          |     ✅ 部分插件支持      |
+| 解码到任意尺寸               |        ✅        |   ⚠️ 默认 ~32 px    |      ✅（SVG 矢量）      |
+| Web / 浏览器 wasm            |        ✅        |      ✅ 纯 JS       |   ❌（依赖 Go 子进程）   |
+| Python 绑定                  |  ✅ PyO3 wheel   | ⚠️ 纯 Python 慢 80× |            ❌            |
+| Rust crate                   |        ✅        |         ✅          |            ❌            |
+| 部署形态                     | 请求期 / 构建期 |  请求期 / 构建期   |        仅构建期         |
 
 arthash 当前**不覆盖** sqip 的 Potrace 描边模式（位图轮廓化 → SVG path），也没做 WebP / data-URI 输出。如果你的场景需要这些，sqip 仍然是更合适的选择。
 
@@ -121,20 +121,20 @@ arthash 当前**不覆盖** sqip 的 Potrace 描边模式（位图轮廓化 → 
 
 JS（baseline = thumbhash-js）：
 
-| 实现                |  median | vs baseline | 字节 |
-| ------------------- | ------: | ----------: | ---: |
-| arthash · ts (wasm) |  279 µs | **1.9× 快** |   24 |
-| thumbhash · JS      |  532 µs |  1.0× (baseline) |   24 |
+| 实现                | median |     vs baseline | 字节 |
+| ------------------- | -----: | --------------: | ---: |
+| arthash · ts (wasm) | 279 µs |     **1.9× 快** |   24 |
+| thumbhash · JS      | 532 µs | 1.0× (baseline) |   24 |
 
 原生（baseline = thumbhash-rust，最快的非 arthash 实现）：
 
-| 实现                          |  median   |    vs baseline   | 字节 |
-| ----------------------------- | --------: | ---------------: | ---: |
-| arthash · Python (PyO3)       |   242 µs  |    **1.27× 快**  |   24 |
-| arthash · Rust                |   243 µs  |    **1.27× 快**  |   24 |
-| thumbhash · Rust (evanw)      |   308 µs  |  1.0× (baseline) |   24 |
-| thumbhash · Go (n16f.net)     |   415 µs  |     0.74× 慢     |   24 |
-| thumbhash · Python (PyPI)     |    25 ms  |    0.012× 慢     |   24 |
+| 实现                      | median |     vs baseline | 字节 |
+| ------------------------- | -----: | --------------: | ---: |
+| arthash · Python (PyO3)   | 242 µs |    **1.27× 快** |   24 |
+| arthash · Rust            | 243 µs |    **1.27× 快** |   24 |
+| thumbhash · Rust (evanw)  | 308 µs | 1.0× (baseline) |   24 |
+| thumbhash · Go (n16f.net) | 415 µs |        0.74× 慢 |   24 |
+| thumbhash · Python (PyPI) |  25 ms |       0.012× 慢 |   24 |
 
 arthash Rust 和 PyO3 速度持平（min ~228 µs / median ~243 µs）——PyO3 只多一层 GIL/PyBytes 封装，开销在 µs 量级、被批量测量噪声盖掉。
 
@@ -142,23 +142,23 @@ arthash Rust 和 PyO3 速度持平（min ~228 µs / median ~243 µs）——PyO3
 
 JS（baseline = thumbhash-js 在它默认的 ~32 px 输出）：
 
-| 实现                |  输出尺寸  |   median   |    vs baseline    |
-| ------------------- | --------: | ---------: | ----------------: |
-| arthash · ts (wasm) |    ~32 px |    116 µs  |    **1.4× 快**    |
-| thumbhash · JS      |    ~32 px |    165 µs  |  1.0× (baseline)  |
-| arthash · ts (wasm) |    256 px |   6.69 ms  |   *(对方不支持)*  |
-| arthash · ts (wasm) |    512 px |  26.22 ms  |   *(对方不支持)*  |
-| thumbhash · JS      |    256+   | API 不支持 |        —          |
+| 实现                | 输出尺寸 |     median |     vs baseline |
+| ------------------- | -------: | ---------: | --------------: |
+| arthash · ts (wasm) |   ~32 px |     116 µs |     **1.4× 快** |
+| thumbhash · JS      |   ~32 px |     165 µs | 1.0× (baseline) |
+| arthash · ts (wasm) |   256 px |    6.69 ms |  *(对方不支持)* |
+| arthash · ts (wasm) |   512 px |   26.22 ms |  *(对方不支持)* |
+| thumbhash · JS      |     256+ | API 不支持 |               — |
 
 thumbhash JS 解码 API 只输出 ~32 px，要变大只能 CSS 拉伸（拉糊）。arthash 直接 IDCT 到任意尺寸，省掉前端上采样这一步。
 
 原生 @ 256 px（baseline = thumbhash-go @ 256）：
 
-| 实现                          |   median   |    vs baseline    |
-| ----------------------------- | ---------: | ----------------: |
-| arthash · Rust                |   2.06 ms  |    **5.9× 快**    |
-| arthash · Python (PyO3)       |   2.60 ms  |    **4.7× 快**    |
-| thumbhash · Go @ 256          |  12.2 ms   |  1.0× (baseline)  |
+| 实现                    |  median |     vs baseline |
+| ----------------------- | ------: | --------------: |
+| arthash · Rust          | 2.06 ms |     **5.9× 快** |
+| arthash · Python (PyO3) | 2.60 ms |     **4.7× 快** |
+| thumbhash · Go @ 256    | 12.2 ms | 1.0× (baseline) |
 
 thumbhash 的 Rust crate 在它自己的默认 ~32 px 输出下比 arthash 快；一旦要求显示尺寸缓冲（占位图实际场景），arthash 反超 6×。
 
@@ -168,31 +168,31 @@ JS（baseline = sqip-node 同 n 值）。arthash 越大的 n 优势越明显—�
 
 **编码时间**：
 
-| 实现                            |   n=12 (倍率)    |   n=24 (倍率)    |   n=64 (倍率)     |
-| ------------------------------- | ---------------: | ---------------: | ----------------: |
-| arthash · ts TRIANGLE           | 5.1 ms (**56×**) | 7.9 ms (**56×**) | 15.2 ms (**67×**) |
-| arthash · ts CIRCLE             |   5.3 ms (54×)   |   7.2 ms (62×)   |    15.5 ms (66×)  |
-| sqip · primitive-triangle @0.3  |      284 ms      |      446 ms      |       1015 ms     |
+| 实现                           |      n=12 (倍率) |      n=24 (倍率) |       n=64 (倍率) |
+| ------------------------------ | ---------------: | ---------------: | ----------------: |
+| arthash · ts TRIANGLE          | 5.1 ms (**56×**) | 7.9 ms (**56×**) | 15.2 ms (**67×**) |
+| arthash · ts CIRCLE            |     5.3 ms (54×) |     7.2 ms (62×) |     15.5 ms (66×) |
+| sqip · primitive-triangle @0.3 |           284 ms |           446 ms |           1015 ms |
 
 **输出大小**：
 
-| 实现                            |    n=12 (倍率)    |    n=24 (倍率)    |    n=64 (倍率)    |
-| ------------------------------- | ----------------: | ----------------: | ----------------: |
-| arthash · ts CIRCLE             | 53 B (**16× 小**) | 102 B (**15× 小**)| 267 B (**14× 小**)|
-| arthash · ts TRIANGLE           |   77 B (11× 小)   |  150 B (10× 小)   |  395 B (9× 小)    |
-| sqip · primitive-triangle @0.3  |       842 B       |       1482 B      |       3650 B      |
+| 实现                           |       n=12 (倍率) |        n=24 (倍率) |        n=64 (倍率) |
+| ------------------------------ | ----------------: | -----------------: | -----------------: |
+| arthash · ts CIRCLE            | 53 B (**16× 小**) | 102 B (**15× 小**) | 267 B (**14× 小**) |
+| arthash · ts TRIANGLE          |     77 B (11× 小) |     150 B (10× 小) |      395 B (9× 小) |
+| sqip · primitive-triangle @0.3 |             842 B |             1482 B |             3650 B |
 
 sqip 每次调用都要 spawn Go primitive 子进程，根本不能在浏览器跑；所以它适合**构建期一次性生成**。arthash 走 wasm-bindgen，**请求期实时编码**也轻松。
 
 ### 画质 (256 长边, PSNR，按 PSNR 降序)
 
-| 输出                  |   字节   |   PSNR  |
-| --------------------- | -------: | ------: |
-| sqip · 12 原语 SVG    |  ~1100 B | 24.4 dB |
-| arthash · DCT         |    17 B  | 23.3 dB |
-| thumbhash             |    17 B  | 22.9 dB |
-| arthash · TRIANGLE 12 |    77 B  | 21.4 dB |
-| arthash · CIRCLE 12   |    53 B  | 20.7 dB |
+| 输出                  |    字节 |    PSNR |
+| --------------------- | ------: | ------: |
+| sqip · 12 原语 SVG    | ~1100 B | 24.4 dB |
+| arthash · DCT         |    17 B | 23.3 dB |
+| thumbhash             |    17 B | 22.9 dB |
+| arthash · TRIANGLE 12 |    77 B | 21.4 dB |
+| arthash · CIRCLE 12   |    53 B | 20.7 dB |
 
 同 17 B 预算下 arthash DCT 比 thumbhash 高 0.4 dB；arthash TRIANGLE 12 用 77 B 就拿到 21.4 dB，相比 sqip 的 ~1100 B / 24.4 dB，是用 1/14 字节换 3 dB 画质。
 

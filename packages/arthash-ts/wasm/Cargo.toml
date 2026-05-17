@@ -22,3 +22,8 @@ serde-wasm-bindgen = "0.6"
 opt-level = 3
 lto = true
 codegen-units = 1
+# panic=abort drops the unwinding tables and the formatting glue that
+# panic messages drag in (a few KB on wasm). strip=debuginfo removes
+# DWARF sections that wasm-opt -Oz doesn't fully clean up.
+panic = "abort"
+strip = "debuginfo"

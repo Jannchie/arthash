@@ -57,8 +57,10 @@ for the upgrade walkthrough.
 #### Cross-language
 
 - **Named presets.** `Preset::TinyDct`, `PlaceholderTriangle`,
-  `PlaceholderCircle`, `PlaceholderPixel`, `MediumTriangle`, `DetailTriangle`,
-  `DetailCircle`. Wired into all three SDKs.
+  `PlaceholderCircle`, `PlaceholderPixel`, `MediumTriangle`, `MediumCircle`,
+  `MediumPixel`, `DetailTriangle`, `DetailCircle`, `DetailPixel`. Wired into
+  all three SDKs + CLI. The preset matrix is symmetric across triangle /
+  circle / pixel at three byte budgets.
 - **`is_byte_compatible_with(other)`.** Verifies two codecs would decode each
   other's hashes byte-for-byte. Looser than `==` — ignores construction
   style (factory vs raw). Available in Rust + Python.

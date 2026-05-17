@@ -140,8 +140,11 @@ export const Preset = {
   PlaceholderCircle: "placeholder_circle",
   PlaceholderPixel: "placeholder_pixel",
   MediumTriangle: "medium_triangle",
+  MediumCircle: "medium_circle",
+  MediumPixel: "medium_pixel",
   DetailTriangle: "detail_triangle",
   DetailCircle: "detail_circle",
+  DetailPixel: "detail_pixel",
 } as const;
 export type Preset = (typeof Preset)[keyof typeof Preset];
 
@@ -193,8 +196,11 @@ export const codec = {
       case Preset.PlaceholderCircle: return codec.circle({ n: 12 });
       case Preset.PlaceholderPixel: return codec.pixel({ n: 16 });
       case Preset.MediumTriangle: return codec.triangle({ n: 24 });
+      case Preset.MediumCircle: return codec.circle({ n: 24 });
+      case Preset.MediumPixel: return codec.pixel({ n: 24 });
       case Preset.DetailTriangle: return codec.triangle({ n: 64 });
       case Preset.DetailCircle: return codec.circle({ n: 64 });
+      case Preset.DetailPixel: return codec.pixel({ n: 64 });
     }
   },
   /** Convenience: switch a codec's color mode to palette indexing. */
@@ -395,22 +401,39 @@ async function ready(): Promise<void> {
 // FFI plumbing
 // ---------------------------------------------------------------------------
 
+/** camelCase → snake_case for FFI key names. `nShapes` → `n_shapes`, `rBits`
+ *  → `r_bits`. Acronyms and existing underscores are preserved. */
+function toSnakeCase(key: string): string {
+  return key.replace(/[A-Z]/g, (m) => "_" + m.toLowerCase());
+}
+
+/** Copy own enumerable keys from `src` into `dst` with camelCase → snake_case
+ *  renaming. Skips entries whose value (or transformed value) is `undefined`,
+ *  so optional fields don't show up as `null` on the Rust side. Pass a
+ *  `transform` map to override specific keys (return `undefined` to skip). */
+function assignSnakeCase(
+  dst: Record<string, unknown>,
+  src: Record<string, unknown>,
+  transform: Record<string, (v: unknown) => unknown> = {},
+): void {
+  for (const [k, v] of Object.entries(src)) {
+    if (v === undefined) continue;
+    const fn = transform[k];
+    const transformed = fn ? fn(v) : v;
+    if (transformed === undefined) continue;
+    dst[toSnakeCase(k)] = transformed;
+  }
+}
+
 function codecToFfi(c: Codec): Record<string, unknown> {
   if (c.kind === "raw") {
-    const s = c.spec;
-    const out: Record<string, unknown> = { shape: s.shape };
-    if (s.nShapes !== undefined) out.n_shapes = s.nShapes;
-    if (s.cxBits !== undefined) out.cx_bits = s.cxBits;
-    if (s.cyBits !== undefined) out.cy_bits = s.cyBits;
-    if (s.rBits !== undefined) out.r_bits = s.rBits;
-    if (s.alphaBits !== undefined) out.alpha_bits = s.alphaBits;
-    if (s.colorBits !== undefined) out.color_bits = s.colorBits;
-    if (s.thetaBits !== undefined) out.theta_bits = s.thetaBits;
-    if (s.palette !== undefined && s.palette.length > 0) {
-      out.palette = Array.from(s.palette);
-    }
-    if (s.paletteK !== undefined) out.palette_k = s.paletteK;
-    if (s.gridAspect !== undefined) out.grid_aspect = s.gridAspect;
+    const out: Record<string, unknown> = {};
+    assignSnakeCase(out, c.spec as unknown as Record<string, unknown>, {
+      palette: (v) => {
+        const arr = v as Uint8Array;
+        return arr.length > 0 ? Array.from(arr) : undefined;
+      },
+    });
     return out;
   }
 
@@ -440,14 +463,7 @@ function codecToFfi(c: Codec): Record<string, unknown> {
 function searchToFfi(s: SearchOptions | undefined): unknown {
   if (!s) return undefined;
   const out: Record<string, unknown> = {};
-  if (s.strategy !== undefined) out.strategy = s.strategy;
-  if (s.nRandom !== undefined) out.n_random = s.nRandom;
-  if (s.nTopk !== undefined) out.n_topk = s.nTopk;
-  if (s.hillClimbSteps !== undefined) out.hill_climb_steps = s.hillClimbSteps;
-  if (s.hillClimbMaxAge !== undefined) {
-    out.hill_climb_max_age = s.hillClimbMaxAge;
-  }
-  if (s.nAttempts !== undefined) out.n_attempts = s.nAttempts;
+  assignSnakeCase(out, s as unknown as Record<string, unknown>);
   return out;
 }
 
@@ -590,7 +606,23 @@ function thumbTarget(c: Codec): number {
 
 /** Browser-only: load an image source (URL string, Blob, HTMLImageElement,
  *  ImageBitmap), resize to the codec's thumbnail target, encode in one call.
- *  Requires a DOM canvas — for Node, use `encode` / `encodeRgba` directly. */
+ *
+ *  **Node users**: this function intentionally has no Node fallback to keep
+ *  the npm package canvas-free. Decode the image yourself with `sharp` /
+ *  `jimp` / `@napi-rs/canvas`, resize the long edge to `48` (shape modes) or
+ *  `≤ 100` (DCT), extract row-major RGB bytes, then call `encode(rgb, w, h,
+ *  codec)`. Example with `sharp`:
+ *
+ *  ```ts
+ *  import sharp from "sharp";
+ *  import { encode, codec } from "arthash";
+ *  const c = codec.triangle({ n: 64 });
+ *  const { data, info } = await sharp("photo.jpg")
+ *    .resize({ width: 48, height: 48, fit: "inside" })
+ *    .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+ *  const hash = await encode(new Uint8Array(data), info.width, info.height, c);
+ *  ```
+ */
 export async function encodeImage(
   source: string | Blob | HTMLImageElement | ImageBitmap,
   c: Codec,

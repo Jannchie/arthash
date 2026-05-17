@@ -10,10 +10,10 @@ Written in Rust at the core. Python and TypeScript share the same Rust code (via
 
 ## What it replaces
 
-| If you use                  | Switch to arthash's        | Main wins                                                          |
-| --------------------------- | -------------------------- | ------------------------------------------------------------------ |
-| blurhash / thumbhash        | `DCT` mode                 | same byte budget, +0.4 dB PSNR; JS encode 1.9× / decode 1.4×       |
-| sqip (primitive only)       | `TRIANGLE` / `CIRCLE` mode | 1/9 – 1/16 the size; 50–67× faster encode; runs natively in browser wasm |
+| If you use            | Switch to arthash's        | Main wins                                                                |
+| --------------------- | -------------------------- | ------------------------------------------------------------------------ |
+| blurhash / thumbhash  | `DCT` mode                 | same byte budget, +0.4 dB PSNR; JS encode 1.9× / decode 1.4×             |
+| sqip (primitive only) | `TRIANGLE` / `CIRCLE` mode | 1/9 – 1/16 the size; 50–67× faster encode; runs natively in browser wasm |
 
 shape / PIXEL modes can also take an external palette, dropping per-shape colour to 4 bit and giving the output a natural visual style (brand palette, retro, Morandi, ...).
 
@@ -77,15 +77,15 @@ Factories: `codec.dct()` / `.circle({ n })` / `.triangle({ n })` / `.square({ n 
 
 ## Modes & byte counts
 
-| Mode           | Look                                  | n=12 bytes | n=64 bytes |
-| -------------- | ------------------------------------- | ---------: | ---------: |
-| `DCT`          | blurry thumbnail (thumbhash-style)    |     17–24  |         —  |
-| `PIXEL`        | palette pixel mosaic                  |        25  |       129  |
-| `CIRCLE`       | overlapping circles, SVG out          |        53  |       267  |
-| `SQUARE`       | axis-aligned squares, SVG out         |        53  |       267  |
-| `RECT`         | axis-aligned rectangles, SVG out      |        59  |       299  |
-| `ROTATED_RECT` | rotated rectangles, SVG out           |        66  |       339  |
-| `TRIANGLE`     | triangle mosaic, SVG out              |        77  |       395  |
+| Mode           | Look                               | n=12 bytes | n=64 bytes |
+| -------------- | ---------------------------------- | ---------: | ---------: |
+| `DCT`          | blurry thumbnail (thumbhash-style) |      17–24 |          — |
+| `PIXEL`        | palette pixel mosaic               |         25 |        129 |
+| `CIRCLE`       | overlapping circles, SVG out       |         53 |        267 |
+| `SQUARE`       | axis-aligned squares, SVG out      |         53 |        267 |
+| `RECT`         | axis-aligned rectangles, SVG out   |         59 |        299 |
+| `ROTATED_RECT` | rotated rectangles, SVG out        |         66 |        339 |
+| `TRIANGLE`     | triangle mosaic, SVG out           |         77 |        395 |
 
 The playground default is `TRIANGLE n=64 / baseSize 512 / RGB-565`, a reasonable starting point. If you need smaller bytes, lower `n` (n=24 → 150 B, n=12 → 77 B). For a specific visual style, swap in a palette. For minimum size plus a blurry look, switch to DCT (≤ 24 B).
 
@@ -97,19 +97,19 @@ The playground default is `TRIANGLE n=64 / baseSize 512 / RGB-565`, a reasonable
 
 ### Feature comparison
 
-| Feature                                  |      arthash      |     thumbhash      |             sqip              |
-| ---------------------------------------- | :---------------: | :----------------: | :---------------------------: |
-| DCT blurry thumbnail (17–24 B)           |         ✅         |          ✅         |               ❌               |
-| Geometric SVG primitives                 |     ✅ 5 shapes    |          ❌         |       ✅ multiple plugins      |
-| Pixel mosaic                             |         ✅         |          ❌         |               ❌               |
-| External palette (colour → 4 bit)        |         ✅         |          ❌         |               ❌               |
-| Potrace-style SVG tracing                |         ❌         |          ❌         |   ✅ `sqip-plugin-potrace`    |
-| WebP output                              |         ❌         |          ❌         |     ✅ via some plugins        |
-| Decode to arbitrary output size          |         ✅         |  ⚠️ default ~32 px  |       ✅ (SVG, vector)         |
-| Web / browser wasm                       |         ✅         |     ✅ pure JS      |   ❌ (needs Go subprocess)    |
-| Python binding                           |    ✅ PyO3 wheel   | ⚠️ pure-Python 80× slower |             ❌            |
-| Rust crate                               |         ✅         |          ✅         |               ❌               |
-| Deployment                               |   request / build |   request / build  |          build-time only       |
+| Feature                           |     arthash     |        thumbhash         |          sqip           |
+| --------------------------------- | :-------------: | :----------------------: | :---------------------: |
+| DCT blurry thumbnail (17–24 B)    |        ✅        |            ✅             |            ❌            |
+| Geometric SVG primitives          |   ✅ 5 shapes    |            ❌             |   ✅ multiple plugins    |
+| Pixel mosaic                      |        ✅        |            ❌             |            ❌            |
+| External palette (colour → 4 bit) |        ✅        |            ❌             |            ❌            |
+| Potrace-style SVG tracing         |        ❌        |            ❌             | ✅ `sqip-plugin-potrace` |
+| WebP output                       |        ❌        |            ❌             |   ✅ via some plugins    |
+| Decode to arbitrary output size   |        ✅        |     ⚠️ default ~32 px     |     ✅ (SVG, vector)     |
+| Web / browser wasm                |        ✅        |        ✅ pure JS         | ❌ (needs Go subprocess) |
+| Python binding                    |  ✅ PyO3 wheel   | ⚠️ pure-Python 80× slower |            ❌            |
+| Rust crate                        |        ✅        |            ✅             |            ❌            |
+| Deployment                        | request / build |     request / build      |     build-time only     |
 
 arthash **does not** cover sqip's Potrace tracing mode (bitmap contour → SVG path), nor does it produce WebP / data-URI output. If you need those, sqip is still the better fit.
 
@@ -121,20 +121,20 @@ Same machine, 100×100 input. JS numbers are measured with [`bench/js-cross/`](.
 
 JS (baseline = thumbhash-js):
 
-| Impl                |  median | vs baseline | bytes |
-| ------------------- | ------: | ----------: | ----: |
-| arthash · ts (wasm) |  279 µs | **1.9× faster** |    24 |
-| thumbhash · JS      |  532 µs | 1.0× (baseline) |    24 |
+| Impl                | median |     vs baseline | bytes |
+| ------------------- | -----: | --------------: | ----: |
+| arthash · ts (wasm) | 279 µs | **1.9× faster** |    24 |
+| thumbhash · JS      | 532 µs | 1.0× (baseline) |    24 |
 
 Native (baseline = thumbhash-rust, the fastest non-arthash impl):
 
-| Impl                          |  median   |       vs baseline    | bytes |
-| ----------------------------- | --------: | -------------------: | ----: |
-| arthash · Python (PyO3)       |   242 µs  |    **1.27× faster**  |    24 |
-| arthash · Rust                |   243 µs  |    **1.27× faster**  |    24 |
-| thumbhash · Rust (evanw)      |   308 µs  |    1.0× (baseline)   |    24 |
-| thumbhash · Go (n16f.net)     |   415 µs  |     0.74× slower     |    24 |
-| thumbhash · Python (PyPI)     |    25 ms  |    0.012× slower     |    24 |
+| Impl                      | median |      vs baseline | bytes |
+| ------------------------- | -----: | ---------------: | ----: |
+| arthash · Python (PyO3)   | 242 µs | **1.27× faster** |    24 |
+| arthash · Rust            | 243 µs | **1.27× faster** |    24 |
+| thumbhash · Rust (evanw)  | 308 µs |  1.0× (baseline) |    24 |
+| thumbhash · Go (n16f.net) | 415 µs |     0.74× slower |    24 |
+| thumbhash · Python (PyPI) |  25 ms |    0.012× slower |    24 |
 
 arthash Rust and PyO3 are essentially tied (min ~228 µs / median ~243 µs) — PyO3 only adds a thin GIL/PyBytes wrapper, whose µs-level overhead is lost in batch-measurement noise.
 
@@ -142,23 +142,23 @@ arthash Rust and PyO3 are essentially tied (min ~228 µs / median ~243 µs) — 
 
 JS (baseline = thumbhash-js at its default ~32 px output):
 
-| Impl                |  output size  |   median    |   vs baseline   |
-| ------------------- | ------------: | ----------: | --------------: |
-| arthash · ts (wasm) |        ~32 px |     116 µs  | **1.4× faster** |
-| thumbhash · JS      |        ~32 px |     165 µs  | 1.0× (baseline) |
-| arthash · ts (wasm) |        256 px |    6.69 ms  |  *(N/A on opp.)*|
-| arthash · ts (wasm) |        512 px |   26.22 ms  |  *(N/A on opp.)*|
-| thumbhash · JS      |         256+  |  unsupported |        —        |
+| Impl                | output size |      median |     vs baseline |
+| ------------------- | ----------: | ----------: | --------------: |
+| arthash · ts (wasm) |      ~32 px |      116 µs | **1.4× faster** |
+| thumbhash · JS      |      ~32 px |      165 µs | 1.0× (baseline) |
+| arthash · ts (wasm) |      256 px |     6.69 ms | *(N/A on opp.)* |
+| arthash · ts (wasm) |      512 px |    26.22 ms | *(N/A on opp.)* |
+| thumbhash · JS      |        256+ | unsupported |               — |
 
 thumbhash's JS decode API only outputs ~32 px; to go larger you have to CSS-upscale (blurry). arthash IDCTs directly to the target size, skipping the upsample step on the client.
 
 Native @ 256 px (baseline = thumbhash-go @ 256):
 
-| Impl                          |   median   |    vs baseline    |
-| ----------------------------- | ---------: | ----------------: |
-| arthash · Rust                |   2.06 ms  |    **5.9× faster**|
-| arthash · Python (PyO3)       |   2.60 ms  |    **4.7× faster**|
-| thumbhash · Go @ 256          |  12.2 ms   |  1.0× (baseline)  |
+| Impl                    |  median |     vs baseline |
+| ----------------------- | ------: | --------------: |
+| arthash · Rust          | 2.06 ms | **5.9× faster** |
+| arthash · Python (PyO3) | 2.60 ms | **4.7× faster** |
+| thumbhash · Go @ 256    | 12.2 ms | 1.0× (baseline) |
 
 thumbhash's Rust crate at its native ~32 px default is faster than arthash; but as soon as you ask for a display-sized buffer (the actual placeholder scenario), arthash overtakes it by 6×.
 
@@ -168,31 +168,31 @@ JS, baseline = sqip-node at the same `n`. arthash's lead grows with `n` — sqip
 
 **Encode time**:
 
-| Impl                            |   n=12 (ratio)    |    n=24 (ratio)    |    n=64 (ratio)    |
-| ------------------------------- | ----------------: | -----------------: | -----------------: |
-| arthash · ts TRIANGLE           | 5.1 ms (**56×**)  |  7.9 ms (**56×**)  | 15.2 ms (**67×**)  |
-| arthash · ts CIRCLE             |   5.3 ms (54×)    |    7.2 ms (62×)    |    15.5 ms (66×)   |
-| sqip · primitive-triangle @0.3  |      284 ms       |       446 ms       |       1015 ms      |
+| Impl                           |     n=12 (ratio) |     n=24 (ratio) |      n=64 (ratio) |
+| ------------------------------ | ---------------: | ---------------: | ----------------: |
+| arthash · ts TRIANGLE          | 5.1 ms (**56×**) | 7.9 ms (**56×**) | 15.2 ms (**67×**) |
+| arthash · ts CIRCLE            |     5.3 ms (54×) |     7.2 ms (62×) |     15.5 ms (66×) |
+| sqip · primitive-triangle @0.3 |           284 ms |           446 ms |           1015 ms |
 
 **Output size**:
 
-| Impl                            |    n=12 (ratio)    |    n=24 (ratio)    |    n=64 (ratio)    |
-| ------------------------------- | -----------------: | -----------------: | -----------------: |
-| arthash · ts CIRCLE             | 53 B (**16× smaller**) | 102 B (**15× smaller**) | 267 B (**14× smaller**) |
-| arthash · ts TRIANGLE           |   77 B (11× smaller)   |  150 B (10× smaller)    |  395 B (9× smaller)     |
-| sqip · primitive-triangle @0.3  |        842 B       |       1482 B       |       3650 B       |
+| Impl                           |           n=12 (ratio) |            n=24 (ratio) |            n=64 (ratio) |
+| ------------------------------ | ---------------------: | ----------------------: | ----------------------: |
+| arthash · ts CIRCLE            | 53 B (**16× smaller**) | 102 B (**15× smaller**) | 267 B (**14× smaller**) |
+| arthash · ts TRIANGLE          |     77 B (11× smaller) |     150 B (10× smaller) |      395 B (9× smaller) |
+| sqip · primitive-triangle @0.3 |                  842 B |                  1482 B |                  3650 B |
 
 sqip spawns a Go primitive subprocess per call, so it can't run in the browser; that makes it best suited to **build-time generation**. arthash, via wasm-bindgen, is happy to encode **at request time**.
 
 ### Visual quality (256 long-edge, PSNR, sorted by PSNR desc)
 
-| Output                  |   bytes  |   PSNR  |
-| ----------------------- | -------: | ------: |
-| sqip · 12 primitives SVG|  ~1100 B | 24.4 dB |
-| arthash · DCT           |    17 B  | 23.3 dB |
-| thumbhash               |    17 B  | 22.9 dB |
-| arthash · TRIANGLE 12   |    77 B  | 21.4 dB |
-| arthash · CIRCLE 12     |    53 B  | 20.7 dB |
+| Output                   |   bytes |    PSNR |
+| ------------------------ | ------: | ------: |
+| sqip · 12 primitives SVG | ~1100 B | 24.4 dB |
+| arthash · DCT            |    17 B | 23.3 dB |
+| thumbhash                |    17 B | 22.9 dB |
+| arthash · TRIANGLE 12    |    77 B | 21.4 dB |
+| arthash · CIRCLE 12      |    53 B | 20.7 dB |
 
 At a 17 B budget arthash DCT beats thumbhash by 0.4 dB; arthash TRIANGLE 12 reaches 21.4 dB at 77 B, which is **1/14 the size of sqip's 1100 B / 24.4 dB output for a 3 dB quality drop**.
 
