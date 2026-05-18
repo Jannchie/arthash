@@ -20,18 +20,27 @@ arthash には 7 つの codec モードがあります。それぞれバイト�
 
 最速の選び方—これらは playground のデフォルトで、バイト予算順に並んでいます。
 
-| プリセット             | モード   | n   | おおよそのバイト |
-| ---------------------- | -------- | --- | ---------------: |
-| `TinyDct`              | DCT      | —   |             ~21  |
-| `PlaceholderCircle`    | CIRCLE   | 12  |               53 |
-| `PlaceholderTriangle`  | TRIANGLE | 12  |               77 |
-| `PlaceholderPixel`     | PIXEL    | 16  |               41 |
-| `MediumCircle`         | CIRCLE   | 24  |              102 |
-| `MediumTriangle`       | TRIANGLE | 24  |              150 |
-| `MediumPixel`          | PIXEL    | 24  |               57 |
-| `DetailCircle`         | CIRCLE   | 64  |              267 |
-| `DetailTriangle`       | TRIANGLE | 64  |              395 |
-| `DetailPixel`          | PIXEL    | 64  |              129 |
+| プリセット       | モード   | n   | おおよそのバイト |
+| ---------------- | -------- | --- | ---------------: |
+| `Dct`            | DCT      | —   |             ~21  |
+| `SmallCircle`    | CIRCLE   | 12  |               53 |
+| `SmallSquare`    | SQUARE   | 12  |               53 |
+| `SmallRect`      | RECT     | 12  |               59 |
+| `SmallTriangle`  | TRIANGLE | 12  |               77 |
+| `SmallPixel`     | PIXEL    | 16  |               33 |
+| `MediumCircle`   | CIRCLE   | 24  |              102 |
+| `MediumSquare`   | SQUARE   | 24  |              102 |
+| `MediumRect`     | RECT     | 24  |              114 |
+| `MediumTriangle` | TRIANGLE | 24  |              150 |
+| `MediumPixel`    | PIXEL    | 24  |               49 |
+| `LargeCircle`    | CIRCLE   | 64  |              267 |
+| `LargeSquare`    | SQUARE   | 64  |              267 |
+| `LargeRect`      | RECT     | 64  |              299 |
+| `LargeTriangle`  | TRIANGLE | 64  |              395 |
+| `LargePixel`     | PIXEL    | 64  |              129 |
+
+0.3 以前の名前（`TinyDct` / `Placeholder*` / `Detail*`）は非推奨エイリアスとして
+保持されます—詳しくは [`docs/MIGRATION.md`](https://github.com/Jannchie/arthash/blob/main/docs/MIGRATION.md#02--03) を参照。
 
 ```ts
 codec.preset(Preset.MediumTriangle)

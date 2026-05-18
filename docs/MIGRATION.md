@@ -1,4 +1,104 @@
-# Migration: arthash 0.1 → 0.2
+# Migration
+
+The wire format (`docs/SPEC.md`) is **unchanged across every release** —
+hashes produced by older versions still decode under newer codecs, byte for
+byte. Only the SDK surfaces change.
+
+---
+
+## 0.2 → 0.3
+
+The 0.3 release renames the `Preset` size axis from `placeholder` / `medium` /
+`detail` to `small` / `medium` / `large`, renames `tiny_dct` to `dct`, and
+adds six new presets (`{small,medium,large}_{rect,square}`). The old names
+still work — they're kept as deprecated aliases that produce byte-identical
+codecs to their replacements. They will be removed in 1.0.
+
+### Name mapping
+
+| Old (deprecated)        | New                | n  | Shape    |
+| ----------------------- | ------------------ | -: | -------- |
+| `tiny_dct`              | `dct`              |  — | DCT      |
+| `placeholder_triangle`  | `small_triangle`   | 12 | Triangle |
+| `placeholder_circle`    | `small_circle`     | 12 | Circle   |
+| `placeholder_pixel`     | `small_pixel`      | 16 | Pixel    |
+| `medium_triangle`       | `medium_triangle`  | 24 | Triangle |
+| `medium_circle`         | `medium_circle`    | 24 | Circle   |
+| `medium_pixel`          | `medium_pixel`     | 24 | Pixel    |
+| `detail_triangle`       | `large_triangle`   | 64 | Triangle |
+| `detail_circle`         | `large_circle`     | 64 | Circle   |
+| `detail_pixel`          | `large_pixel`      | 64 | Pixel    |
+| —                       | `small_rect`       | 12 | Rect     |
+| —                       | `medium_rect`      | 24 | Rect     |
+| —                       | `large_rect`       | 64 | Rect     |
+| —                       | `small_square`     | 12 | Square   |
+| —                       | `medium_square`    | 24 | Square   |
+| —                       | `large_square`     | 64 | Square   |
+
+`medium_*` names are unchanged.
+
+### Rust
+
+```rust
+// 0.2
+let c = Preset::DetailTriangle.codec();
+
+// 0.3
+let c = Preset::LargeTriangle.codec();
+
+// New rect / square presets
+let c = Preset::LargeRect.codec();    // 64-rect mosaic
+let c = Preset::SmallSquare.codec();  // 12-square mosaic
+```
+
+### Python
+
+```python
+# 0.2
+codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+from arthash import detail_triangle
+codec = detail_triangle()
+
+# 0.3
+codec = Codec.preset(Preset.LARGE_TRIANGLE)
+from arthash import large_triangle, large_rect, small_square
+codec = large_triangle()
+```
+
+The top-level shortcut functions `tiny_dct()` / `placeholder_*()` /
+`detail_*()` still work but emit a `DeprecationWarning`.
+
+### TypeScript
+
+```ts
+// 0.2
+const c = codec.preset(Preset.DetailTriangle);
+
+// 0.3
+const c = codec.preset(Preset.LargeTriangle);
+const c2 = codec.preset(Preset.LargeRect);
+```
+
+IDEs will mark old keys (`Preset.DetailTriangle`, etc.) with `@deprecated`
+strikethrough.
+
+### CLI
+
+```sh
+# 0.2
+arthash encode photo.jpg -o hash --preset detail-triangle
+
+# 0.3
+arthash encode photo.jpg -o hash --preset large-triangle
+arthash encode photo.jpg -o hash --preset large-rect
+```
+
+The old `--preset detail-triangle` keeps working — `arthash --help` lists it
+as `Deprecated alias for `large-triangle``.
+
+---
+
+## 0.1 → 0.2
 
 The 0.2 release reshapes the public API around ease of use. The wire format
 (`docs/SPEC.md`) is **unchanged** — hashes produced by 0.1 still decode under

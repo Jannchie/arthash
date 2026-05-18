@@ -17,7 +17,7 @@ import { encode, decode, toSvg, codec, Preset, encodeImage, init } from "arthash
 await init();
 
 // 命名预设——最简单的入口
-const c = codec.preset(Preset.DetailTriangle);   // triangle, n=64
+const c = codec.preset(Preset.LargeTriangle);    // triangle, n=64
 const hash = await encode(rgbBytes, width, height, c);
 const { w, h, rgba } = await decode(hash, c);
 const svg = await toSvg(hash, c, { baseSize: 512, blur: 8 });
@@ -71,7 +71,7 @@ hash_bytes = encode("photo.jpg")
 w, h, rgba = decode(hash_bytes, base_size=256)   # rgba 形状 (h, w, 4)
 
 # 命名预设
-codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+codec = Codec.preset(Preset.LARGE_TRIANGLE)
 hash_bytes = encode("photo.jpg", codec)
 svg = to_svg(hash_bytes, codec, base_size=512, blur=8.0)
 
@@ -89,7 +89,7 @@ hash_bytes = encode("photo.jpg", codec)
 use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
 
 // 命名预设（推荐）
-let codec = Preset::DetailTriangle.codec();
+let codec = Preset::LargeTriangle.codec();
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
 let out = decode(&hash, &codec, DecodeOptions::default());
 
@@ -114,7 +114,7 @@ const loaded = ref(false);
 
 onMounted(async () => {
   await init();
-  placeholder.value = await toSvg(props.hash, codec.preset(Preset.DetailTriangle), {
+  placeholder.value = await toSvg(props.hash, codec.preset(Preset.LargeTriangle), {
     baseSize: 512,
     blur: 8,
   });

@@ -13,7 +13,7 @@
  * const { w, h, rgba } = await decode(hash, codec.triangle({ n: 64 }));
  *
  * // Named preset
- * const hash2 = await encode(rgbBytes, w, h, codec.preset(Preset.DetailTriangle));
+ * const hash2 = await encode(rgbBytes, w, h, codec.preset(Preset.LargeTriangle));
  *
  * // Browser convenience: load image, resize, encode in one call
  * const hash3 = await encodeImage(imgUrl, codec.triangle({ n: 64 }));
@@ -93,21 +93,48 @@ export interface RawCodecSpec {
   gridAspect?: number;
 }
 
-/** Named codec recipes. Use `codec.preset(Preset.DetailTriangle)`.
+/** Named codec recipes. Use `codec.preset(Preset.LargeTriangle)`.
  *
- *  Roughly ordered by byte budget: `TinyDct` (~21 B) → `Placeholder*` (~50–80
- *  B) → `Medium*` (~150 B) → `Detail*` (~270–400 B). Actual byte counts vary
- *  ±1 B with image aspect. */
+ *  Two axes:
+ *  - **size** — `Small*` (n=12, pixel n=16, ~50–80 B) → `Medium*` (n=24,
+ *    ~100–150 B) → `Large*` (n=64, ~270–400 B).
+ *  - **shape** — `Triangle` / `Circle` / `Pixel` / `Rect` / `Square`.
+ *
+ *  Plus `Preset.Dct` — the frequency-domain placeholder (~21 B), outside the
+ *  size axis. Actual byte counts vary ±1 B with image aspect.
+ *
+ *  Pre-0.3 names (`TinyDct` / `Placeholder*` / `Detail*`) are kept as
+ *  deprecated aliases for source compatibility; they will be removed in 1.0. */
 export const Preset = {
-  TinyDct: "tiny_dct",
-  PlaceholderTriangle: "placeholder_triangle",
-  PlaceholderCircle: "placeholder_circle",
-  PlaceholderPixel: "placeholder_pixel",
+  Dct: "dct",
+  SmallTriangle: "small_triangle",
+  SmallCircle: "small_circle",
+  SmallPixel: "small_pixel",
+  SmallRect: "small_rect",
+  SmallSquare: "small_square",
   MediumTriangle: "medium_triangle",
   MediumCircle: "medium_circle",
   MediumPixel: "medium_pixel",
+  MediumRect: "medium_rect",
+  MediumSquare: "medium_square",
+  LargeTriangle: "large_triangle",
+  LargeCircle: "large_circle",
+  LargePixel: "large_pixel",
+  LargeRect: "large_rect",
+  LargeSquare: "large_square",
+  /** @deprecated Renamed to `Preset.Dct`. */
+  TinyDct: "tiny_dct",
+  /** @deprecated Renamed to `Preset.SmallTriangle`. */
+  PlaceholderTriangle: "placeholder_triangle",
+  /** @deprecated Renamed to `Preset.SmallCircle`. */
+  PlaceholderCircle: "placeholder_circle",
+  /** @deprecated Renamed to `Preset.SmallPixel`. */
+  PlaceholderPixel: "placeholder_pixel",
+  /** @deprecated Renamed to `Preset.LargeTriangle`. */
   DetailTriangle: "detail_triangle",
+  /** @deprecated Renamed to `Preset.LargeCircle`. */
   DetailCircle: "detail_circle",
+  /** @deprecated Renamed to `Preset.LargePixel`. */
   DetailPixel: "detail_pixel",
 } as const;
 export type Preset = (typeof Preset)[keyof typeof Preset];
@@ -155,13 +182,27 @@ export const codec = {
   },
   preset(p: Preset): Codec {
     switch (p) {
+      case Preset.Dct: return codec.dct();
+      case Preset.SmallTriangle: return codec.triangle({ n: 12 });
+      case Preset.SmallCircle: return codec.circle({ n: 12 });
+      case Preset.SmallPixel: return codec.pixel({ n: 16 });
+      case Preset.SmallRect: return codec.rect({ n: 12 });
+      case Preset.SmallSquare: return codec.square({ n: 12 });
+      case Preset.MediumTriangle: return codec.triangle({ n: 24 });
+      case Preset.MediumCircle: return codec.circle({ n: 24 });
+      case Preset.MediumPixel: return codec.pixel({ n: 24 });
+      case Preset.MediumRect: return codec.rect({ n: 24 });
+      case Preset.MediumSquare: return codec.square({ n: 24 });
+      case Preset.LargeTriangle: return codec.triangle({ n: 64 });
+      case Preset.LargeCircle: return codec.circle({ n: 64 });
+      case Preset.LargePixel: return codec.pixel({ n: 64 });
+      case Preset.LargeRect: return codec.rect({ n: 64 });
+      case Preset.LargeSquare: return codec.square({ n: 64 });
+      // Deprecated aliases — same codec as their replacement.
       case Preset.TinyDct: return codec.dct();
       case Preset.PlaceholderTriangle: return codec.triangle({ n: 12 });
       case Preset.PlaceholderCircle: return codec.circle({ n: 12 });
       case Preset.PlaceholderPixel: return codec.pixel({ n: 16 });
-      case Preset.MediumTriangle: return codec.triangle({ n: 24 });
-      case Preset.MediumCircle: return codec.circle({ n: 24 });
-      case Preset.MediumPixel: return codec.pixel({ n: 24 });
       case Preset.DetailTriangle: return codec.triangle({ n: 64 });
       case Preset.DetailCircle: return codec.circle({ n: 64 });
       case Preset.DetailPixel: return codec.pixel({ n: 64 });

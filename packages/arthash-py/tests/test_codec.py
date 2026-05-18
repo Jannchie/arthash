@@ -197,10 +197,37 @@ def test_pixel_factory_grid_aspect():
     assert c.grid_aspect == 1.5
 
 
-def test_preset_detail_triangle_is_n64():
-    c = Codec.preset(Preset.DETAIL_TRIANGLE)
+def test_preset_large_triangle_is_n64():
+    c = Codec.preset(Preset.LARGE_TRIANGLE)
     assert c.shape == ShapeType.TRIANGLE
     assert c.n_shapes == 64
+
+
+def test_preset_rect_and_square_variants():
+    # New rect / square presets reach the right factory at all 3 size tiers.
+    assert Codec.preset(Preset.SMALL_RECT).shape == ShapeType.RECT
+    assert Codec.preset(Preset.SMALL_RECT).n_shapes == 12
+    assert Codec.preset(Preset.MEDIUM_RECT).n_shapes == 24
+    assert Codec.preset(Preset.LARGE_RECT).n_shapes == 64
+    assert Codec.preset(Preset.SMALL_SQUARE).shape == ShapeType.SQUARE
+    assert Codec.preset(Preset.LARGE_SQUARE).n_shapes == 64
+
+
+def test_preset_deprecated_aliases_equivalent():
+    # Deprecated aliases produce byte-compatible codecs to their replacements.
+    pairs = [
+        (Preset.TINY_DCT, Preset.DCT),
+        (Preset.PLACEHOLDER_TRIANGLE, Preset.SMALL_TRIANGLE),
+        (Preset.PLACEHOLDER_CIRCLE, Preset.SMALL_CIRCLE),
+        (Preset.PLACEHOLDER_PIXEL, Preset.SMALL_PIXEL),
+        (Preset.DETAIL_TRIANGLE, Preset.LARGE_TRIANGLE),
+        (Preset.DETAIL_CIRCLE, Preset.LARGE_CIRCLE),
+        (Preset.DETAIL_PIXEL, Preset.LARGE_PIXEL),
+    ]
+    for old, new in pairs:
+        assert Codec.preset(old).is_byte_compatible_with(Codec.preset(new)), (
+            f"{old.name} != {new.name}"
+        )
 
 
 def test_with_palette_returns_new_codec():
@@ -224,22 +251,56 @@ def test_with_color_bits_drops_palette():
 
 def test_top_level_shortcuts_match_preset():
     from arthash import (
-        tiny_dct, placeholder_triangle, detail_triangle,
-        placeholder_circle, placeholder_pixel,
+        dct, small_triangle, small_circle, small_pixel,
+        small_rect, small_square,
+        medium_triangle, medium_circle, medium_pixel,
+        medium_rect, medium_square,
+        large_triangle, large_circle, large_pixel,
+        large_rect, large_square,
     )
-    assert tiny_dct().is_byte_compatible_with(Codec.preset(Preset.TINY_DCT))
-    assert placeholder_triangle().is_byte_compatible_with(
-        Codec.preset(Preset.PLACEHOLDER_TRIANGLE)
+    pairs = [
+        (dct, Preset.DCT),
+        (small_triangle, Preset.SMALL_TRIANGLE),
+        (small_circle, Preset.SMALL_CIRCLE),
+        (small_pixel, Preset.SMALL_PIXEL),
+        (small_rect, Preset.SMALL_RECT),
+        (small_square, Preset.SMALL_SQUARE),
+        (medium_triangle, Preset.MEDIUM_TRIANGLE),
+        (medium_circle, Preset.MEDIUM_CIRCLE),
+        (medium_pixel, Preset.MEDIUM_PIXEL),
+        (medium_rect, Preset.MEDIUM_RECT),
+        (medium_square, Preset.MEDIUM_SQUARE),
+        (large_triangle, Preset.LARGE_TRIANGLE),
+        (large_circle, Preset.LARGE_CIRCLE),
+        (large_pixel, Preset.LARGE_PIXEL),
+        (large_rect, Preset.LARGE_RECT),
+        (large_square, Preset.LARGE_SQUARE),
+    ]
+    for fn, p in pairs:
+        assert fn().is_byte_compatible_with(Codec.preset(p)), f"{fn.__name__} != {p.name}"
+
+
+def test_deprecated_shortcuts_emit_warning():
+    import pytest
+    from arthash import (
+        tiny_dct, placeholder_triangle, placeholder_circle, placeholder_pixel,
+        detail_triangle, detail_circle, detail_pixel,
     )
-    assert detail_triangle().is_byte_compatible_with(
-        Codec.preset(Preset.DETAIL_TRIANGLE)
-    )
-    assert placeholder_circle().is_byte_compatible_with(
-        Codec.preset(Preset.PLACEHOLDER_CIRCLE)
-    )
-    assert placeholder_pixel().is_byte_compatible_with(
-        Codec.preset(Preset.PLACEHOLDER_PIXEL)
-    )
+    # Each deprecated shortcut emits DeprecationWarning and still returns a
+    # codec byte-compatible with its new-name replacement.
+    cases = [
+        (tiny_dct, Preset.DCT),
+        (placeholder_triangle, Preset.SMALL_TRIANGLE),
+        (placeholder_circle, Preset.SMALL_CIRCLE),
+        (placeholder_pixel, Preset.SMALL_PIXEL),
+        (detail_triangle, Preset.LARGE_TRIANGLE),
+        (detail_circle, Preset.LARGE_CIRCLE),
+        (detail_pixel, Preset.LARGE_PIXEL),
+    ]
+    for fn, replacement in cases:
+        with pytest.warns(DeprecationWarning):
+            c = fn()
+        assert c.is_byte_compatible_with(Codec.preset(replacement)), fn.__name__
 
 
 # ----------------------------- byte compatibility -----------------------------

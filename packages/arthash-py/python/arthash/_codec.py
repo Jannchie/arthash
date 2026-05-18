@@ -39,18 +39,41 @@ class Preset(str, enum.Enum):
     """Named codec recipes — battle-tested defaults you can drop in without
     understanding the byte format. See `Codec.preset()`.
 
-    Roughly ordered by byte budget within each style: `TINY_DCT` (~21 B) →
-    `PLACEHOLDER_*` (~50–80 B) → `MEDIUM_*` (~150 B) → `DETAIL_*` (~270–400 B).
-    Actual byte counts vary ±1 B with image aspect.
+    Two axes:
+        * **size** — `SMALL_*` (n=12, pixel n=16, ~50–80 B) → `MEDIUM_*` (n=24,
+          ~100–150 B) → `LARGE_*` (n=64, ~270–400 B).
+        * **shape** — `TRIANGLE` / `CIRCLE` / `PIXEL` / `RECT` / `SQUARE`.
+
+    Plus `DCT` — the frequency-domain placeholder (~21 B), outside the size
+    axis. Actual byte counts vary ±1 B with image aspect.
+
+    Pre-0.3 names (`TINY_DCT` / `PLACEHOLDER_*` / `DETAIL_*`) are kept as
+    deprecated aliases for source compatibility; they will be removed in 1.0.
     """
 
+    # ----- Active variants -----
+    DCT = "dct"
+    SMALL_TRIANGLE = "small_triangle"
+    SMALL_CIRCLE = "small_circle"
+    SMALL_PIXEL = "small_pixel"
+    SMALL_RECT = "small_rect"
+    SMALL_SQUARE = "small_square"
+    MEDIUM_TRIANGLE = "medium_triangle"
+    MEDIUM_CIRCLE = "medium_circle"
+    MEDIUM_PIXEL = "medium_pixel"
+    MEDIUM_RECT = "medium_rect"
+    MEDIUM_SQUARE = "medium_square"
+    LARGE_TRIANGLE = "large_triangle"
+    LARGE_CIRCLE = "large_circle"
+    LARGE_PIXEL = "large_pixel"
+    LARGE_RECT = "large_rect"
+    LARGE_SQUARE = "large_square"
+
+    # ----- Deprecated pre-0.3 aliases -----
     TINY_DCT = "tiny_dct"
     PLACEHOLDER_TRIANGLE = "placeholder_triangle"
     PLACEHOLDER_CIRCLE = "placeholder_circle"
     PLACEHOLDER_PIXEL = "placeholder_pixel"
-    MEDIUM_TRIANGLE = "medium_triangle"
-    MEDIUM_CIRCLE = "medium_circle"
-    MEDIUM_PIXEL = "medium_pixel"
     DETAIL_TRIANGLE = "detail_triangle"
     DETAIL_CIRCLE = "detail_circle"
     DETAIL_PIXEL = "detail_pixel"
@@ -182,27 +205,40 @@ class Codec:
 
     @classmethod
     def preset(cls, p: Preset) -> "Codec":
-        """Named codec recipe — see [`Preset`]."""
-        if p == Preset.TINY_DCT:
+        """Named codec recipe — see [`Preset`]. Deprecated pre-0.3 names are
+        accepted and produce the same Codec as their replacement."""
+        if p in (Preset.DCT, Preset.TINY_DCT):
             return cls.dct()
-        if p == Preset.PLACEHOLDER_TRIANGLE:
+        if p in (Preset.SMALL_TRIANGLE, Preset.PLACEHOLDER_TRIANGLE):
             return cls.triangle(12)
-        if p == Preset.PLACEHOLDER_CIRCLE:
+        if p in (Preset.SMALL_CIRCLE, Preset.PLACEHOLDER_CIRCLE):
             return cls.circle(12)
-        if p == Preset.PLACEHOLDER_PIXEL:
+        if p in (Preset.SMALL_PIXEL, Preset.PLACEHOLDER_PIXEL):
             return cls.pixel(16)
+        if p == Preset.SMALL_RECT:
+            return cls.rect(12)
+        if p == Preset.SMALL_SQUARE:
+            return cls.square(12)
         if p == Preset.MEDIUM_TRIANGLE:
             return cls.triangle(24)
         if p == Preset.MEDIUM_CIRCLE:
             return cls.circle(24)
         if p == Preset.MEDIUM_PIXEL:
             return cls.pixel(24)
-        if p == Preset.DETAIL_TRIANGLE:
+        if p == Preset.MEDIUM_RECT:
+            return cls.rect(24)
+        if p == Preset.MEDIUM_SQUARE:
+            return cls.square(24)
+        if p in (Preset.LARGE_TRIANGLE, Preset.DETAIL_TRIANGLE):
             return cls.triangle(64)
-        if p == Preset.DETAIL_CIRCLE:
+        if p in (Preset.LARGE_CIRCLE, Preset.DETAIL_CIRCLE):
             return cls.circle(64)
-        if p == Preset.DETAIL_PIXEL:
+        if p in (Preset.LARGE_PIXEL, Preset.DETAIL_PIXEL):
             return cls.pixel(64)
+        if p == Preset.LARGE_RECT:
+            return cls.rect(64)
+        if p == Preset.LARGE_SQUARE:
+            return cls.square(64)
         raise ValueError(f"unknown preset: {p}")
 
     # ---------- byte-compatibility check ----------

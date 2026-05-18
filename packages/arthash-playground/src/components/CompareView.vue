@@ -21,20 +21,27 @@ interface Variant {
   useSvg: boolean;
 }
 
-// One column per built-in `Preset` from `arthash`. Triangle / Circle / Pixel
-// each have three size tiers; DCT is the single non-shape mode (no SVG path).
-// Kept in Preset declaration order so the byte budget grows left → right.
+// One column per built-in `Preset` from `arthash`. Triangle / Circle / Pixel /
+// Rect / Square each have three size tiers; DCT is the single frequency-domain
+// mode (no SVG path). Kept in Preset declaration order so the byte budget
+// grows left → right within each size tier.
 const VARIANTS: Variant[] = [
-  { id: Preset.TinyDct,             label: "Tiny · DCT",         shape: Shape.DCT,      nShapes: 0,  useSvg: false },
-  { id: Preset.PlaceholderTriangle, label: "Placeholder · △12",  shape: Shape.TRIANGLE, nShapes: 12, useSvg: true  },
-  { id: Preset.PlaceholderCircle,   label: "Placeholder · ○12",  shape: Shape.CIRCLE,   nShapes: 12, useSvg: true  },
-  { id: Preset.PlaceholderPixel,    label: "Placeholder · ▦16",  shape: Shape.PIXEL,    nShapes: 16, useSvg: true  },
-  { id: Preset.MediumTriangle,      label: "Medium · △24",       shape: Shape.TRIANGLE, nShapes: 24, useSvg: true  },
-  { id: Preset.MediumCircle,        label: "Medium · ○24",       shape: Shape.CIRCLE,   nShapes: 24, useSvg: true  },
-  { id: Preset.MediumPixel,         label: "Medium · ▦24",       shape: Shape.PIXEL,    nShapes: 24, useSvg: true  },
-  { id: Preset.DetailTriangle,      label: "Detail · △64",       shape: Shape.TRIANGLE, nShapes: 64, useSvg: true  },
-  { id: Preset.DetailCircle,        label: "Detail · ○64",       shape: Shape.CIRCLE,   nShapes: 64, useSvg: true  },
-  { id: Preset.DetailPixel,         label: "Detail · ▦64",       shape: Shape.PIXEL,    nShapes: 64, useSvg: true  },
+  { id: Preset.Dct,            label: "DCT",            shape: Shape.DCT,      nShapes: 0,  useSvg: false },
+  { id: Preset.SmallTriangle,  label: "Small · △12",    shape: Shape.TRIANGLE, nShapes: 12, useSvg: true  },
+  { id: Preset.SmallCircle,    label: "Small · ○12",    shape: Shape.CIRCLE,   nShapes: 12, useSvg: true  },
+  { id: Preset.SmallPixel,     label: "Small · ▦16",    shape: Shape.PIXEL,    nShapes: 16, useSvg: true  },
+  { id: Preset.SmallRect,      label: "Small · ▭12",    shape: Shape.RECT,     nShapes: 12, useSvg: true  },
+  { id: Preset.SmallSquare,    label: "Small · □12",    shape: Shape.SQUARE,   nShapes: 12, useSvg: true  },
+  { id: Preset.MediumTriangle, label: "Medium · △24",   shape: Shape.TRIANGLE, nShapes: 24, useSvg: true  },
+  { id: Preset.MediumCircle,   label: "Medium · ○24",   shape: Shape.CIRCLE,   nShapes: 24, useSvg: true  },
+  { id: Preset.MediumPixel,    label: "Medium · ▦24",   shape: Shape.PIXEL,    nShapes: 24, useSvg: true  },
+  { id: Preset.MediumRect,     label: "Medium · ▭24",   shape: Shape.RECT,     nShapes: 24, useSvg: true  },
+  { id: Preset.MediumSquare,   label: "Medium · □24",   shape: Shape.SQUARE,   nShapes: 24, useSvg: true  },
+  { id: Preset.LargeTriangle,  label: "Large · △64",    shape: Shape.TRIANGLE, nShapes: 64, useSvg: true  },
+  { id: Preset.LargeCircle,    label: "Large · ○64",    shape: Shape.CIRCLE,   nShapes: 64, useSvg: true  },
+  { id: Preset.LargePixel,     label: "Large · ▦64",    shape: Shape.PIXEL,    nShapes: 64, useSvg: true  },
+  { id: Preset.LargeRect,      label: "Large · ▭64",    shape: Shape.RECT,     nShapes: 64, useSvg: true  },
+  { id: Preset.LargeSquare,    label: "Large · □64",    shape: Shape.SQUARE,   nShapes: 64, useSvg: true  },
 ];
 
 const baseSize = ref(512);

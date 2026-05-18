@@ -198,11 +198,17 @@ type ColorMode =
 ### `Preset`
 
 ```ts
-enum Preset {
+// Size axis: small (n=12, pixel n=16) / medium (n=24) / large (n=64)
+const Preset = {
+  Dct,
+  SmallTriangle, SmallCircle, SmallPixel, SmallRect, SmallSquare,
+  MediumTriangle, MediumCircle, MediumPixel, MediumRect, MediumSquare,
+  LargeTriangle, LargeCircle, LargePixel, LargeRect, LargeSquare,
+
+  // Deprecated pre-0.3 aliases (JSDoc @deprecated). Kept for source compat.
   TinyDct, PlaceholderTriangle, PlaceholderCircle, PlaceholderPixel,
-  MediumTriangle, MediumCircle, MediumPixel,
   DetailTriangle, DetailCircle, DetailPixel,
-}
+};
 ```
 
 ### `RawCodecSpec`

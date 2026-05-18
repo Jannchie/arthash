@@ -11,7 +11,7 @@ import { encode, decode, toSvg, codec, Preset, encodeImage } from "arthash";
 // want to control timing (e.g. before a tight render loop).
 
 // Named preset
-const c = codec.preset(Preset.DetailTriangle);       // triangle, n=64
+const c = codec.preset(Preset.LargeTriangle);        // triangle, n=64
 const hash = await encode(rgbBytes, width, height, c);
 const { w, h, rgba } = await decode(hash, c);
 const svg = await toSvg(hash, c, { blur: 12 });

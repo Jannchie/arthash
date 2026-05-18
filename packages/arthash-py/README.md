@@ -32,7 +32,7 @@ h = encode("photo.jpg")
 w, hh, rgba = decode(h, base_size=256)              # (h, w, 4) RGBA ndarray
 
 # Named preset
-codec = Codec.preset(Preset.DETAIL_TRIANGLE)        # triangle, n=64
+codec = Codec.preset(Preset.LARGE_TRIANGLE)         # triangle, n=64
 h = encode("photo.jpg", codec)
 
 # Factory + palette

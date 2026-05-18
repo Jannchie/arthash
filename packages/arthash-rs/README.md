@@ -32,7 +32,7 @@ let rgb: Vec<u8> = /* row-major H*W*3 sRGB u8 */;
 // Build a codec via the factory methods …
 let codec = Codec::triangle(64);
 // … or pick a named preset
-let codec = Preset::DetailTriangle.codec();
+let codec = Preset::LargeTriangle.codec();
 
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
 

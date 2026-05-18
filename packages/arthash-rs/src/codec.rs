@@ -209,85 +209,174 @@ impl ColorMode {
 /// Named presets — battle-tested codec recipes you can drop in without
 /// understanding the byte format. Same value used at encode + decode time.
 ///
-/// Listed roughly in order of increasing byte budget within each style:
-/// `TinyDct` (~21 B) → `Placeholder*` (~50–80 B) → `Medium*` (~150 B) →
-/// `Detail*` (~270–400 B). Actual byte counts vary ±1 B with image aspect.
+/// Two axes:
+/// * **size** — `Small*` (n=12, pixel n=16, ~50–80 B) → `Medium*` (n=24,
+///   ~100–150 B) → `Large*` (n=64, ~270–400 B).
+/// * **shape** — `Triangle` / `Circle` / `Pixel` / `Rect` / `Square`.
+///
+/// Plus [`Preset::Dct`], the single frequency-domain placeholder (~21 B,
+/// outside the size axis).
+///
+/// Actual byte counts vary ±1 B with image aspect. The pre-0.3 names
+/// (`TinyDct` / `Placeholder*` / `Detail*`) are kept as deprecated aliases
+/// for source compatibility and will be removed in 1.0.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[allow(deprecated)]
 pub enum Preset {
+    // ----- Active variants ------------------------------------------------
+
     /// V4 thumbhash-style hash, ~21 B. Blurry frequency-domain placeholder.
-    TinyDct,
+    Dct,
+
     /// 12-triangle mosaic, ~77 B. Quick SVG placeholder.
-    PlaceholderTriangle,
+    SmallTriangle,
     /// 12-circle mosaic, ~53 B. SQIP-style overlapping circles.
-    PlaceholderCircle,
+    SmallCircle,
     /// 16-cell PIXEL mosaic, ~33 B. Lo-fi mosaic look.
-    PlaceholderPixel,
-    /// 24-triangle mosaic, ~150 B. Middle ground between Placeholder and Detail.
+    SmallPixel,
+    /// 12-rectangle mosaic. Axis-aligned rectangles.
+    SmallRect,
+    /// 12-square mosaic. Axis-aligned squares.
+    SmallSquare,
+
+    /// 24-triangle mosaic, ~150 B. Middle ground between Small and Large.
     MediumTriangle,
     /// 24-circle mosaic, ~102 B. Middle ground with circular brush feel.
     MediumCircle,
     /// 24-cell PIXEL mosaic, ~49 B. Medium lo-fi mosaic.
     MediumPixel,
-    /// 64-triangle mosaic, ~395 B. The playground default — recognisable
-    /// preview at request-time generation cost.
-    DetailTriangle,
+    /// 24-rectangle mosaic. Middle ground axis-aligned rectangles.
+    MediumRect,
+    /// 24-square mosaic. Middle ground axis-aligned squares.
+    MediumSquare,
+
+    /// 64-triangle mosaic, ~395 B. Detail level — playground default.
+    LargeTriangle,
     /// 64-circle mosaic, ~267 B. Detail level with circular brush feel.
-    DetailCircle,
+    LargeCircle,
     /// 64-cell PIXEL mosaic, ~129 B. Detail-level lo-fi mosaic.
+    LargePixel,
+    /// 64-rectangle mosaic. Detail-level axis-aligned rectangles.
+    LargeRect,
+    /// 64-square mosaic. Detail-level axis-aligned squares.
+    LargeSquare,
+
+    // ----- Deprecated pre-0.3 aliases -------------------------------------
+
+    /// Deprecated alias for [`Preset::Dct`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::Dct`")]
+    TinyDct,
+    /// Deprecated alias for [`Preset::SmallTriangle`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::SmallTriangle`")]
+    PlaceholderTriangle,
+    /// Deprecated alias for [`Preset::SmallCircle`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::SmallCircle`")]
+    PlaceholderCircle,
+    /// Deprecated alias for [`Preset::SmallPixel`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::SmallPixel`")]
+    PlaceholderPixel,
+    /// Deprecated alias for [`Preset::LargeTriangle`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::LargeTriangle`")]
+    DetailTriangle,
+    /// Deprecated alias for [`Preset::LargeCircle`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::LargeCircle`")]
+    DetailCircle,
+    /// Deprecated alias for [`Preset::LargePixel`].
+    #[deprecated(since = "0.3.0", note = "renamed to `Preset::LargePixel`")]
     DetailPixel,
 }
 
+#[allow(deprecated)]
 impl Preset {
     pub fn codec(self) -> Codec {
         match self {
-            Preset::TinyDct => Codec::dct(),
-            Preset::PlaceholderTriangle => Codec::triangle(12),
-            Preset::PlaceholderCircle => Codec::circle(12),
-            Preset::PlaceholderPixel => Codec::pixel(16),
+            Preset::Dct | Preset::TinyDct => Codec::dct(),
+            Preset::SmallTriangle | Preset::PlaceholderTriangle => Codec::triangle(12),
+            Preset::SmallCircle | Preset::PlaceholderCircle => Codec::circle(12),
+            Preset::SmallPixel | Preset::PlaceholderPixel => Codec::pixel(16),
+            Preset::SmallRect => Codec::rect(12),
+            Preset::SmallSquare => Codec::square(12),
             Preset::MediumTriangle => Codec::triangle(24),
             Preset::MediumCircle => Codec::circle(24),
             Preset::MediumPixel => Codec::pixel(24),
-            Preset::DetailTriangle => Codec::triangle(64),
-            Preset::DetailCircle => Codec::circle(64),
-            Preset::DetailPixel => Codec::pixel(64),
+            Preset::MediumRect => Codec::rect(24),
+            Preset::MediumSquare => Codec::square(24),
+            Preset::LargeTriangle | Preset::DetailTriangle => Codec::triangle(64),
+            Preset::LargeCircle | Preset::DetailCircle => Codec::circle(64),
+            Preset::LargePixel | Preset::DetailPixel => Codec::pixel(64),
+            Preset::LargeRect => Codec::rect(64),
+            Preset::LargeSquare => Codec::square(64),
         }
     }
 
-    /// All named presets in declaration order.
+    /// All named presets in declaration order — active variants first, then
+    /// deprecated aliases. Used by [`Preset::from_name`] for round-trip parsing.
     pub fn all() -> &'static [Preset] {
         &[
+            // Active
+            Preset::Dct,
+            Preset::SmallTriangle,
+            Preset::SmallCircle,
+            Preset::SmallPixel,
+            Preset::SmallRect,
+            Preset::SmallSquare,
+            Preset::MediumTriangle,
+            Preset::MediumCircle,
+            Preset::MediumPixel,
+            Preset::MediumRect,
+            Preset::MediumSquare,
+            Preset::LargeTriangle,
+            Preset::LargeCircle,
+            Preset::LargePixel,
+            Preset::LargeRect,
+            Preset::LargeSquare,
+            // Deprecated aliases — kept so old serialized names round-trip.
             Preset::TinyDct,
             Preset::PlaceholderTriangle,
             Preset::PlaceholderCircle,
             Preset::PlaceholderPixel,
-            Preset::MediumTriangle,
-            Preset::MediumCircle,
-            Preset::MediumPixel,
             Preset::DetailTriangle,
             Preset::DetailCircle,
             Preset::DetailPixel,
         ]
     }
 
-    /// Stable name for serialization / CLI flags / config files.
+    /// Stable name for serialization / CLI flags / config files. Each variant
+    /// (including deprecated ones) returns its own name so round-trip via
+    /// [`Preset::from_name`] is stable.
     pub fn name(self) -> &'static str {
         match self {
+            Preset::Dct => "dct",
+            Preset::SmallTriangle => "small_triangle",
+            Preset::SmallCircle => "small_circle",
+            Preset::SmallPixel => "small_pixel",
+            Preset::SmallRect => "small_rect",
+            Preset::SmallSquare => "small_square",
+            Preset::MediumTriangle => "medium_triangle",
+            Preset::MediumCircle => "medium_circle",
+            Preset::MediumPixel => "medium_pixel",
+            Preset::MediumRect => "medium_rect",
+            Preset::MediumSquare => "medium_square",
+            Preset::LargeTriangle => "large_triangle",
+            Preset::LargeCircle => "large_circle",
+            Preset::LargePixel => "large_pixel",
+            Preset::LargeRect => "large_rect",
+            Preset::LargeSquare => "large_square",
             Preset::TinyDct => "tiny_dct",
             Preset::PlaceholderTriangle => "placeholder_triangle",
             Preset::PlaceholderCircle => "placeholder_circle",
             Preset::PlaceholderPixel => "placeholder_pixel",
-            Preset::MediumTriangle => "medium_triangle",
-            Preset::MediumCircle => "medium_circle",
-            Preset::MediumPixel => "medium_pixel",
             Preset::DetailTriangle => "detail_triangle",
             Preset::DetailCircle => "detail_circle",
             Preset::DetailPixel => "detail_pixel",
         }
     }
 
-    /// Parse from the stable [`name`](Self::name) string.
+    /// Parse from the stable [`name`](Self::name) string. Old pre-0.3 names
+    /// (`tiny_dct` / `placeholder_*` / `detail_*`) still parse but return the
+    /// deprecated variant.
     pub fn from_name(s: &str) -> Option<Self> {
         Preset::all().iter().copied().find(|p| p.name() == s)
     }
@@ -787,11 +876,33 @@ mod tests {
 
     #[test]
     fn preset_to_codec() {
-        let c: Codec = Preset::DetailTriangle.into();
+        let c: Codec = Preset::LargeTriangle.into();
         match c {
             Codec::Triangle { n, .. } => assert_eq!(n, 64),
             _ => panic!(),
         }
+        // New rect/square presets reach the right factory.
+        match Codec::from(Preset::LargeRect) {
+            Codec::Rect { n, .. } => assert_eq!(n, 64),
+            _ => panic!(),
+        }
+        match Codec::from(Preset::SmallSquare) {
+            Codec::Square { n, .. } => assert_eq!(n, 12),
+            _ => panic!(),
+        }
+    }
+
+    /// Deprecated aliases produce byte-identical codecs to their replacements.
+    #[test]
+    #[allow(deprecated)]
+    fn preset_deprecated_aliases_equivalent() {
+        assert_eq!(Preset::TinyDct.codec(), Preset::Dct.codec());
+        assert_eq!(Preset::PlaceholderTriangle.codec(), Preset::SmallTriangle.codec());
+        assert_eq!(Preset::PlaceholderCircle.codec(), Preset::SmallCircle.codec());
+        assert_eq!(Preset::PlaceholderPixel.codec(), Preset::SmallPixel.codec());
+        assert_eq!(Preset::DetailTriangle.codec(), Preset::LargeTriangle.codec());
+        assert_eq!(Preset::DetailCircle.codec(), Preset::LargeCircle.codec());
+        assert_eq!(Preset::DetailPixel.codec(), Preset::LargePixel.codec());
     }
 
     #[test]
@@ -840,10 +951,23 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
+    #[allow(deprecated)]
     fn serde_preset_kebab_case() {
-        let s = serde_json::to_string(&Preset::DetailTriangle).unwrap();
-        assert_eq!(s, "\"detail_triangle\"");
+        // New canonical names round-trip.
+        let s = serde_json::to_string(&Preset::LargeTriangle).unwrap();
+        assert_eq!(s, "\"large_triangle\"");
         let back: Preset = serde_json::from_str(&s).unwrap();
-        assert_eq!(back, Preset::DetailTriangle);
+        assert_eq!(back, Preset::LargeTriangle);
+
+        // Deprecated names still parse — old serialized data must still load.
+        let back_old: Preset = serde_json::from_str("\"detail_triangle\"").unwrap();
+        assert_eq!(back_old, Preset::DetailTriangle);
+        // And serialize back to their own name (round-trip stability).
+        let s_old = serde_json::to_string(&Preset::DetailTriangle).unwrap();
+        assert_eq!(s_old, "\"detail_triangle\"");
+
+        // New rect/square presets serialize as expected.
+        let s_rect = serde_json::to_string(&Preset::MediumRect).unwrap();
+        assert_eq!(s_rect, "\"medium_rect\"");
     }
 }

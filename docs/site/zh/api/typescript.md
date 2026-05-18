@@ -188,11 +188,17 @@ type ColorMode =
 ### `Preset`
 
 ```ts
-enum Preset {
+// 尺寸轴：small (n=12, pixel n=16) / medium (n=24) / large (n=64)
+const Preset = {
+  Dct,
+  SmallTriangle, SmallCircle, SmallPixel, SmallRect, SmallSquare,
+  MediumTriangle, MediumCircle, MediumPixel, MediumRect, MediumSquare,
+  LargeTriangle, LargeCircle, LargePixel, LargeRect, LargeSquare,
+
+  // 0.3 之前的别名（JSDoc @deprecated 标注），为 source 兼容保留。
   TinyDct, PlaceholderTriangle, PlaceholderCircle, PlaceholderPixel,
-  MediumTriangle, MediumCircle, MediumPixel,
   DetailTriangle, DetailCircle, DetailPixel,
-}
+};
 ```
 
 ### `RawCodecSpec`

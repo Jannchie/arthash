@@ -54,7 +54,7 @@ Codec.pixel(n=12, grid_aspect=None, palette=None)
 ### `Codec.preset(p)`
 
 ```python
-Codec.preset(Preset.DETAIL_TRIANGLE)
+Codec.preset(Preset.LARGE_TRIANGLE)
 ```
 
 ### `Codec.raw(...)`
@@ -84,16 +84,26 @@ Codec.raw(
 ## `Preset`
 
 ```python
-Preset.TINY_DCT
-Preset.PLACEHOLDER_TRIANGLE
-Preset.PLACEHOLDER_CIRCLE
-Preset.PLACEHOLDER_PIXEL
+# サイズ軸：small (n=12, pixel n=16) / medium (n=24) / large (n=64)
+Preset.DCT
+Preset.SMALL_TRIANGLE
+Preset.SMALL_CIRCLE
+Preset.SMALL_PIXEL
+Preset.SMALL_RECT
+Preset.SMALL_SQUARE
 Preset.MEDIUM_TRIANGLE
 Preset.MEDIUM_CIRCLE
 Preset.MEDIUM_PIXEL
-Preset.DETAIL_TRIANGLE
-Preset.DETAIL_CIRCLE
-Preset.DETAIL_PIXEL
+Preset.MEDIUM_RECT
+Preset.MEDIUM_SQUARE
+Preset.LARGE_TRIANGLE
+Preset.LARGE_CIRCLE
+Preset.LARGE_PIXEL
+Preset.LARGE_RECT
+Preset.LARGE_SQUARE
+
+# 0.3 以前の非推奨エイリアス—ソース互換のため保持。
+# Preset.TINY_DCT, Preset.PLACEHOLDER_*, Preset.DETAIL_*
 ```
 
 ## `Palette`
@@ -138,7 +148,7 @@ hash_bytes = encode("photo.jpg")
 print(len(hash_bytes))                              # ~21
 
 # 2. 名前付きプリセット
-codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+codec = Codec.preset(Preset.LARGE_TRIANGLE)
 hash_bytes = encode("photo.jpg", codec)
 svg = to_svg(hash_bytes, codec, base_size=512, blur=8.0)
 

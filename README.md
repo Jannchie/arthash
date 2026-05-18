@@ -39,7 +39,7 @@ shape / PIXEL modes can also take an external palette, dropping per-shape colour
 use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
 
 // Named preset (recommended)
-let codec = Preset::DetailTriangle.codec();          // triangle, n=64
+let codec = Preset::LargeTriangle.codec();           // triangle, n=64
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
 let out = decode(&hash, &codec, DecodeOptions::default());
 // out.width / out.height / out.rgba
@@ -60,7 +60,7 @@ hash_bytes = encode("photo.jpg")
 w, h, rgba = decode(hash_bytes, base_size=256)   # rgba shape (h, w, 4)
 
 # Named preset
-codec = Codec.preset(Preset.DETAIL_TRIANGLE)
+codec = Codec.preset(Preset.LARGE_TRIANGLE)
 hash_bytes = encode("photo.jpg", codec)
 svg = to_svg(hash_bytes, codec, base_size=512, blur=8.0)
 
@@ -78,7 +78,7 @@ import { encode, decode, toSvg, codec, Preset, encodeImage } from "arthash";
 // Wasm loads automatically on first call. Optionally `await init()` to preload.
 
 // Named preset
-const c = codec.preset(Preset.DetailTriangle);   // triangle, n=64
+const c = codec.preset(Preset.LargeTriangle);    // triangle, n=64
 const hash = await encode(rgbBytes, width, height, c);
 const { w, h, rgba } = await decode(hash, c);
 const svg = await toSvg(hash, c, { baseSize: 512, blur: 8 });

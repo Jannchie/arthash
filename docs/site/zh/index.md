@@ -39,7 +39,7 @@ features:
 ```ts
 import { encode, decode, toSvg, codec, Preset } from "arthash";
 
-const c = codec.preset(Preset.DetailTriangle);   // triangle, n=64
+const c = codec.preset(Preset.LargeTriangle);    // triangle, n=64
 const hash = await encode(rgbBytes, width, height, c);
 //   → Uint8Array(395)  — 整张图被压成 395 字节
 

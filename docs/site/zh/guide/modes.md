@@ -20,18 +20,27 @@ arthash 共 7 种 codec 模式，每个在字节预算、编码成本、视觉�
 
 最快上手的方式——这些就是 playground 默认提供的几档，按字节预算排序。
 
-| 预设                  | 模式     | n   | 大致字节 |
-| --------------------- | -------- | --- | -------: |
-| `TinyDct`             | DCT      | —   |     ~21  |
-| `PlaceholderCircle`   | CIRCLE   | 12  |       53 |
-| `PlaceholderTriangle` | TRIANGLE | 12  |       77 |
-| `PlaceholderPixel`    | PIXEL    | 16  |       41 |
-| `MediumCircle`        | CIRCLE   | 24  |      102 |
-| `MediumTriangle`      | TRIANGLE | 24  |      150 |
-| `MediumPixel`         | PIXEL    | 24  |       57 |
-| `DetailCircle`        | CIRCLE   | 64  |      267 |
-| `DetailTriangle`      | TRIANGLE | 64  |      395 |
-| `DetailPixel`         | PIXEL    | 64  |      129 |
+| 预设             | 模式     | n   | 大致字节 |
+| ---------------- | -------- | --- | -------: |
+| `Dct`            | DCT      | —   |     ~21  |
+| `SmallCircle`    | CIRCLE   | 12  |       53 |
+| `SmallSquare`    | SQUARE   | 12  |       53 |
+| `SmallRect`      | RECT     | 12  |       59 |
+| `SmallTriangle`  | TRIANGLE | 12  |       77 |
+| `SmallPixel`     | PIXEL    | 16  |       33 |
+| `MediumCircle`   | CIRCLE   | 24  |      102 |
+| `MediumSquare`   | SQUARE   | 24  |      102 |
+| `MediumRect`     | RECT     | 24  |      114 |
+| `MediumTriangle` | TRIANGLE | 24  |      150 |
+| `MediumPixel`    | PIXEL    | 24  |       49 |
+| `LargeCircle`    | CIRCLE   | 64  |      267 |
+| `LargeSquare`    | SQUARE   | 64  |      267 |
+| `LargeRect`      | RECT     | 64  |      299 |
+| `LargeTriangle`  | TRIANGLE | 64  |      395 |
+| `LargePixel`     | PIXEL    | 64  |      129 |
+
+0.3 之前的名字（`TinyDct` / `Placeholder*` / `Detail*`）作为已弃用的别名保留——详见
+[`docs/MIGRATION.md`](https://github.com/Jannchie/arthash/blob/main/docs/MIGRATION.md#02--03)。
 
 ```ts
 codec.preset(Preset.MediumTriangle)

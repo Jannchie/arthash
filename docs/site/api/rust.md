@@ -141,14 +141,23 @@ let c = Codec::triangle(24).with_palette(Palette::from_hex(&[...]).unwrap());
 
 ```rust
 pub enum Preset {
+    // Size axis: small (n=12, pixel n=16) / medium (n=24) / large (n=64)
+    Dct,
+    SmallTriangle, SmallCircle, SmallPixel, SmallRect, SmallSquare,
+    MediumTriangle, MediumCircle, MediumPixel, MediumRect, MediumSquare,
+    LargeTriangle, LargeCircle, LargePixel, LargeRect, LargeSquare,
+
+    // Deprecated pre-0.3 aliases — kept for source compatibility.
     TinyDct,
     PlaceholderTriangle, PlaceholderCircle, PlaceholderPixel,
-    MediumTriangle, MediumCircle, MediumPixel,
     DetailTriangle, DetailCircle, DetailPixel,
 }
 
 impl Preset {
     pub fn codec(self) -> Codec;
+    pub fn all() -> &'static [Preset];
+    pub fn name(self) -> &'static str;
+    pub fn from_name(s: &str) -> Option<Self>;
 }
 ```
 
@@ -198,7 +207,7 @@ fn main() {
     println!("{} bytes", hash.len());
 
     // Named preset
-    let codec = Preset::DetailTriangle.codec();
+    let codec = Preset::LargeTriangle.codec();
     let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
     let out = decode(&hash, &codec, DecodeOptions { base_size: 512, ..Default::default() });
     write_png("placeholder.png", &out.rgba, out.width, out.height);

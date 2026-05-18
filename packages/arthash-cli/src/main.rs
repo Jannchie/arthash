@@ -110,7 +110,7 @@ enum Cmd {
 
 #[derive(clap::Args, Clone)]
 struct CodecArgs {
-    /// Named preset (e.g. `detail-triangle`, `placeholder-circle`).
+    /// Named preset (e.g. `large-triangle`, `small-circle`, `medium-rect`).
     /// Overrides `--shape` / `--n-shapes` when set.
     #[arg(long, value_enum, conflicts_with_all = ["shape", "n_shapes"])]
     preset: Option<PresetArg>,
@@ -160,39 +160,83 @@ enum ShapeArg {
 }
 
 #[derive(ValueEnum, Clone, Copy)]
+#[allow(deprecated)]
 enum PresetArg {
-    #[value(name = "tiny-dct")]
-    TinyDct,
-    #[value(name = "placeholder-triangle")]
-    PlaceholderTriangle,
-    #[value(name = "placeholder-circle")]
-    PlaceholderCircle,
-    #[value(name = "placeholder-pixel")]
-    PlaceholderPixel,
+    // Active variants — new naming (small / medium / large).
+    #[value(name = "dct")]
+    Dct,
+    #[value(name = "small-triangle")]
+    SmallTriangle,
+    #[value(name = "small-circle")]
+    SmallCircle,
+    #[value(name = "small-pixel")]
+    SmallPixel,
+    #[value(name = "small-rect")]
+    SmallRect,
+    #[value(name = "small-square")]
+    SmallSquare,
     #[value(name = "medium-triangle")]
     MediumTriangle,
     #[value(name = "medium-circle")]
     MediumCircle,
     #[value(name = "medium-pixel")]
     MediumPixel,
-    #[value(name = "detail-triangle")]
+    #[value(name = "medium-rect")]
+    MediumRect,
+    #[value(name = "medium-square")]
+    MediumSquare,
+    #[value(name = "large-triangle")]
+    LargeTriangle,
+    #[value(name = "large-circle")]
+    LargeCircle,
+    #[value(name = "large-pixel")]
+    LargePixel,
+    #[value(name = "large-rect")]
+    LargeRect,
+    #[value(name = "large-square")]
+    LargeSquare,
+
+    // Deprecated pre-0.3 aliases — kept so existing scripts still work.
+    #[value(name = "tiny-dct", help = "Deprecated alias for `dct`.")]
+    TinyDct,
+    #[value(name = "placeholder-triangle", help = "Deprecated alias for `small-triangle`.")]
+    PlaceholderTriangle,
+    #[value(name = "placeholder-circle", help = "Deprecated alias for `small-circle`.")]
+    PlaceholderCircle,
+    #[value(name = "placeholder-pixel", help = "Deprecated alias for `small-pixel`.")]
+    PlaceholderPixel,
+    #[value(name = "detail-triangle", help = "Deprecated alias for `large-triangle`.")]
     DetailTriangle,
-    #[value(name = "detail-circle")]
+    #[value(name = "detail-circle", help = "Deprecated alias for `large-circle`.")]
     DetailCircle,
-    #[value(name = "detail-pixel")]
+    #[value(name = "detail-pixel", help = "Deprecated alias for `large-pixel`.")]
     DetailPixel,
 }
 
+#[allow(deprecated)]
 impl PresetArg {
     fn to_preset(self) -> Preset {
         match self {
+            PresetArg::Dct => Preset::Dct,
+            PresetArg::SmallTriangle => Preset::SmallTriangle,
+            PresetArg::SmallCircle => Preset::SmallCircle,
+            PresetArg::SmallPixel => Preset::SmallPixel,
+            PresetArg::SmallRect => Preset::SmallRect,
+            PresetArg::SmallSquare => Preset::SmallSquare,
+            PresetArg::MediumTriangle => Preset::MediumTriangle,
+            PresetArg::MediumCircle => Preset::MediumCircle,
+            PresetArg::MediumPixel => Preset::MediumPixel,
+            PresetArg::MediumRect => Preset::MediumRect,
+            PresetArg::MediumSquare => Preset::MediumSquare,
+            PresetArg::LargeTriangle => Preset::LargeTriangle,
+            PresetArg::LargeCircle => Preset::LargeCircle,
+            PresetArg::LargePixel => Preset::LargePixel,
+            PresetArg::LargeRect => Preset::LargeRect,
+            PresetArg::LargeSquare => Preset::LargeSquare,
             PresetArg::TinyDct => Preset::TinyDct,
             PresetArg::PlaceholderTriangle => Preset::PlaceholderTriangle,
             PresetArg::PlaceholderCircle => Preset::PlaceholderCircle,
             PresetArg::PlaceholderPixel => Preset::PlaceholderPixel,
-            PresetArg::MediumTriangle => Preset::MediumTriangle,
-            PresetArg::MediumCircle => Preset::MediumCircle,
-            PresetArg::MediumPixel => Preset::MediumPixel,
             PresetArg::DetailTriangle => Preset::DetailTriangle,
             PresetArg::DetailCircle => Preset::DetailCircle,
             PresetArg::DetailPixel => Preset::DetailPixel,

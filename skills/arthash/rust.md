@@ -61,7 +61,7 @@ Codec::triangle(24)           // triangle mosaic
 Codec::circle(24)             // overlapping circles
 Codec::pixel(16)              // palette pixel mosaic
 Codec::dct()                  // blurry frequency-domain placeholder — see below
-Preset::DetailTriangle.codec()  // (or any other named preset)
+Preset::LargeTriangle.codec()   // (or any other named preset)
 ```
 
 DCT mode is intentionally not the recommended default — reach for it only when you specifically want a **blurry, blurhash/thumbhash-style** look at the smallest possible byte budget. `to_svg` on a DCT hash returns `Err`; render via `decode` and paint to PNG / a canvas instead.

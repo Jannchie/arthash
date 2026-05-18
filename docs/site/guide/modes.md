@@ -23,18 +23,27 @@ and `PIXEL` have no natural SVG primitive form and throw.
 The fastest way to pick a codec — these are the playground defaults, ordered by
 byte budget.
 
-| Preset                | Mode     | n   | Approx. bytes |
-| --------------------- | -------- | --- | ------------: |
-| `TinyDct`             | DCT      | —   |          ~21  |
-| `PlaceholderCircle`   | CIRCLE   | 12  |            53 |
-| `PlaceholderTriangle` | TRIANGLE | 12  |            77 |
-| `PlaceholderPixel`    | PIXEL    | 16  |            41 |
-| `MediumCircle`        | CIRCLE   | 24  |           102 |
-| `MediumTriangle`      | TRIANGLE | 24  |           150 |
-| `MediumPixel`         | PIXEL    | 24  |            57 |
-| `DetailCircle`        | CIRCLE   | 64  |           267 |
-| `DetailTriangle`      | TRIANGLE | 64  |           395 |
-| `DetailPixel`         | PIXEL    | 64  |           129 |
+| Preset           | Mode     | n   | Approx. bytes |
+| ---------------- | -------- | --- | ------------: |
+| `Dct`            | DCT      | —   |          ~21  |
+| `SmallCircle`    | CIRCLE   | 12  |            53 |
+| `SmallSquare`    | SQUARE   | 12  |            53 |
+| `SmallRect`      | RECT     | 12  |            59 |
+| `SmallTriangle`  | TRIANGLE | 12  |            77 |
+| `SmallPixel`     | PIXEL    | 16  |            33 |
+| `MediumCircle`   | CIRCLE   | 24  |           102 |
+| `MediumSquare`   | SQUARE   | 24  |           102 |
+| `MediumRect`     | RECT     | 24  |           114 |
+| `MediumTriangle` | TRIANGLE | 24  |           150 |
+| `MediumPixel`    | PIXEL    | 24  |            49 |
+| `LargeCircle`    | CIRCLE   | 64  |           267 |
+| `LargeSquare`    | SQUARE   | 64  |           267 |
+| `LargeRect`      | RECT     | 64  |           299 |
+| `LargeTriangle`  | TRIANGLE | 64  |           395 |
+| `LargePixel`     | PIXEL    | 64  |           129 |
+
+Pre-0.3 names (`TinyDct` / `Placeholder*` / `Detail*`) are kept as deprecated
+aliases — see [`docs/MIGRATION.md`](https://github.com/Jannchie/arthash/blob/main/docs/MIGRATION.md#02--03).
 
 ```ts
 codec.preset(Preset.MediumTriangle)

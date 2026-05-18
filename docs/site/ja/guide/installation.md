@@ -28,7 +28,7 @@ bun add arthash
 
 ```ts
 import { encode, codec, Preset } from "arthash";
-const c = codec.preset(Preset.PlaceholderTriangle);
+const c = codec.preset(Preset.SmallTriangle);
 const hash = await encode(rgbBytes, w, h, c);
 ```
 
@@ -80,7 +80,7 @@ cargo add arthash
 ```rust
 use arthash::{Codec, Preset, encode_rgb, decode, EncodeOptions, DecodeOptions};
 
-let codec = Preset::DetailTriangle.codec();
+let codec = Preset::LargeTriangle.codec();
 let hash = encode_rgb(&rgb, w, h, &codec, EncodeOptions::default());
 let out = decode(&hash, &codec, DecodeOptions::default());
 // out.width / out.height / out.rgba
