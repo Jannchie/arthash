@@ -8,7 +8,13 @@ import Tile from "./Tile.vue";
 import AdvancedPanel, { type AdvancedConfig } from "./AdvancedPanel.vue";
 import SearchControls from "./SearchControls.vue";
 import { DEMO_IMAGES } from "../demo";
-import { COLOR_OPTIONS, DEFAULT_SEARCH, supportsSvg, type SearchConfig } from "../pipeline";
+import {
+  COLOR_OPTIONS,
+  DEFAULT_SEARCH,
+  supportsCornerRadius,
+  supportsSvg,
+  type SearchConfig,
+} from "../pipeline";
 
 interface Props {
   ready: boolean;
@@ -19,6 +25,10 @@ const shape = ref<ShapeType>(Shape.RECT);
 const nShapes = ref(64);
 const baseSize = ref(512);
 const blur = ref(0);
+// Default cornerRadius=4 — visible softening at thumbnail size, gives rect
+// placeholders a deliberate UI look. Only honored for rect / square /
+// rotrect; other shapes silently ignore.
+const cornerRadius = ref(4);
 const seed = ref(0);
 const useSvg = ref(true);
 const cols = ref(8);
@@ -31,6 +41,7 @@ const DEBOUNCE_MS = 300;
 const nShapesD = refDebounced(nShapes, DEBOUNCE_MS);
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
+const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
@@ -45,6 +56,7 @@ const tileSettled = ref(new Set<number>());
 
 const svgPossible = computed(() => supportsSvg(shape.value));
 const renderSvg = computed(() => useSvg.value && svgPossible.value);
+const cornerRadiusVisible = computed(() => supportsCornerRadius(shape.value));
 
 const aggregate = computed(() => {
   const ms = Array.from(tileMetrics.value.values());
@@ -69,7 +81,7 @@ function onTileMetrics(i: number, v: { encodeMs: number; decodeMs: number; hashB
 }
 
 watch(
-  [shape, nShapesD, baseSizeD, blurD, seedD, useSvg, advancedD, colorId, searchD],
+  [shape, nShapesD, baseSizeD, blurD, cornerRadiusD, seedD, useSvg, advancedD, colorId, searchD],
   () => {
     tileMetrics.value = new Map();
     tileSettled.value = new Set();
@@ -117,6 +129,10 @@ function fmtMs(ms: number) {
       <label class="ctl" v-if="svgPossible">
         <span>blur</span>
         <input type="number" min="0" max="32" step="1" v-model.number="blur" />
+      </label>
+      <label class="ctl" v-if="cornerRadiusVisible">
+        <span>corner_r</span>
+        <input type="number" min="0" max="32" step="0.5" v-model.number="cornerRadius" />
       </label>
       <label class="ctl toggle" v-if="svgPossible">
         <input type="checkbox" v-model="useSvg" />
@@ -192,6 +208,7 @@ function fmtMs(ms: number) {
           :n-shapes="nShapesD"
           :base-size="baseSizeD"
           :blur="blurD"
+          :corner-radius="cornerRadiusD"
           :seed="seedD"
           :use-svg="renderSvg"
           :ready="ready"

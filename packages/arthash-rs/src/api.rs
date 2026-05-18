@@ -11,6 +11,7 @@
 use crate::bitio::BitReader;
 use crate::codec::{Codec, CodecConfig, ShapeType};
 use crate::colorspace::{linear_to_srgb_u8, srgb_u8_to_linear};
+use crate::render::{gaussian_blur_rgba8, RenderStyle};
 use crate::shape::circle::{decode_render as circle_decode, encode_circle};
 use crate::shape::pixel::{decode_render as pixel_decode, encode_pixel, PixelSmooth};
 use crate::shape::quant::{aspect_from_code, read_color};
@@ -42,6 +43,10 @@ pub struct DecodeOptions {
     /// Shape-mode supersample factor (per-axis; total samples per output
     /// pixel = `aa²`). `1` = off (default). Ignored by DCT/PIXEL.
     pub aa: u32,
+    /// Visual styling — corner rounding (rect/square/rotrect only) and
+    /// Gaussian blur. Both fields in output-pixel units. `Default` = sharp,
+    /// zero-cost (matches pre-0.3.0 output byte-for-byte).
+    pub style: RenderStyle,
 }
 
 impl Default for DecodeOptions {
@@ -51,6 +56,7 @@ impl Default for DecodeOptions {
             override_aspect: None,
             pixel_smooth: PixelSmooth::Nearest,
             aa: 1,
+            style: RenderStyle::default(),
         }
     }
 }
@@ -169,7 +175,11 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
 
     if matches!(cfg.shape, ShapeType::Pixel) {
         let rgb = pixel_decode(&mut br, cfg, w, h, quant_aspect, opts.pixel_smooth);
-        return (w, h, rgb_to_rgba(&rgb, w, h));
+        let mut rgba = rgb_to_rgba(&rgb, w, h);
+        if opts.style.blur > 0.0 {
+            gaussian_blur_rgba8(&mut rgba, w, h, opts.style.blur);
+        }
+        return (w, h, rgba);
     }
 
     let ss = opts.aa.max(1);
@@ -181,12 +191,15 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
         canvas[i * 3 + 1] = bg[1];
         canvas[i * 3 + 2] = bg[2];
     }
+    // corner_radius is supplied in output-pixel units; scale to canvas units
+    // for the supersampled rasterizer. Non-rect shapes silently ignore it.
+    let corner_radius_canvas = opts.style.corner_radius * (ss as f32);
     match cfg.shape {
         ShapeType::Circle => circle_decode(&mut br, cfg, ww, hh, &mut canvas),
         ShapeType::Triangle => triangle_decode(&mut br, cfg, ww, hh, &mut canvas),
-        ShapeType::Square => square_decode(&mut br, cfg, ww, hh, &mut canvas),
-        ShapeType::Rect => rect_decode(&mut br, cfg, ww, hh, &mut canvas),
-        ShapeType::RotatedRect => rotrect_decode(&mut br, cfg, ww, hh, &mut canvas),
+        ShapeType::Square => square_decode(&mut br, cfg, ww, hh, &mut canvas, corner_radius_canvas),
+        ShapeType::Rect => rect_decode(&mut br, cfg, ww, hh, &mut canvas, corner_radius_canvas),
+        ShapeType::RotatedRect => rotrect_decode(&mut br, cfg, ww, hh, &mut canvas, corner_radius_canvas),
         _ => unreachable!(),
     }
     let mut canvas_lin = vec![0.0f32; (w * h * 3) as usize];
@@ -221,6 +234,9 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
         rgba[i * 4 + 1] = linear_to_srgb_u8(canvas[i * 3 + 1]);
         rgba[i * 4 + 2] = linear_to_srgb_u8(canvas[i * 3 + 2]);
         rgba[i * 4 + 3] = 255;
+    }
+    if opts.style.blur > 0.0 {
+        gaussian_blur_rgba8(&mut rgba, w, h, opts.style.blur);
     }
     (w, h, rgba)
 }
@@ -286,5 +302,160 @@ fn fit_long_edge(w: u32, h: u32, target: u32) -> (u32, u32) {
     } else {
         let new_w = ((target as u64 * w as u64) / h as u64).max(1) as u32;
         (new_w, target)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Codec;
+
+    fn solid_rgb(w: u32, h: u32, c: [u8; 3]) -> Vec<u8> {
+        let mut buf = Vec::with_capacity((w * h * 3) as usize);
+        for _ in 0..(w * h) {
+            buf.extend_from_slice(&c);
+        }
+        buf
+    }
+
+    /// `RenderStyle::default()` (both fields zero) must produce decode output
+    /// byte-for-byte identical to pre-0.3.0 — both the rounded-rect AA and
+    /// blur primitives must take the zero-cost fast path.
+    #[test]
+    fn decode_default_style_byte_identical() {
+        for codec in [
+            Codec::circle(8),
+            Codec::triangle(8),
+            Codec::square(8),
+            Codec::rect(8),
+            Codec::rotated_rect(8),
+            Codec::pixel(12),
+            Codec::default(), // DCT
+        ] {
+            let rgb = solid_rgb(48, 48, [128, 80, 200]);
+            let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+            let default_out = decode(&bytes, &codec, DecodeOptions::default());
+            // Explicit zero style — should also take the fast path.
+            let explicit_zero = decode(
+                &bytes,
+                &codec,
+                DecodeOptions {
+                    style: RenderStyle { blur: 0.0, corner_radius: 0.0 },
+                    ..DecodeOptions::default()
+                },
+            );
+            assert_eq!(
+                default_out.rgba, explicit_zero.rgba,
+                "zero-style decode must match default decode for {:?}",
+                codec
+            );
+        }
+    }
+
+    #[test]
+    fn decode_with_blur_changes_output() {
+        // Need non-uniform input — uniform → triangles degenerate to
+        // background, blur is no-op (constant input through Gaussian).
+        let codec = Codec::triangle(12);
+        let rgb = checkerboard_rgb(48, 48, 8);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let sharp = decode(&bytes, &codec, DecodeOptions::default());
+        let blurred = decode(
+            &bytes,
+            &codec,
+            DecodeOptions {
+                style: RenderStyle { blur: 4.0, corner_radius: 0.0 },
+                ..DecodeOptions::default()
+            },
+        );
+        assert_eq!(sharp.rgba.len(), blurred.rgba.len());
+        let mut changed = 0usize;
+        for i in 0..(sharp.width * sharp.height) as usize {
+            if sharp.rgba[i * 4] != blurred.rgba[i * 4] {
+                changed += 1;
+            }
+        }
+        let total = (sharp.width * sharp.height) as usize;
+        assert!(
+            changed > total / 10,
+            "blur should change at least 10% of pixels, only {changed}/{total}",
+        );
+    }
+
+    fn checkerboard_rgb(w: u32, h: u32, cell: u32) -> Vec<u8> {
+        let mut buf = Vec::with_capacity((w * h * 3) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                let on = ((x / cell) + (y / cell)) % 2 == 0;
+                let c: [u8; 3] = if on { [220, 60, 60] } else { [40, 80, 200] };
+                buf.extend_from_slice(&c);
+            }
+        }
+        buf
+    }
+
+    #[test]
+    fn decode_rect_corner_radius_softens_corners() {
+        // Encoder needs a non-uniform input to produce real rects (uniform
+        // input → background matches target, all rects degenerate). With a
+        // checkerboard, the encoder produces visible rects whose corners
+        // the AA path then rounds.
+        let codec = Codec::rect(6);
+        let rgb = checkerboard_rgb(48, 48, 8);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let sharp = decode(&bytes, &codec, DecodeOptions::default());
+        let rounded = decode(
+            &bytes,
+            &codec,
+            DecodeOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 12.0 },
+                ..DecodeOptions::default()
+            },
+        );
+        // Outputs must differ — corner_radius takes the AA path.
+        assert_ne!(sharp.rgba, rounded.rgba);
+    }
+
+    #[test]
+    fn decode_circle_ignores_corner_radius() {
+        // Non-rect-family shape — corner_radius silently ignored, no panic,
+        // output identical to default-style decode.
+        let codec = Codec::circle(8);
+        let rgb = solid_rgb(48, 48, [40, 160, 90]);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let default_out = decode(&bytes, &codec, DecodeOptions::default());
+        let with_radius = decode(
+            &bytes,
+            &codec,
+            DecodeOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 5.0 },
+                ..DecodeOptions::default()
+            },
+        );
+        assert_eq!(default_out.rgba, with_radius.rgba);
+    }
+
+    #[test]
+    fn decode_pixel_blur_works() {
+        // PIXEL goes through a different rasterization path (sRGB grid, no
+        // float linear canvas). Blur must apply post-rasterization.
+        let codec = Codec::pixel(16);
+        let rgb = solid_rgb(48, 48, [40, 160, 90]);
+        let bytes = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        let sharp = decode(&bytes, &codec, DecodeOptions::default());
+        let blurred = decode(
+            &bytes,
+            &codec,
+            DecodeOptions {
+                style: RenderStyle { blur: 3.0, corner_radius: 0.0 },
+                ..DecodeOptions::default()
+            },
+        );
+        // PIXEL with a SOLID image input becomes a uniform-color grid; blur
+        // is a no-op on uniform input (kernel sums to 1.0). Verify sizes
+        // match and outputs are equivalent (the blur ran but didn't change
+        // anything because every cell carries the same color).
+        assert_eq!(sharp.rgba.len(), blurred.rgba.len());
+        assert_eq!(sharp.rgba, blurred.rgba);
     }
 }

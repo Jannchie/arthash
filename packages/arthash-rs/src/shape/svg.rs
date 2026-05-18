@@ -36,6 +36,7 @@ use super::square::decode_square_at;
 use crate::bitio::BitReader;
 use crate::codec::{Codec, CodecConfig, ShapeType};
 use crate::colorspace::linear_to_srgb_u8;
+use crate::render::RenderStyle;
 use std::fmt::Write as _;
 
 /// Options for [`to_svg`].
@@ -48,17 +49,43 @@ pub struct SvgOptions {
     /// Override the stored aspect for non-default sizing (same semantics
     /// as `DecodeOptions::override_aspect`).
     pub override_aspect: Option<f32>,
+    /// Visual styling — Gaussian blur (`style.blur`) and corner rounding for
+    /// rect/square/rotrect (`style.corner_radius`). Both in viewBox units.
+    /// `Default` = sharp, no blur.
+    pub style: RenderStyle,
     /// Gaussian blur stdDeviation in viewBox-space units. `0.0` = no blur.
-    /// SQIP-equivalent default is around `12`.
+    ///
+    /// **Deprecated since 0.3.0.** Set `style.blur` instead. When both are
+    /// non-zero, `style.blur` wins. Field will be removed in 1.0.
+    #[deprecated(
+        since = "0.3.0",
+        note = "use `SvgOptions { style: RenderStyle { blur: ... }, .. }` instead. Will be removed in 1.0."
+    )]
     pub blur: f32,
 }
 
+#[allow(deprecated)]
 impl Default for SvgOptions {
     fn default() -> Self {
         Self {
             base_size: 256,
             override_aspect: None,
+            style: RenderStyle::default(),
             blur: 0.0,
+        }
+    }
+}
+
+#[allow(deprecated)]
+impl SvgOptions {
+    /// Effective blur σ: `style.blur` if set, otherwise the deprecated
+    /// top-level `blur` field. Internal coalescing for the deprecation
+    /// window — callers should set `style.blur` directly.
+    pub(crate) fn effective_blur(&self) -> f32 {
+        if self.style.blur > 0.0 {
+            self.style.blur
+        } else {
+            self.blur
         }
     }
 }
@@ -166,6 +193,17 @@ fn opacity_attr(alpha: f32) -> String {
     }
 }
 
+/// `rx`/`ry` attribute pair when `r > 0`. SVG renders `<rect>` with `rx` and
+/// `ry` set as a rounded rect — equivalent to the AA raster `apply_rounded_rect_aa`
+/// fill, so `(hash, codec, style)` produces visually matched output.
+fn corner_attr(r: f32) -> String {
+    if r > 0.0 {
+        format!(" rx=\"{}\" ry=\"{}\"", fmt_num(r), fmt_num(r))
+    } else {
+        String::new()
+    }
+}
+
 fn circle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
     let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
     let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
@@ -236,7 +274,15 @@ fn triangle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, ou
     }
 }
 
-fn rect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
+fn rect_elements(
+    br: &mut BitReader,
+    codec: &CodecConfig,
+    w: u32,
+    h: u32,
+    corner_radius: f32,
+    out: &mut String,
+) {
+    let corner = corner_attr(corner_radius);
     for _ in 0..codec.n_shapes {
         let (cx, cy, rw, rh, color, alpha) = decode_rect_at(br, codec, w, h);
         let x = cx - rw / 2;
@@ -245,14 +291,22 @@ fn rect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &
         let opacity = opacity_attr(alpha);
         write!(
             out,
-            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}/>",
-            x, y, rw.max(0), rh.max(0), fill, opacity
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}{}/>",
+            x, y, rw.max(0), rh.max(0), fill, opacity, corner
         )
         .unwrap();
     }
 }
 
-fn square_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
+fn square_elements(
+    br: &mut BitReader,
+    codec: &CodecConfig,
+    w: u32,
+    h: u32,
+    corner_radius: f32,
+    out: &mut String,
+) {
+    let corner = corner_attr(corner_radius);
     for _ in 0..codec.n_shapes {
         let (cx, cy, s, color, alpha) = decode_square_at(br, codec, w, h);
         let x = cx - s / 2;
@@ -261,8 +315,8 @@ fn square_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out:
         let opacity = opacity_attr(alpha);
         write!(
             out,
-            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}/>",
-            x, y, s.max(0), s.max(0), fill, opacity
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}{}/>",
+            x, y, s.max(0), s.max(0), fill, opacity, corner
         )
         .unwrap();
     }
@@ -308,17 +362,27 @@ fn pixel_elements(
     }
 }
 
-fn rotrect_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
+fn rotrect_elements(
+    br: &mut BitReader,
+    codec: &CodecConfig,
+    w: u32,
+    h: u32,
+    corner_radius: f32,
+    out: &mut String,
+) {
+    let corner = corner_attr(corner_radius);
     for _ in 0..codec.n_shapes {
         let (cx, cy, rw, rh, theta_deg, color, alpha) = decode_rotrect_at(br, codec, w, h);
         let x = cx - rw / 2;
         let y = cy - rh / 2;
         let fill = color_to_hex(&color);
         let opacity = opacity_attr(alpha);
+        // SVG `<rect rx ry transform="rotate(...)">` rounds corners in the
+        // pre-rotation frame, matching `apply_rotated_rounded_rect_aa`.
         write!(
             out,
-            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{} transform=\"rotate({} {} {})\"/>",
-            x, y, rw.max(0), rh.max(0), fill, opacity,
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"{}{} transform=\"rotate({} {} {})\"/>",
+            x, y, rw.max(0), rh.max(0), fill, opacity, corner,
             fmt_num(theta_deg), cx, cy
         )
         .unwrap();
@@ -359,6 +423,7 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
         )
     };
 
+    let corner_radius = opts.style.corner_radius;
     let mut body = String::new();
     match cfg.shape {
         ShapeType::Pixel => {
@@ -378,15 +443,18 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
             match cfg.shape {
                 ShapeType::Circle => circle_elements(&mut br, &cfg, w, h, &mut body),
                 ShapeType::Triangle => triangle_elements(&mut br, &cfg, w, h, &mut body),
-                ShapeType::Square => square_elements(&mut br, &cfg, w, h, &mut body),
-                ShapeType::Rect => rect_elements(&mut br, &cfg, w, h, &mut body),
-                ShapeType::RotatedRect => rotrect_elements(&mut br, &cfg, w, h, &mut body),
+                ShapeType::Square => square_elements(&mut br, &cfg, w, h, corner_radius, &mut body),
+                ShapeType::Rect => rect_elements(&mut br, &cfg, w, h, corner_radius, &mut body),
+                ShapeType::RotatedRect => {
+                    rotrect_elements(&mut br, &cfg, w, h, corner_radius, &mut body)
+                }
                 _ => unreachable!(),
             }
         }
     }
 
-    if opts.blur > 0.0 {
+    let blur_sigma = opts.effective_blur();
+    if blur_sigma > 0.0 {
         // SQIP-style Gaussian blur. The filter region defaults to the bbox
         // of the filtered group (-10% margin each side), so we expand to
         // the full viewBox so blur extends to the edges instead of cutting
@@ -397,7 +465,7 @@ pub fn to_svg(hash_bytes: &[u8], codec: &Codec, opts: SvgOptions) -> Result<Stri
              primitiveUnits=\"userSpaceOnUse\">\
              <feGaussianBlur stdDeviation=\"{}\"/></filter>\
              <g filter=\"url(#b)\">{}</g>",
-            fmt_num(opts.blur),
+            fmt_num(blur_sigma),
             body
         );
     }
@@ -529,6 +597,7 @@ mod tests {
 
     #[test]
     fn blur_wraps_in_filter() {
+        use crate::RenderStyle;
         let codec = Codec::circle(2);
         let bytes = encode_rgb(
             &solid_rgb(48, 48, [200, 200, 200]),
@@ -541,7 +610,7 @@ mod tests {
             &bytes,
             &codec,
             SvgOptions {
-                blur: 12.0,
+                style: RenderStyle { blur: 12.0, corner_radius: 0.0 },
                 ..SvgOptions::default()
             },
         )
@@ -549,6 +618,178 @@ mod tests {
         assert!(svg.contains("<filter id=\"b\""));
         assert!(svg.contains("stdDeviation=\"12\""));
         assert!(svg.contains("<g filter=\"url(#b)\""));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn deprecated_blur_field_still_works() {
+        // The top-level `blur` field is deprecated since 0.3.0 but kept for
+        // source compatibility until 1.0. Both old and new spelling must
+        // produce identical SVG output.
+        use crate::RenderStyle;
+        let codec = Codec::circle(2);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [200, 200, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let old_path = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions { blur: 8.0, ..SvgOptions::default() },
+        )
+        .unwrap();
+        let new_path = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                style: RenderStyle { blur: 8.0, corner_radius: 0.0 },
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(old_path, new_path);
+    }
+
+    #[test]
+    fn style_blur_wins_over_deprecated_blur() {
+        use crate::RenderStyle;
+        let codec = Codec::circle(2);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [200, 200, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        #[allow(deprecated)]
+        let opts = SvgOptions {
+            blur: 5.0,
+            style: RenderStyle { blur: 12.0, corner_radius: 0.0 },
+            ..SvgOptions::default()
+        };
+        let svg = to_svg(&bytes, &codec, opts).unwrap();
+        assert!(svg.contains("stdDeviation=\"12\""));
+        assert!(!svg.contains("stdDeviation=\"5\""));
+    }
+
+    #[test]
+    fn rect_emits_rx_ry_when_corner_radius_set() {
+        use crate::RenderStyle;
+        let codec = Codec::rect(3);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 4.0 },
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        // 3 rects, each with rx and ry.
+        assert_eq!(svg.matches(" rx=\"4\"").count(), 3);
+        assert_eq!(svg.matches(" ry=\"4\"").count(), 3);
+    }
+
+    #[test]
+    fn square_emits_rx_ry_when_corner_radius_set() {
+        use crate::RenderStyle;
+        let codec = Codec::square(3);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 2.5 },
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(svg.matches(" rx=\"2.5\"").count(), 3);
+        assert_eq!(svg.matches(" ry=\"2.5\"").count(), 3);
+    }
+
+    #[test]
+    fn rotrect_emits_rx_ry_when_corner_radius_set() {
+        use crate::RenderStyle;
+        let codec = Codec::rotated_rect(3);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 3.0 },
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(svg.matches(" rx=\"3\"").count(), 3);
+        // Rotation transform also preserved.
+        assert_eq!(svg.matches(" transform=\"rotate(").count(), 3);
+    }
+
+    #[test]
+    fn rect_no_rx_when_corner_radius_zero() {
+        // Fast path: zero corner_radius → no rx/ry attribute, byte-identical
+        // SVG output to pre-0.3.0.
+        let codec = Codec::rect(3);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(&bytes, &codec, SvgOptions::default()).unwrap();
+        assert!(!svg.contains(" rx="));
+        assert!(!svg.contains(" ry="));
+    }
+
+    #[test]
+    fn circle_ignores_corner_radius() {
+        // Non-rect-family codecs silently ignore corner_radius (TS catches
+        // this at compile time; Rust doesn't have conditional types).
+        use crate::RenderStyle;
+        let codec = Codec::circle(3);
+        let bytes = encode_rgb(
+            &solid_rgb(48, 48, [60, 120, 200]),
+            48,
+            48,
+            &codec,
+            EncodeOptions::default(),
+        );
+        let svg = to_svg(
+            &bytes,
+            &codec,
+            SvgOptions {
+                style: RenderStyle { blur: 0.0, corner_radius: 5.0 },
+                ..SvgOptions::default()
+            },
+        )
+        .unwrap();
+        // Circles don't have rx/ry (those are rect attributes).
+        assert!(!svg.contains(" rx="));
     }
 
     #[test]

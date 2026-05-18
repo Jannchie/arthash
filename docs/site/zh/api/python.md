@@ -4,7 +4,7 @@ PyPI 包：[`arthash`](https://pypi.org/project/arthash/)。PyO3 wheel——重�
 
 ```python
 from arthash import (
-    Codec, Preset, Palette,
+    Codec, Preset, Palette, RenderStyle,
     encode, decode, to_svg,
 )
 from arthash import palettes
@@ -25,13 +25,13 @@ from arthash import palettes
 
 `codec` 为 `None` 时默认 `Codec.dct()`。
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=None, pixel_smooth=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
 
-返回 `(width, height, rgba)`，其中 `rgba` 是 `(h, w, 4)` 形状、`uint8` 类型的 `numpy.ndarray`。`codec` 为 `None` 时默认 `Codec.dct()`。
+返回 `(width, height, rgba)`，其中 `rgba` 是 `(h, w, 4)` 形状、`uint8` 类型的 `numpy.ndarray`。`codec` 为 `None` 时默认 `Codec.dct()`。`style` 传 `RenderStyle` 控制模糊和圆角（见下）。
 
-### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, blur=0.0) -> str`
+### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 
-把 shape 模式的 hash 渲染成 SVG 字符串。只支持 `CIRCLE` / `TRIANGLE` / `SQUARE` / `RECT` / `ROTATED_RECT`。DCT 和 PIXEL 抛 `ValueError`。
+把 shape 模式的 hash 渲染成 SVG 字符串。只支持 `CIRCLE` / `TRIANGLE` / `SQUARE` / `RECT` / `ROTATED_RECT`。DCT 和 PIXEL 抛 `ValueError`。`style` 控制模糊和圆角；`blur` kwarg **自 0.3.0 起弃用**——请改用 `style=RenderStyle(blur=...)`。1.0 移除。
 
 ## `Codec`
 
@@ -114,6 +114,30 @@ Palette.from_hex(["#aabbcc", ...])
 
 # 内置常量
 from arthash.palettes import PICO8, GAMEBOY, NES, MORANDI, MONO
+```
+
+## `RenderStyle`
+
+```python
+@dataclass
+class RenderStyle:
+    blur: float = 0.0          # 高斯 stdDeviation（viewBox 单位）；0 = 锐利
+    corner_radius: float = 0.0 # 仅 rect / square / rotrect；0 = 直角
+```
+
+独立于 codec 的字节格式——同一 `(hash, codec)` 配不同 `style` 会产生视觉不同
+但字节不变的输出。默认值（两个字段都为 0）走零成本快路径。
+
+在非 rect 家族 codec（circle / triangle / pixel / DCT）上设置 `corner_radius`
+会发出 `UserWarning` 并被静默忽略——TS SDK 在编译期通过条件类型拦截，Python
+退回到运行时警告，意图一致。
+
+```python
+from arthash import RenderStyle, decode, to_svg, Codec
+
+style = RenderStyle(blur=2.0, corner_radius=4.0)
+w, h, rgba = decode(hash_bytes, Codec.rect(n=32), style=style)
+svg = to_svg(hash_bytes, Codec.rect(n=32), style=style)
 ```
 
 ## `EncodeOptions` / 搜索预算

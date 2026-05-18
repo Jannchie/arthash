@@ -6,7 +6,8 @@ crate：[`arthash`](https://crates.io/crates/arthash)。标准实现——Python
 use arthash::{
     Codec, Preset,
     encode_rgb, encode_rgba, decode, to_svg,
-    EncodeOptions, DecodeOptions, SvgRenderOptions,
+    EncodeOptions, DecodeOptions, SvgOptions,
+    RenderStyle,
     SearchOptions, SearchStrategy,
     Palette,
 };
@@ -48,17 +49,17 @@ pub fn decode(
 ) -> DecodeResult;
 ```
 
-### `to_svg(hash, codec, opts) -> String`
+### `to_svg(hash, codec, opts) -> Result<String, SvgError>`
 
 ```rust
 pub fn to_svg(
     hash: &[u8],
     codec: &Codec,
-    opts: SvgRenderOptions,
-) -> String;
+    opts: SvgOptions,
+) -> Result<String, SvgError>;
 ```
 
-只支持 shape 模式（`CIRCLE`、`TRIANGLE`、`SQUARE`、`RECT`、`ROTATED_RECT`），DCT / PIXEL 返回 `Err`。
+只支持 shape 模式（`CIRCLE`、`TRIANGLE`、`SQUARE`、`RECT`、`ROTATED_RECT`），DCT 返回 `Err(SvgError::UnsupportedShape(_))`。
 
 ## Options
 
@@ -71,20 +72,41 @@ pub struct EncodeOptions {
 pub struct DecodeOptions {
     pub base_size: u32,                  // 默认 256
     pub override_aspect: Option<f32>,
-    pub aa: Option<u32>,                 // shape 超采样（1 / 2 / 4）
-    pub pixel_smooth: Option<PixelSmooth>,
+    pub aa: u32,                         // shape 超采样（1 / 2 / 4）
+    pub pixel_smooth: PixelSmooth,
+    pub style: RenderStyle,              // 视觉样式（见下）
 }
 
-pub struct SvgRenderOptions {
+pub struct SvgOptions {
     pub base_size: u32,                  // 默认 256
     pub override_aspect: Option<f32>,
-    pub blur: f32,                       // 高斯 stdDeviation；0 = 关
+    pub style: RenderStyle,              // 视觉样式
+    #[deprecated(since = "0.3.0", note = "use style.blur; removed in 1.0")]
+    pub blur: f32,                       // 请改用 style.blur
 }
 
 pub enum PixelSmooth { Nearest, Bilinear }
 ```
 
 所有 struct 都实现了 `Default`。
+
+## `RenderStyle`
+
+```rust
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RenderStyle {
+    pub blur: f32,          // 高斯 stdDeviation（viewBox 单位）
+    pub corner_radius: f32, // 仅 rect / square / rotrect
+}
+```
+
+独立于 codec 字节格式——同一 `(hash, codec)` 配不同 `style` 会产生视觉不同
+但字节不变的输出。默认值（`RenderStyle::default()`）走零成本快路径，输出
+与 pre-0.3.0 字节一致。
+
+非 rect 家族 codec（circle / triangle / pixel / DCT）上的 `corner_radius`
+被静默忽略——TS SDK 在编译期通过条件类型拦截；Python 发 `UserWarning`；
+Rust 取静默路径，符合「数据进、数据出」的惯例。
 
 ## Codec
 

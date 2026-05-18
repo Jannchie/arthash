@@ -1,3 +1,39 @@
+## [Unreleased] — 0.3.0
+
+Preset naming overhaul. **Wire format unchanged** — hashes produced by 0.2 still
+decode under 0.3 codecs. See [`docs/MIGRATION.md`](./docs/MIGRATION.md#02--03)
+for the full rename table.
+
+### Added
+
+- **New size-axis preset naming.** `Preset` size buckets renamed to
+  `small_*` / `medium_*` / `large_*` (n=12 / 24 / 64; pixel small=16).
+  `tiny_dct` renamed to plain `dct`. `medium_*` names unchanged.
+- **Rect and Square presets.** Six new presets — `{small,medium,large}_rect`
+  and `{small,medium,large}_square` — wired across Rust / TS / Python / CLI /
+  playground. Rect and square shape factories were already available at the
+  `Codec::rect(n)` / `Codec::square(n)` layer; this surfaces them as named
+  recipes.
+- **Playground rows.** The compare view now shows all 16 presets in one row,
+  grouped by size tier (DCT, then small / medium / large × triangle, circle,
+  pixel, rect, square).
+
+### Deprecated
+
+The pre-0.3 preset names are kept as aliases that produce byte-identical
+codecs to their replacements. They will be removed in 1.0.
+
+- Rust: `Preset::TinyDct` / `PlaceholderTriangle` / `PlaceholderCircle` /
+  `PlaceholderPixel` / `DetailTriangle` / `DetailCircle` / `DetailPixel`
+  carry `#[deprecated(since = "0.3.0")]`.
+- TypeScript: same keys on the `Preset` object carry `@deprecated` JSDoc.
+- Python: `Preset.TINY_DCT` etc. still parse; top-level shortcuts
+  (`tiny_dct()` / `placeholder_*()` / `detail_*()`) emit `DeprecationWarning`.
+- CLI: `--preset tiny-dct` / `placeholder-*` / `detail-*` still parse and
+  appear in `--help` as `Deprecated alias for ...`.
+
+---
+
 ## v0.2.0
 
 [v0.1.2...v0.2.0](https://github.com/Jannchie/arthash/compare/v0.1.2...v0.2.0)

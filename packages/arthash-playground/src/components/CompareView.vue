@@ -46,6 +46,8 @@ const VARIANTS: Variant[] = [
 
 const baseSize = ref(512);
 const blur = ref(0);
+// Applies only to rect / square / rotrect variants; other shapes ignore it.
+const cornerRadius = ref(4);
 const seed = ref(0);
 const colorId = ref<string>("rgb-565");
 
@@ -55,11 +57,12 @@ const search = ref<SearchConfig>({ ...DEFAULT_SEARCH });
 const DEBOUNCE_MS = 300;
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
+const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
 
-watch([baseSizeD, blurD, seedD, advancedD, colorId, searchD], () => {
+watch([baseSizeD, blurD, cornerRadiusD, seedD, advancedD, colorId, searchD], () => {
   tileMetrics.value = new Map();
 }, { deep: true });
 
@@ -158,6 +161,10 @@ const gridStyle = computed(() => ({
         <input type="number" min="0" max="32" step="1" v-model.number="blur" />
       </label>
       <label class="ctl">
+        <span>corner_r</span>
+        <input type="number" min="0" max="32" step="0.5" v-model.number="cornerRadius" title="applied to rect / square / rotrect variants" />
+      </label>
+      <label class="ctl">
         <span>seed</span>
         <input type="number" min="0" max="999999" step="1" v-model.number="seed" />
       </label>
@@ -230,6 +237,7 @@ const gridStyle = computed(() => ({
         :n-shapes="v.nShapes"
         :base-size="baseSizeD"
         :blur="blurD"
+        :corner-radius="cornerRadiusD"
         :seed="seedD"
         :use-svg="v.useSvg"
         :ready="ready"

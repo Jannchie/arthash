@@ -33,7 +33,7 @@ import warnings
 
 from . import palettes
 from .__about__ import __version__
-from ._api import decode, encode, to_svg
+from ._api import RenderStyle, decode, encode, to_svg
 from ._codec import DEFAULT_CODEC, Codec, Preset, ShapeType
 from ._search import DEFAULT_SEARCH, SearchOptions
 
@@ -195,6 +195,7 @@ __all__ = [
     "DEFAULT_CODEC",
     "DEFAULT_SEARCH",
     "Preset",
+    "RenderStyle",
     "SearchOptions",
     "ShapeType",
     "decode",

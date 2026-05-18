@@ -11,7 +11,7 @@ use numpy::PyArray1;
 use arthash::{
     decode as rs_decode, encode_rgb as rs_encode_rgb, encode_rgba as rs_encode_rgba,
     to_svg as rs_to_svg, Codec, CodecConfig, DecodeOptions, EncodeOptions, PixelSmooth,
-    SearchOptions, ShapeType, Strategy, SvgOptions,
+    RenderStyle, SearchOptions, ShapeType, Strategy, SvgOptions,
 };
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
@@ -168,7 +168,7 @@ fn encode_rgba<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0))]
 fn decode<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -177,6 +177,8 @@ fn decode<'py>(
     override_aspect: Option<f32>,
     pixel_smooth: &str,
     aa: u32,
+    blur: f32,
+    corner_radius: f32,
 ) -> PyResult<(u32, u32, Bound<'py, PyBytes>)> {
     let codec = codec_from_dict(codec)?;
     let opts = DecodeOptions {
@@ -184,6 +186,7 @@ fn decode<'py>(
         override_aspect,
         pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
         aa: aa.max(1),
+        style: RenderStyle { blur, corner_radius },
     };
     let out = py.detach(|| rs_decode(hash, &codec, opts));
     Ok((out.width, out.height, PyBytes::new(py, &out.rgba)))
@@ -192,7 +195,7 @@ fn decode<'py>(
 /// Same as `decode` but returns the RGBA as a numpy ndarray to spare a copy
 /// when callers will reshape immediately.
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0))]
 fn decode_to_numpy<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -201,6 +204,8 @@ fn decode_to_numpy<'py>(
     override_aspect: Option<f32>,
     pixel_smooth: &str,
     aa: u32,
+    blur: f32,
+    corner_radius: f32,
 ) -> PyResult<(u32, u32, Bound<'py, PyArray1<u8>>)> {
     let codec = codec_from_dict(codec)?;
     let opts = DecodeOptions {
@@ -208,13 +213,15 @@ fn decode_to_numpy<'py>(
         override_aspect,
         pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
         aa: aa.max(1),
+        style: RenderStyle { blur, corner_radius },
     };
     let out = py.detach(|| rs_decode(hash, &codec, opts));
     Ok((out.width, out.height, PyArray1::from_vec(py, out.rgba)))
 }
 
+#[allow(deprecated)]
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, blur=0.0))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, blur=0.0, corner_radius=0.0))]
 fn to_svg(
     py: Python<'_>,
     hash: &[u8],
@@ -222,12 +229,16 @@ fn to_svg(
     base_size: u32,
     override_aspect: Option<f32>,
     blur: f32,
+    corner_radius: f32,
 ) -> PyResult<String> {
     let codec = codec_from_dict(codec)?;
     let opts = SvgOptions {
         base_size,
         override_aspect,
-        blur,
+        style: RenderStyle { blur, corner_radius },
+        // Python wrapper coalesces deprecated `blur` kwarg into `style.blur`
+        // before calling, so we don't need to set the deprecated field here.
+        blur: 0.0,
     };
     py.detach(|| rs_to_svg(hash, &codec, opts))
         .map_err(|e| match e {

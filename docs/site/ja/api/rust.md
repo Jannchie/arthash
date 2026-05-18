@@ -6,7 +6,8 @@ crate：[`arthash`](https://crates.io/crates/arthash)。正規実装—Python �
 use arthash::{
     Codec, Preset,
     encode_rgb, encode_rgba, decode, to_svg,
-    EncodeOptions, DecodeOptions, SvgRenderOptions,
+    EncodeOptions, DecodeOptions, SvgOptions,
+    RenderStyle,
     SearchOptions, SearchStrategy,
     Palette,
 };
@@ -48,17 +49,17 @@ pub fn decode(
 ) -> DecodeResult;
 ```
 
-### `to_svg(hash, codec, opts) -> String`
+### `to_svg(hash, codec, opts) -> Result<String, SvgError>`
 
 ```rust
 pub fn to_svg(
     hash: &[u8],
     codec: &Codec,
-    opts: SvgRenderOptions,
-) -> String;
+    opts: SvgOptions,
+) -> Result<String, SvgError>;
 ```
 
-shape モード（`CIRCLE`、`TRIANGLE`、`SQUARE`、`RECT`、`ROTATED_RECT`）のみサポート。`DCT` / `PIXEL` は `Err` を返します。
+shape モード（`CIRCLE`、`TRIANGLE`、`SQUARE`、`RECT`、`ROTATED_RECT`）のみサポート。`DCT` は `Err(SvgError::UnsupportedShape(_))` を返します。
 
 ## Options
 
@@ -71,20 +72,43 @@ pub struct EncodeOptions {
 pub struct DecodeOptions {
     pub base_size: u32,                  // デフォルト 256
     pub override_aspect: Option<f32>,
-    pub aa: Option<u32>,                 // shape スーパーサンプル（1 / 2 / 4）
-    pub pixel_smooth: Option<PixelSmooth>,
+    pub aa: u32,                         // shape スーパーサンプル（1 / 2 / 4）
+    pub pixel_smooth: PixelSmooth,
+    pub style: RenderStyle,              // 視覚スタイル（後述）
 }
 
-pub struct SvgRenderOptions {
+pub struct SvgOptions {
     pub base_size: u32,                  // デフォルト 256
     pub override_aspect: Option<f32>,
-    pub blur: f32,                       // ガウスの stdDeviation、0 = オフ
+    pub style: RenderStyle,              // 視覚スタイル
+    #[deprecated(since = "0.3.0", note = "use style.blur; removed in 1.0")]
+    pub blur: f32,                       // style.blur を使ってください
 }
 
 pub enum PixelSmooth { Nearest, Bilinear }
 ```
 
 すべての struct は `Default` を実装。
+
+## `RenderStyle`
+
+```rust
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RenderStyle {
+    pub blur: f32,          // ガウスの stdDeviation（viewBox 単位）
+    pub corner_radius: f32, // rect / square / rotrect のみ
+}
+```
+
+codec のバイト形式から独立—同じ `(hash, codec)` に異なる `style` を渡す
+と、ハッシュバイトを変えずに視覚的に異なる出力が得られます。デフォルト
+（`RenderStyle::default()`）はゼロコストの fast path、pre-0.3.0 と出力が
+バイト一致。
+
+非 rect ファミリーの codec（circle / triangle / pixel / DCT）に対する
+`corner_radius` は静かに無視されます—TS SDK はコンパイル時に条件型で捕捉、
+Python は `UserWarning` を発出、Rust は data-in / data-out の慣例に従って
+静かに無視する経路を取ります。
 
 ## Codec
 

@@ -11,7 +11,7 @@ use super::options::SearchOptions;
 use super::quant::{
     alpha_to_q, aspect_code, dim_to_q, q_to_alpha, q_to_dim, quant_xy, read_color, write_color,
 };
-use super::raster::{apply_rect, EvalResult};
+use super::raster::{apply_rect, apply_rounded_rect_aa, EvalResult};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
@@ -208,10 +208,21 @@ pub fn encode_body(bw: &mut BitWriter, rects: &[Rect], tw: u32, th: u32, codec: 
     }
 }
 
-pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: &mut [f32]) {
+/// Decode + render rects into `canvas`. `corner_radius` is in canvas pixel
+/// units; `0` keeps the existing hard-edge fast path byte-identical to
+/// pre-0.3.0 output. Positive values switch to AA rounded-rect rendering.
+pub fn decode_render(
+    br: &mut BitReader,
+    codec: &Codec,
+    w: u32,
+    h: u32,
+    canvas: &mut [f32],
+    corner_radius: f32,
+) {
     let x_max = (1u32 << codec.cx_bits) - 1;
     let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
+    let use_aa = corner_radius > 0.0;
     for _ in 0..codec.n_shapes {
         let x_q = br.read(codec.cx_bits);
         let y_q = br.read(codec.cy_bits);
@@ -224,8 +235,16 @@ pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: 
         let rw = q_to_dim(w_q, w, codec.r_bits).round() as i32;
         let rh = q_to_dim(h_q, h, codec.r_bits).round() as i32;
         let alpha = q_to_alpha(a_q, &alpha_levels);
-        let (x0, y0, x1, y1) = rect_bounds(cx, cy, rw, rh);
-        apply_rect(canvas, h as i32, w as i32, x0, y0, x1, y1, alpha, &color);
+        if use_aa {
+            apply_rounded_rect_aa(
+                canvas, h as i32, w as i32,
+                cx as f32, cy as f32, rw as f32, rh as f32,
+                corner_radius, alpha, &color,
+            );
+        } else {
+            let (x0, y0, x1, y1) = rect_bounds(cx, cy, rw, rh);
+            apply_rect(canvas, h as i32, w as i32, x0, y0, x1, y1, alpha, &color);
+        }
     }
 }
 

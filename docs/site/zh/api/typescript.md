@@ -6,9 +6,11 @@ npm 包：[`arthash`](https://www.npmjs.com/package/arthash)。底层是通过 w
 import {
   encode, decode, toSvg,
   encodeSync, decodeSync, toSvgSync,
+  toImageData, toImageBitmap,
   encodeImage, init,
   codec, palette, palettes,
   Preset, Shape,
+  type RenderStyle,
 } from "arthash";
 ```
 
@@ -95,10 +97,10 @@ interface SearchOptions {
 ### `decode(hash, codec, opts?)`
 
 ```ts
-decode(
+decode<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: DecodeOptions,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
 ): Promise<DecodeResult>
 
 interface DecodeOptions {
@@ -106,6 +108,7 @@ interface DecodeOptions {
   overrideAspect?: number;              // 覆盖存储的宽高比
   aa?: number;                          // shape 模式超采样（1 / 2 / 4）
   pixelSmooth?: "nearest" | "bilinear"; // 仅 PIXEL；默认 "nearest"
+  style?: RenderStyle;                  // 视觉样式（见下）
 }
 
 interface DecodeResult {
@@ -119,21 +122,50 @@ interface DecodeResult {
 
 同步版本。需要先 `await init()`。
 
+### `toImageData(hash, codec, opts?)`
+
+仅浏览器。返回可直接喂给 `ctx.putImageData(...)` 的 `ImageData`。参数同
+`decode`。Node 下抛错——请用 `decode()` 配合自己的图像库（sharp /
+@napi-rs/canvas / jimp）。
+
+```ts
+toImageData<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageData>
+```
+
+### `toImageBitmap(hash, codec, opts?)`
+
+仅浏览器。返回适合 GPU 上传的 `ImageBitmap`（`drawImage`、
+`texSubImage2D`、worker `postMessage` transfer list）。参数同 `decode`。
+
+```ts
+toImageBitmap<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageBitmap>
+```
+
 ## SVG 渲染
 
 ### `toSvg(hash, codec, opts?)`
 
 ```ts
-toSvg(
+toSvg<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: SvgRenderOptions,
+  c: C,
+  opts?: SvgRenderOptions & { style?: RenderStyle<C> },
 ): Promise<string>
 
 interface SvgRenderOptions {
   baseSize?: number;            // 长边 px（viewBox 单位）；默认 256
   overrideAspect?: number;
-  blur?: number;                // 高斯 stdDeviation，单位 viewBox；0 = 关
+  style?: RenderStyle;          // 视觉样式（见下）
+  /** @deprecated 0.3.0 起弃用——请改用 `style.blur`。1.0 移除。 */
+  blur?: number;
 }
 ```
 
@@ -142,6 +174,30 @@ interface SvgRenderOptions {
 ### `toSvgSync(hash, codec, opts?)`
 
 同步版本。需要先 `await init()`。
+
+## RenderStyle
+
+```ts
+type RenderStyle<C extends Codec = Codec> = C extends {
+  kind: "rect" | "square" | "rotrect";
+} ? {
+  blur?: number;          // 高斯 stdDeviation（viewBox 单位），0 = 锐利
+  cornerRadius?: number;  // 圆角半径（viewBox 单位），仅 rect 家族
+} : {
+  blur?: number;
+  cornerRadius?: never;   // 非 rect 家族 codec 上设置 = 编译期错误
+};
+```
+
+`RenderStyle` 独立于 codec 的字节格式——同一 `(hash, codec)` 配不同 `style`
+产生视觉不同但字节不变的输出。默认值（两个字段都为 0）走零成本快路径。
+
+`<C>` 泛型在类型层强制 `cornerRadius` 只能用于 rect / square / rotrect
+codec——传给 circle / triangle / pixel / dct 是编译期错误。PIXEL 故意排除
+（瓦片网格在圆角下会出现可见缝隙）。
+
+两个字段在 `decode` / `toSvg` / `toImageData` / `toImageBitmap` 之间应用
+方式一致——`(hash, codec, style)` 在 raster 和 SVG 路径上视觉对齐。
 
 ## Codec
 

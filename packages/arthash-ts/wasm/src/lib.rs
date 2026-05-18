@@ -12,7 +12,7 @@
 use arthash::{
     decode as rs_decode, encode_rgb as rs_encode_rgb, encode_rgba as rs_encode_rgba,
     to_svg as rs_to_svg, Codec, CodecConfig, DecodeOptions, EncodeOptions, PixelSmooth,
-    SearchOptions, ShapeType, Strategy, SvgError, SvgOptions,
+    RenderStyle, SearchOptions, ShapeType, Strategy, SvgError, SvgOptions,
 };
 use js_sys::{Array, Reflect};
 use wasm_bindgen::prelude::*;
@@ -220,6 +220,8 @@ pub fn decode(
     override_aspect: Option<f32>,
     aa: Option<u32>,
     pixel_smooth: Option<String>,
+    corner_radius: Option<f32>,
+    blur: Option<f32>,
 ) -> Result<DecodeResult, JsValue> {
     let c = parse_codec(codec)?;
     let ps = match pixel_smooth.as_deref() {
@@ -235,6 +237,10 @@ pub fn decode(
             override_aspect,
             pixel_smooth: ps,
             aa: aa.unwrap_or(1).max(1),
+            style: RenderStyle {
+                blur: blur.unwrap_or(0.0),
+                corner_radius: corner_radius.unwrap_or(0.0),
+            },
         },
     );
     Ok(DecodeResult {
@@ -246,21 +252,33 @@ pub fn decode(
 
 /// Render a shape-mode hash as a compact SVG string.
 #[wasm_bindgen(js_name = toSvg)]
+#[allow(deprecated)]
 pub fn to_svg(
     hash: &[u8],
     codec: JsValue,
     base_size: u32,
     override_aspect: Option<f32>,
     blur: f32,
+    corner_radius: Option<f32>,
 ) -> Result<String, JsValue> {
     let c = parse_codec(codec)?;
+    // `blur` arrives as a positional f32 (matches pre-0.3.0 TS surface). The
+    // TS SDK coalesces deprecated `opts.blur` and new `opts.style.blur` into
+    // this single value before calling, so we just forward.
     rs_to_svg(
         hash,
         &c,
         SvgOptions {
             base_size,
             override_aspect,
-            blur,
+            style: RenderStyle {
+                blur,
+                corner_radius: corner_radius.unwrap_or(0.0),
+            },
+            // The deprecated `blur` field is kept on `SvgOptions` for Rust
+            // callers; here we use `style.blur` exclusively (it wins over
+            // the deprecated field in `effective_blur()`).
+            blur: 0.0,
         },
     )
     .map_err(|e: SvgError| JsError::new(&e.to_string()).into())

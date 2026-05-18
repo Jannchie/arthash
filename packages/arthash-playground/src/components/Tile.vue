@@ -10,6 +10,9 @@ interface Props {
   nShapes: number;
   baseSize: number;
   blur: number;
+  /** Corner radius (viewBox units). Silently ignored for non-rect-family
+   *  shapes. Default `0`. */
+  cornerRadius?: number;
   seed: number;
   useSvg: boolean;
   ready: boolean;
@@ -79,6 +82,7 @@ async function run() {
       nShapes: props.nShapes,
       baseSize: props.baseSize,
       blur: props.blur,
+      cornerRadius: props.cornerRadius,
       seed: props.seed,
       alphaBits: props.alphaBits,
       colorId: props.colorId,
@@ -119,6 +123,7 @@ watch(
     props.nShapes,
     props.baseSize,
     props.blur,
+    props.cornerRadius,
     props.seed,
     props.useSvg,
     props.alphaBits,
@@ -147,12 +152,10 @@ const rootStyle = computed(() => {
   return {};
 });
 
-// SVG mode bakes blur into the SVG via <feGaussianBlur>. In raster (canvas)
-// mode the decoded pixels are painted directly, so blur has nowhere to apply
-// — fall back to a CSS filter on the canvas element so the knob still works.
-const canvasStyle = computed(() =>
-  props.blur > 0 ? { filter: `blur(${props.blur}px)` } : {},
-);
+// Since 0.3.0, blur is baked into the decoded RGBA by `runPipeline` via
+// `style.blur` — same value the SVG path uses for `<feGaussianBlur>`. No
+// CSS filter needed; the wasm output already carries the blur.
+const canvasStyle = computed(() => ({}));
 
 // On hover (SVG mode), reveal the original image instantly behind the SVG
 // and fade out each SVG shape over ~1s — biggest first (the background path

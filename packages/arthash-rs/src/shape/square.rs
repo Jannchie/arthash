@@ -10,7 +10,7 @@ use super::options::SearchOptions;
 use super::quant::{
     alpha_to_q, aspect_code, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color, write_color,
 };
-use super::raster::{apply_rect, EvalResult};
+use super::raster::{apply_rect, apply_rounded_rect_aa, EvalResult};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
@@ -196,10 +196,21 @@ pub fn encode_body(bw: &mut BitWriter, squares: &[Square], tw: u32, th: u32, cod
     }
 }
 
-pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: &mut [f32]) {
+/// Decode + render squares into `canvas`. `corner_radius` is in canvas pixel
+/// units; `0` keeps the existing hard-edge fast path byte-identical to
+/// pre-0.3.0 output.
+pub fn decode_render(
+    br: &mut BitReader,
+    codec: &Codec,
+    w: u32,
+    h: u32,
+    canvas: &mut [f32],
+    corner_radius: f32,
+) {
     let x_max = (1u32 << codec.cx_bits) - 1;
     let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
+    let use_aa = corner_radius > 0.0;
     for _ in 0..codec.n_shapes {
         let x_q = br.read(codec.cx_bits);
         let y_q = br.read(codec.cy_bits);
@@ -210,8 +221,16 @@ pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: 
         let cy = (y_q as f32 / y_max as f32 * (h - 1) as f32).round() as i32;
         let s = q_to_r(s_q, w, h, codec.r_bits).round() as i32;
         let alpha = q_to_alpha(a_q, &alpha_levels);
-        let (x0, y0, x1, y1) = square_bounds(cx, cy, s);
-        apply_rect(canvas, h as i32, w as i32, x0, y0, x1, y1, alpha, &color);
+        if use_aa {
+            apply_rounded_rect_aa(
+                canvas, h as i32, w as i32,
+                cx as f32, cy as f32, s as f32, s as f32,
+                corner_radius, alpha, &color,
+            );
+        } else {
+            let (x0, y0, x1, y1) = square_bounds(cx, cy, s);
+            apply_rect(canvas, h as i32, w as i32, x0, y0, x1, y1, alpha, &color);
+        }
     }
 }
 

@@ -139,30 +139,37 @@ export const Preset = {
 } as const;
 export type Preset = (typeof Preset)[keyof typeof Preset];
 
-/** Factory namespace — `codec.dct()`, `codec.triangle({ n: 64 })`, … */
+/** Factory namespace — `codec.dct()`, `codec.triangle({ n: 64 })`, …
+ *
+ *  Each factory's return type is inferred to its narrowed shape (e.g.
+ *  `{ kind: 'rect', n: number, color?: ColorMode }`) rather than the broad
+ *  `Codec` union. This narrowing lets `RenderStyle<C>`'s conditional type
+ *  enforce `cornerRadius` is only allowed for rect-family codecs at call
+ *  sites. Returns are still assignable to `Codec` since every narrow type
+ *  is a member of the union. */
 export const codec = {
-  dct(): Codec {
-    return { kind: "dct" };
+  dct() {
+    return { kind: "dct" as const };
   },
-  circle(opts: { n?: number; color?: ColorMode } = {}): Codec {
-    return { kind: "circle", n: opts.n ?? 12, color: opts.color };
+  circle(opts: { n?: number; color?: ColorMode } = {}) {
+    return { kind: "circle" as const, n: opts.n ?? 12, color: opts.color };
   },
-  triangle(opts: { n?: number; color?: ColorMode } = {}): Codec {
-    return { kind: "triangle", n: opts.n ?? 12, color: opts.color };
+  triangle(opts: { n?: number; color?: ColorMode } = {}) {
+    return { kind: "triangle" as const, n: opts.n ?? 12, color: opts.color };
   },
-  square(opts: { n?: number; color?: ColorMode } = {}): Codec {
-    return { kind: "square", n: opts.n ?? 12, color: opts.color };
+  square(opts: { n?: number; color?: ColorMode } = {}) {
+    return { kind: "square" as const, n: opts.n ?? 12, color: opts.color };
   },
-  rect(opts: { n?: number; color?: ColorMode } = {}): Codec {
-    return { kind: "rect", n: opts.n ?? 12, color: opts.color };
+  rect(opts: { n?: number; color?: ColorMode } = {}) {
+    return { kind: "rect" as const, n: opts.n ?? 12, color: opts.color };
   },
   rotatedRect(opts: {
     n?: number;
     thetaBits?: number;
     color?: ColorMode;
-  } = {}): Codec {
+  } = {}) {
     return {
-      kind: "rotrect",
+      kind: "rotrect" as const,
       n: opts.n ?? 12,
       thetaBits: opts.thetaBits,
       color: opts.color,
@@ -172,9 +179,9 @@ export const codec = {
     n?: number;
     gridAspect?: number;
     color?: ColorMode;
-  } = {}): Codec {
+  } = {}) {
     return {
-      kind: "pixel",
+      kind: "pixel" as const,
       n: opts.n ?? 12,
       gridAspect: opts.gridAspect,
       color: opts.color,
@@ -344,6 +351,36 @@ export interface EncodeOptions {
   search?: SearchOptions;
 }
 
+/** Codec kinds where corner-rounding is meaningful. PIXEL is excluded
+ *  intentionally — its tile grid would show seams between rounded cells. */
+type RectFamilyKind = "rect" | "square" | "rotrect";
+
+/** Visual styling applied at render time (decode, SVG, raster helpers).
+ *  Independent of the codec byte format — same `(hash, codec)` with different
+ *  `RenderStyle` produces visually distinct but byte-identical hashes.
+ *
+ *  Both fields are in viewBox / base-size units. When `C` is a specific
+ *  codec kind, `cornerRadius` is only available for rect-family codecs;
+ *  passing it to circle / triangle / pixel / DCT is a compile error
+ *  (via `cornerRadius?: never` in the non-rect branch). */
+export type RenderStyle<C extends Codec = Codec> = C extends {
+  kind: RectFamilyKind;
+}
+  ? {
+      /** Gaussian blur stdDeviation in viewBox units. `0` = sharp. */
+      blur?: number;
+      /** Round corners by this radius (viewBox units). `0` = sharp.
+       *  Only available for rect / square / rotrect codecs. */
+      cornerRadius?: number;
+    }
+  : {
+      /** Gaussian blur stdDeviation in viewBox units. `0` = sharp. */
+      blur?: number;
+      /** cornerRadius is only supported for rect / square / rotrect.
+       *  Setting it on circle / triangle / pixel / DCT is a type error. */
+      cornerRadius?: never;
+    };
+
 export interface DecodeOptions {
   /** Long-edge pixel target. Default 256. */
   baseSize?: number;
@@ -354,13 +391,18 @@ export interface DecodeOptions {
   aa?: number;
   /** PIXEL only — `"nearest"` (default) or `"bilinear"`. */
   pixelSmooth?: "nearest" | "bilinear";
+  /** Visual styling — blur and (for rect/square/rotrect) cornerRadius. */
+  style?: RenderStyle;
 }
 
 export interface SvgRenderOptions {
   baseSize?: number;
   overrideAspect?: number;
-  /** Gaussian blur stdDeviation in viewBox units. `0` = no blur. */
+  /** Gaussian blur stdDeviation in viewBox units. `0` = no blur.
+   *  @deprecated Use `style.blur` instead. Removed in 1.0. */
   blur?: number;
+  /** Visual styling — blur and (for rect/square/rotrect) cornerRadius. */
+  style?: RenderStyle;
 }
 
 export interface DecodeResult {
@@ -544,23 +586,55 @@ export async function encodeRgba(
   );
 }
 
-/** Decode a placeholder hash to RGBA pixels. */
-export async function decode(
+/** Coalesce deprecated `opts.blur` with `opts.style?.blur` (style wins).
+ *  Optionally `console.warn` in dev when the deprecated path is used —
+ *  silenced when both are set or when only `style.blur` is present. */
+function resolveSvgBlur(opts: SvgRenderOptions): number {
+  const styleBlur = opts.style?.blur;
+  if (styleBlur != null && styleBlur > 0) return styleBlur;
+  const legacy = opts.blur;
+  if (legacy != null && legacy > 0) {
+    // Once-per-session dev warning. Production bundlers strip this branch
+    // when DEV is constant-false; otherwise the runtime check is one extra
+    // property read.
+    devWarnBlurDeprecation();
+    return legacy;
+  }
+  return 0;
+}
+
+let _blurDeprecationWarned = false;
+function devWarnBlurDeprecation(): void {
+  if (_blurDeprecationWarned) return;
+  _blurDeprecationWarned = true;
+  if (typeof console !== "undefined" && console.warn) {
+    console.warn(
+      "[arthash] toSvg opts.blur is deprecated since 0.3.0 — use opts.style.blur instead. Removed in 1.0.",
+    );
+  }
+}
+
+/** Decode a placeholder hash to RGBA pixels. The codec generic `C` lets the
+ *  type system enforce that `cornerRadius` is only set on rect-family
+ *  codecs (rect / square / rotrect) — TypeScript errors at the call site
+ *  rather than at runtime. */
+export async function decode<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts: DecodeOptions = {},
+  c: C,
+  opts: Omit<DecodeOptions, "style"> & { style?: RenderStyle<C> } = {},
 ): Promise<DecodeResult> {
   await ready();
   return decodeSync(hash, c, opts);
 }
 
 /** Synchronous decode — requires `await init()` to have completed first. */
-export function decodeSync(
+export function decodeSync<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts: DecodeOptions = {},
+  c: C,
+  opts: Omit<DecodeOptions, "style"> & { style?: RenderStyle<C> } = {},
 ): DecodeResult {
   assertReady();
+  const style = opts.style as RenderStyle | undefined;
   const r = wasmDecode(
     hash,
     codecToFfi(c),
@@ -568,6 +642,8 @@ export function decodeSync(
     opts.overrideAspect,
     opts.aa,
     opts.pixelSmooth,
+    (style as { cornerRadius?: number } | undefined)?.cornerRadius,
+    style?.blur,
   );
   const out: DecodeResult = { w: r.w, h: r.h, rgba: r.rgba };
   r.free();
@@ -575,29 +651,71 @@ export function decodeSync(
 }
 
 /** Render a shape-mode hash as a compact SVG string. */
-export async function toSvg(
+export async function toSvg<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts: SvgRenderOptions = {},
+  c: C,
+  opts: Omit<SvgRenderOptions, "style"> & { style?: RenderStyle<C> } = {},
 ): Promise<string> {
   await ready();
   return toSvgSync(hash, c, opts);
 }
 
 /** Synchronous SVG render — requires `await init()` first. */
-export function toSvgSync(
+export function toSvgSync<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts: SvgRenderOptions = {},
+  c: C,
+  opts: Omit<SvgRenderOptions, "style"> & { style?: RenderStyle<C> } = {},
 ): string {
   assertReady();
+  const blur = resolveSvgBlur(opts as SvgRenderOptions);
+  const cornerRadius = (opts.style as { cornerRadius?: number } | undefined)
+    ?.cornerRadius;
   return wasmToSvg(
     hash,
     codecToFfi(c),
     opts.baseSize ?? 256,
     opts.overrideAspect,
-    opts.blur ?? 0,
+    blur,
+    cornerRadius,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Raster output helpers (browser-only)
+// ---------------------------------------------------------------------------
+
+const NODE_RASTER_HINT =
+  " is browser-only (needs ImageData / createImageBitmap). In Node, call decode() and use sharp / @napi-rs/canvas / jimp to build the bitmap yourself.";
+
+/** Decode a hash and return an `ImageData` ready for `ctx.putImageData`.
+ *  Browser-only — in Node, use `decode()` + your image library directly. */
+export async function toImageData<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts: Omit<DecodeOptions, "style"> & { style?: RenderStyle<C> } = {},
+): Promise<ImageData> {
+  if (typeof ImageData === "undefined") {
+    throw new Error("arthash.toImageData" + NODE_RASTER_HINT);
+  }
+  const { w, h, rgba } = await decode(hash, c, opts);
+  // ImageData expects a Uint8ClampedArray view. We copy because the wasm
+  // buffer may be transferable from a worker context; a fresh allocation
+  // detaches ownership from the wasm memory.
+  return new ImageData(new Uint8ClampedArray(rgba), w, h);
+}
+
+/** Decode a hash and return an `ImageBitmap` suitable for GPU upload (canvas
+ *  drawImage, WebGL texSubImage, worker transferList). Browser-only. */
+export async function toImageBitmap<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts: Omit<DecodeOptions, "style"> & { style?: RenderStyle<C> } = {},
+): Promise<ImageBitmap> {
+  if (typeof createImageBitmap === "undefined") {
+    throw new Error("arthash.toImageBitmap" + NODE_RASTER_HINT);
+  }
+  const data = await toImageData(hash, c, opts);
+  return createImageBitmap(data);
 }
 
 // ---------------------------------------------------------------------------

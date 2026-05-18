@@ -324,6 +324,9 @@ export interface RunOpts {
   baseSize: number;
   seed: number;
   blur: number;
+  /** Corner radius for rect / square / rotrect (viewBox units). Silently
+   *  ignored for other shapes. */
+  cornerRadius?: number;
   /** Override (rare) — advanced panel knob. */
   alphaBits?: number;
   /** ID of an entry in COLOR_OPTIONS. */
@@ -335,6 +338,15 @@ export interface RunOpts {
   useSvg?: boolean;
   /** Hill-climb search knobs. Ignored by DCT (which has no hill-climb). */
   search?: SearchConfig;
+}
+
+/** True if `cornerRadius` is honored for the given shape (rect-family). */
+export function supportsCornerRadius(shape: ShapeType): boolean {
+  return (
+    shape === Shape.RECT
+    || shape === Shape.SQUARE
+    || shape === Shape.ROTATED_RECT
+  );
 }
 
 /** Build a codec from playground RunOpts using the raw spec escape hatch —
@@ -390,7 +402,15 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   const hash = pfEncode(rgb, w, h, codec, encOpts);
   const encodeMs = performance.now() - t0;
 
-  const decodeArgs: DecodeOptions = { baseSize: opts.baseSize };
+  // Style is applied uniformly across decode + to_svg — same `(hash, codec,
+  // style)` produces visually matched output on both paths. cornerRadius is
+  // silently ignored for non-rect-family shapes; the wasm core does this in
+  // the shape-specific decode_render path.
+  const style = {
+    blur: opts.blur,
+    cornerRadius: opts.cornerRadius ?? 0,
+  };
+  const decodeArgs: DecodeOptions = { baseSize: opts.baseSize, style };
 
   const wantsSvg = opts.useSvg === true && supportsSvg(opts.shape);
 
@@ -406,7 +426,7 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
   if (supportsSvg(opts.shape)) {
     const tSvg0 = performance.now();
     try {
-      svg = pfToSvg(hash, codec, { ...decodeArgs, blur: opts.blur });
+      svg = pfToSvg(hash, codec, { baseSize: opts.baseSize, style });
       if (svg && !/preserveAspectRatio=/.test(svg)) {
         svg = svg.replace(/<svg\b/, '<svg preserveAspectRatio="none"');
       }

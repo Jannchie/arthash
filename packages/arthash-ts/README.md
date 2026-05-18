@@ -14,7 +14,7 @@ import { encode, decode, toSvg, codec, Preset, encodeImage } from "arthash";
 const c = codec.preset(Preset.LargeTriangle);        // triangle, n=64
 const hash = await encode(rgbBytes, width, height, c);
 const { w, h, rgba } = await decode(hash, c);
-const svg = await toSvg(hash, c, { blur: 12 });
+const svg = await toSvg(hash, c, { style: { blur: 12 } });
 // → inline-ready: '<svg xmlns="..." viewBox="...">...</svg>'
 
 // Browser convenience — load + resize + encode in one call
@@ -24,7 +24,36 @@ const hash2 = await encodeImage(imageUrlOrBlob, c);
 import { encodeSync, decodeSync, toSvgSync, init } from "arthash";
 await init();
 const fastHash = encodeSync(rgbBytes, width, height, c);
+
+// Raster output as ImageData / ImageBitmap (browser only):
+import { toImageData, toImageBitmap } from "arthash";
+const data = await toImageData(hash, codec.rect({ n: 32 }), {
+  style: { cornerRadius: 1 },
+});
+ctx.putImageData(data, 0, 0);
 ```
+
+## Visual styling — `RenderStyle`
+
+Pass `style` to `decode` / `toSvg` / `toImageData` / `toImageBitmap` for
+consistent visual decoration without changing the hash bytes:
+
+```ts
+const c = codec.rect({ n: 32 });
+const svg = await toSvg(h, c, { style: { blur: 2, cornerRadius: 1 } });
+```
+
+`cornerRadius` is only available for rect / square / rotrect — passing it
+to other codecs is a compile-time error via the conditional `RenderStyle<C>`
+type.
+
+## Progressive dissolve animation
+
+For fading a hash placeholder shape-by-shape as the real image loads — a
+copy-pastable HTML / CSS / JS recipe (no framework, no extra SDK methods)
+is in the docs:
+
+→ [Dissolve animation guide](https://github.com/Jannchie/arthash/blob/main/docs/site/guide/dissolve-animation.md)
 
 ## Codec factories
 

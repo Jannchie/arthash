@@ -7,9 +7,11 @@ Backed by `arthash-rs` compiled to WebAssembly via wasm-bindgen.
 import {
   encode, decode, toSvg,
   encodeSync, decodeSync, toSvgSync,
+  toImageData, toImageBitmap,
   encodeImage, init,
   codec, palette, palettes,
   Preset, Shape,
+  type RenderStyle,
 } from "arthash";
 ```
 
@@ -104,10 +106,10 @@ byte-format-identical regardless of search budget.
 ### `decode(hash, codec, opts?)`
 
 ```ts
-decode(
+decode<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: DecodeOptions,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
 ): Promise<DecodeResult>
 
 interface DecodeOptions {
@@ -115,6 +117,7 @@ interface DecodeOptions {
   overrideAspect?: number;              // override stored aspect ratio
   aa?: number;                          // shape supersample (1 / 2 / 4)
   pixelSmooth?: "nearest" | "bilinear"; // PIXEL only; default "nearest"
+  style?: RenderStyle;                  // visual styling (see below)
 }
 
 interface DecodeResult {
@@ -128,21 +131,51 @@ interface DecodeResult {
 
 Synchronous variant. Requires `await init()` first.
 
+### `toImageData(hash, codec, opts?)`
+
+Browser-only. Returns an `ImageData` ready for `ctx.putImageData(...)`.
+Same options as `decode`. In Node it throws — call `decode()` and use
+your image library (sharp / @napi-rs/canvas / jimp) directly.
+
+```ts
+toImageData<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageData>
+```
+
+### `toImageBitmap(hash, codec, opts?)`
+
+Browser-only. Returns an `ImageBitmap` suitable for GPU upload
+(`drawImage`, `texSubImage2D`, worker `postMessage` transfer list).
+Same options as `decode`.
+
+```ts
+toImageBitmap<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageBitmap>
+```
+
 ## SVG render
 
 ### `toSvg(hash, codec, opts?)`
 
 ```ts
-toSvg(
+toSvg<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: SvgRenderOptions,
+  c: C,
+  opts?: SvgRenderOptions & { style?: RenderStyle<C> },
 ): Promise<string>
 
 interface SvgRenderOptions {
   baseSize?: number;            // long-edge in px (viewBox units); default 256
   overrideAspect?: number;
-  blur?: number;                // Gaussian stdDeviation in viewBox units; 0 = off
+  style?: RenderStyle;          // visual styling (see below)
+  /** @deprecated since 0.3.0 — use `style.blur` instead. Removed in 1.0. */
+  blur?: number;
 }
 ```
 
@@ -152,6 +185,34 @@ and PIXEL have no SVG primitive form and throw.
 ### `toSvgSync(hash, codec, opts?)`
 
 Synchronous variant. Requires `await init()` first.
+
+## RenderStyle
+
+```ts
+type RenderStyle<C extends Codec = Codec> = C extends {
+  kind: "rect" | "square" | "rotrect";
+} ? {
+  blur?: number;          // Gaussian stdDeviation in viewBox units; 0 = sharp
+  cornerRadius?: number;  // corner radius (viewBox units); rect-family only
+} : {
+  blur?: number;
+  cornerRadius?: never;   // type error to set on non-rect-family codecs
+};
+```
+
+`RenderStyle` is independent of the codec byte format — same `(hash, codec)`
+with different `style` produces visually distinct outputs without changing
+the hash bytes. Default (both fields `0`) takes the zero-cost fast path.
+
+The `<C>` generic enforces at the type level that `cornerRadius` is only
+available for rect / square / rotrect codecs — passing it to a circle /
+triangle / pixel / dct codec is a compile-time error. PIXEL is
+intentionally excluded (the tile grid would show seams between rounded
+cells).
+
+Both fields are applied identically across `decode` / `toSvg` /
+`toImageData` / `toImageBitmap` — `(hash, codec, style)` produces visually
+matched output across raster and SVG paths.
 
 ## Codec
 

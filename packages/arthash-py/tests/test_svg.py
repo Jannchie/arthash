@@ -104,15 +104,16 @@ def test_svg_is_deterministic(rgb_random_seed42):
 def test_blur_zero_no_filter(rgb_random_seed42):
     codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
     h = encode(rgb_random_seed42, codec, seed=0)
-    svg = to_svg(h, codec, blur=0)
+    svg = to_svg(h, codec)
     assert "filter" not in svg
     assert "feGaussianBlur" not in svg
 
 
 def test_blur_emits_filter_element(rgb_random_seed42):
+    from arthash import RenderStyle
     codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
     h = encode(rgb_random_seed42, codec, seed=0)
-    svg = to_svg(h, codec, blur=12)
+    svg = to_svg(h, codec, style=RenderStyle(blur=12))
     root = _parse(svg)
     children = list(root)
     tags = [_strip_ns(c.tag) for c in children]
@@ -122,6 +123,81 @@ def test_blur_emits_filter_element(rgb_random_seed42):
     inner = list(children[g_idx])
     assert _strip_ns(inner[0].tag) == "path"  # bg path moved inside <g>
     assert len(inner) == 1 + codec.n_shapes
+
+
+def test_deprecated_blur_kwarg_still_works(rgb_random_seed42):
+    """`to_svg(blur=...)` is deprecated since 0.3.0 — emits a warning but
+    still produces the correct output. The deprecation window goes until 1.0."""
+    import warnings
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        old_path = to_svg(h, codec, blur=8)
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+    new_path = to_svg(h, codec, style=RenderStyle(blur=8))
+    assert old_path == new_path
+
+
+def test_style_blur_wins_over_deprecated_blur(rgb_random_seed42):
+    import warnings
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        svg = to_svg(h, codec, blur=5, style=RenderStyle(blur=12))
+    # style.blur wins → stdDeviation should be 12, not 5.
+    assert 'stdDeviation="12"' in svg
+    assert 'stdDeviation="5"' not in svg
+
+
+# ----------------------------- corner_radius -----------------------------
+
+def test_corner_radius_emits_rx_ry_on_rect(rgb_random_seed42):
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.RECT, n_shapes=3)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    svg = to_svg(h, codec, style=RenderStyle(corner_radius=4))
+    assert svg.count(' rx="4"') == 3
+    assert svg.count(' ry="4"') == 3
+
+
+def test_corner_radius_emits_rx_ry_on_square(rgb_random_seed42):
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.SQUARE, n_shapes=3)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    svg = to_svg(h, codec, style=RenderStyle(corner_radius=2.5))
+    assert svg.count(' rx="2.5"') == 3
+
+
+def test_corner_radius_zero_no_rx_ry(rgb_random_seed42):
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.RECT, n_shapes=3)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    svg = to_svg(h, codec, style=RenderStyle(corner_radius=0))
+    assert " rx=" not in svg
+    assert " ry=" not in svg
+
+
+def test_corner_radius_on_circle_warns_and_ignored(rgb_random_seed42):
+    """Setting corner_radius on a non-rect codec emits UserWarning and the
+    value is silently dropped — matches the TS conditional-type behavior
+    (caught at compile time there, at runtime here)."""
+    import warnings
+    from arthash import RenderStyle
+    codec = Codec(shape=ShapeType.CIRCLE, n_shapes=4)
+    h = encode(rgb_random_seed42, codec, seed=0)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        svg = to_svg(h, codec, style=RenderStyle(corner_radius=5))
+    # Circles have no rx attribute in any case.
+    assert " rx=" not in svg
+    assert any(
+        issubclass(w.category, UserWarning) and "corner_radius" in str(w.message)
+        for w in caught
+    )
 
 
 # ----------------------------- error cases -----------------------------

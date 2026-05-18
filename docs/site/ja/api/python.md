@@ -4,7 +4,7 @@ PyPI パッケージ：[`arthash`](https://pypi.org/project/arthash/)。PyO3 whe
 
 ```python
 from arthash import (
-    Codec, Preset, Palette,
+    Codec, Preset, Palette, RenderStyle,
     encode, decode, to_svg,
 )
 from arthash import palettes
@@ -25,13 +25,13 @@ from arthash import palettes
 
 `codec` が `None` のときデフォルトは `Codec.dct()`。
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=None, pixel_smooth=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
 
-`(width, height, rgba)` を返します。`rgba` は形状 `(h, w, 4)`、dtype `uint8` の `numpy.ndarray`。`codec` が `None` のときデフォルトは `Codec.dct()`。
+`(width, height, rgba)` を返します。`rgba` は形状 `(h, w, 4)`、dtype `uint8` の `numpy.ndarray`。`codec` が `None` のときデフォルトは `Codec.dct()`。`style` は `RenderStyle` でぼかしと角丸を制御します（後述）。
 
-### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, blur=0.0) -> str`
+### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 
-shape モードのハッシュを SVG 文字列としてレンダリング。`CIRCLE` / `TRIANGLE` / `SQUARE` / `RECT` / `ROTATED_RECT` のみサポート。DCT と PIXEL は `ValueError` を投げます。
+shape モードのハッシュを SVG 文字列としてレンダリング。`CIRCLE` / `TRIANGLE` / `SQUARE` / `RECT` / `ROTATED_RECT` のみサポート。DCT と PIXEL は `ValueError` を投げます。`style` はぼかしと角丸を制御します。`blur` kwarg は **0.3.0 以降非推奨**—`style=RenderStyle(blur=...)` を使ってください。1.0 で削除予定。
 
 ## `Codec`
 
@@ -114,6 +114,32 @@ Palette.from_hex(["#aabbcc", ...])
 
 # 同梱定数
 from arthash.palettes import PICO8, GAMEBOY, NES, MORANDI, MONO
+```
+
+## `RenderStyle`
+
+```python
+@dataclass
+class RenderStyle:
+    blur: float = 0.0          # ガウスの stdDeviation（viewBox 単位）；0 = シャープ
+    corner_radius: float = 0.0 # rect / square / rotrect のみ；0 = 鋭角
+```
+
+codec のバイト形式と独立—同じ `(hash, codec)` に異なる `style` を渡すと、
+ハッシュバイトを変えずに視覚的に異なる出力が得られます。デフォルト（両
+フィールド 0）はゼロコストの fast path。
+
+非 rect ファミリーの codec（circle / triangle / pixel / DCT）で
+`corner_radius` を設定すると `UserWarning` が出て値は静かに無視されます—
+TS SDK はコンパイル時に条件型でこれを捕捉しますが、Python は意図を揃え
+るために実行時警告にフォールバックします。
+
+```python
+from arthash import RenderStyle, decode, to_svg, Codec
+
+style = RenderStyle(blur=2.0, corner_radius=4.0)
+w, h, rgba = decode(hash_bytes, Codec.rect(n=32), style=style)
+svg = to_svg(hash_bytes, Codec.rect(n=32), style=style)
 ```
 
 ## `EncodeOptions` / 検索予算

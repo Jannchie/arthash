@@ -473,6 +473,138 @@ pub fn quad_row_range(v: [(i32, i32); 4], h: u32) -> (i32, i32) {
     (ymin, ymax)
 }
 
+/// Apply (commit) an AA rounded rect onto the linear f32 canvas.
+///
+/// Distance-field rasterizer: for each pixel sample we compute the SDF
+/// distance to the rounded-rect surface, then convert to coverage in a
+/// 1-pixel band (`coverage = clamp(0.5 - sdf, 0, 1)`). Coverage scales the
+/// caller's `alpha` for that pixel — so an AA edge pixel covered at 30%
+/// alpha-blends with 30% of the requested alpha.
+///
+/// `cx`/`cy` are the rect center, `rw`/`rh` are full width/height,
+/// `radius` is corner radius (clamped to `min(rw, rh) / 2`). All in canvas
+/// pixel units. Caller responsible for scaling by supersample factor.
+///
+/// When `radius == 0` this still anti-aliases the four straight edges —
+/// not a drop-in replacement for [`apply_rect`] (which is hard-edged).
+/// The hard-edge fast path stays in `apply_rect` for byte-format
+/// invariance with pre-0.3.0 output.
+pub fn apply_rounded_rect_aa(
+    canvas: &mut [f32],
+    th: i32,
+    tw: i32,
+    cx: f32,
+    cy: f32,
+    rw: f32,
+    rh: f32,
+    radius: f32,
+    alpha: f32,
+    color: &[f32; 3],
+) {
+    let hw = rw * 0.5;
+    let hh = rh * 0.5;
+    if hw <= 0.0 || hh <= 0.0 {
+        return;
+    }
+    let r = radius.max(0.0).min(hw.min(hh));
+    // Expand the iteration bbox by 1 px on every side for the AA fringe.
+    let xmin = ((cx - hw - 0.5).floor() as i32).max(0);
+    let xmax = ((cx + hw + 0.5).ceil() as i32).min(tw - 1);
+    let ymin = ((cy - hh - 0.5).floor() as i32).max(0);
+    let ymax = ((cy + hh + 0.5).ceil() as i32).min(th - 1);
+    if xmin > xmax || ymin > ymax {
+        return;
+    }
+    let inner_hw = hw - r;
+    let inner_hh = hh - r;
+
+    for y in ymin..=ymax {
+        let dy = (y as f32 + 0.5) - cy;
+        let qy = (dy.abs() - inner_hh).max(0.0);
+        let row_off = (y * tw) as usize * 3;
+        for x in xmin..=xmax {
+            let dx = (x as f32 + 0.5) - cx;
+            let qx = (dx.abs() - inner_hw).max(0.0);
+            let d = (qx * qx + qy * qy).sqrt() - r;
+            let cov = (0.5 - d).clamp(0.0, 1.0);
+            if cov > 0.0 {
+                let a = alpha * cov;
+                let one_ma = 1.0 - a;
+                let p = row_off + (x as usize) * 3;
+                canvas[p] = one_ma * canvas[p] + a * color[0];
+                canvas[p + 1] = one_ma * canvas[p + 1] + a * color[1];
+                canvas[p + 2] = one_ma * canvas[p + 2] + a * color[2];
+            }
+        }
+    }
+}
+
+/// Apply (commit) an AA rotated rounded rect onto the linear f32 canvas.
+///
+/// `theta_rad` is the rotation in radians (counter-clockwise about
+/// `(cx, cy)`). The SDF is evaluated in the rect's local axis-aligned frame,
+/// matching SVG's `<rect rx ry transform="rotate(...)">` semantics: corners
+/// are rounded in pre-rotation space, then rotated.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_rotated_rounded_rect_aa(
+    canvas: &mut [f32],
+    th: i32,
+    tw: i32,
+    cx: f32,
+    cy: f32,
+    rw: f32,
+    rh: f32,
+    theta_rad: f32,
+    radius: f32,
+    alpha: f32,
+    color: &[f32; 3],
+) {
+    let hw = rw * 0.5;
+    let hh = rh * 0.5;
+    if hw <= 0.0 || hh <= 0.0 {
+        return;
+    }
+    let r = radius.max(0.0).min(hw.min(hh));
+    let (sin_t, cos_t) = theta_rad.sin_cos();
+    // Axis-aligned bbox of the rotated rect (+1 px AA fringe).
+    let abs_cos = cos_t.abs();
+    let abs_sin = sin_t.abs();
+    let half_w_rot = hw * abs_cos + hh * abs_sin;
+    let half_h_rot = hw * abs_sin + hh * abs_cos;
+    let xmin = ((cx - half_w_rot - 0.5).floor() as i32).max(0);
+    let xmax = ((cx + half_w_rot + 0.5).ceil() as i32).min(tw - 1);
+    let ymin = ((cy - half_h_rot - 0.5).floor() as i32).max(0);
+    let ymax = ((cy + half_h_rot + 0.5).ceil() as i32).min(th - 1);
+    if xmin > xmax || ymin > ymax {
+        return;
+    }
+    let inner_hw = hw - r;
+    let inner_hh = hh - r;
+
+    for y in ymin..=ymax {
+        let py_world = (y as f32 + 0.5) - cy;
+        let row_off = (y * tw) as usize * 3;
+        for x in xmin..=xmax {
+            let px_world = (x as f32 + 0.5) - cx;
+            // Inverse rotation: world → local axis-aligned frame.
+            let lx = cos_t * px_world + sin_t * py_world;
+            let ly = -sin_t * px_world + cos_t * py_world;
+            let qx = (lx.abs() - inner_hw).max(0.0);
+            let qy = (ly.abs() - inner_hh).max(0.0);
+            let d = (qx * qx + qy * qy).sqrt() - r;
+            let cov = (0.5 - d).clamp(0.0, 1.0);
+            if cov > 0.0 {
+                let a = alpha * cov;
+                let one_ma = 1.0 - a;
+                let p = row_off + (x as usize) * 3;
+                canvas[p] = one_ma * canvas[p] + a * color[0];
+                canvas[p + 1] = one_ma * canvas[p + 1] + a * color[1];
+                canvas[p + 2] = one_ma * canvas[p + 2] + a * color[2];
+            }
+        }
+    }
+}
+
 /// Apply (commit) a TRIANGLE onto the canvas using the same edge functions.
 pub fn apply_triangle(
     canvas: &mut [f32],

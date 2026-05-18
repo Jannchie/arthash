@@ -24,6 +24,7 @@ import {
   fmtMs,
   loadImage,
   runPipeline,
+  supportsCornerRadius,
   supportsSvg,
   type SearchConfig,
 } from "../pipeline";
@@ -37,6 +38,9 @@ const shape = ref<ShapeType>(Shape.RECT);
 const nShapes = ref(48);
 const baseSize = ref(512);
 const blur = ref(0);
+// Default cornerRadius=4 — visible softening at preview size, ignored for
+// non-rect shapes via the wasm core's silent-ignore path.
+const cornerRadius = ref(4);
 const useSvg = ref(true);
 const fps = ref(12);
 const playing = ref(true);
@@ -53,11 +57,13 @@ const DEBOUNCE_MS = 200;
 const nShapesD = refDebounced(nShapes, DEBOUNCE_MS);
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
+const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
 
 const svgPossible = computed(() => supportsSvg(shape.value));
 const renderSvg = computed(() => useSvg.value && svgPossible.value);
+const cornerRadiusVisible = computed(() => supportsCornerRadius(shape.value));
 
 const shapeOptions: Array<{ value: ShapeType; label: string }> = [
   { value: Shape.RECT, label: "Rect" },
@@ -186,6 +192,7 @@ function renderOnce() {
       nShapes: nShapesD.value,
       baseSize: baseSizeD.value,
       blur: blurD.value,
+      cornerRadius: cornerRadiusD.value,
       seed: seed.value,
       alphaBits: advancedD.value.alphaBits,
       colorId: colorId.value,
@@ -233,6 +240,7 @@ watch(
     nShapesD,
     baseSizeD,
     blurD,
+    cornerRadiusD,
     renderSvg,
     colorId,
     advancedD,
@@ -318,6 +326,10 @@ const previewStyle = computed(() => {
       <label class="ctl" v-if="svgPossible">
         <span>blur</span>
         <input type="number" min="0" max="32" step="1" v-model.number="blur" />
+      </label>
+      <label class="ctl" v-if="cornerRadiusVisible">
+        <span>corner_r</span>
+        <input type="number" min="0" max="32" step="0.5" v-model.number="cornerRadius" />
       </label>
       <label class="ctl toggle" v-if="svgPossible">
         <input type="checkbox" v-model="useSvg" />

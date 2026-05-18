@@ -60,6 +60,10 @@ export default defineConfig({
                 { text: "Basic Usage", link: "/guide/basic-usage" },
                 { text: "Modes & Codecs", link: "/guide/modes" },
                 { text: "Palettes", link: "/guide/palettes" },
+                {
+                  text: "Dissolve animation",
+                  link: "/guide/dissolve-animation",
+                },
               ],
             },
           ],
@@ -128,6 +132,10 @@ export default defineConfig({
                 { text: "基础用法", link: "/zh/guide/basic-usage" },
                 { text: "模式与 Codec", link: "/zh/guide/modes" },
                 { text: "调色板", link: "/zh/guide/palettes" },
+                {
+                  text: "渐进溶解动画",
+                  link: "/zh/guide/dissolve-animation",
+                },
               ],
             },
           ],
@@ -201,6 +209,10 @@ export default defineConfig({
                 { text: "基本的な使い方", link: "/ja/guide/basic-usage" },
                 { text: "モードと Codec", link: "/ja/guide/modes" },
                 { text: "パレット", link: "/ja/guide/palettes" },
+                {
+                  text: "ディゾルブアニメーション",
+                  link: "/ja/guide/dissolve-animation",
+                },
               ],
             },
           ],

@@ -7,7 +7,8 @@ implementation — Python and TypeScript bindings call the same code.
 use arthash::{
     Codec, Preset,
     encode_rgb, encode_rgba, decode, to_svg,
-    EncodeOptions, DecodeOptions, SvgRenderOptions,
+    EncodeOptions, DecodeOptions, SvgOptions,
+    RenderStyle,
     SearchOptions, SearchStrategy,
     Palette,
 };
@@ -49,18 +50,18 @@ pub fn decode(
 ) -> DecodeResult;
 ```
 
-### `to_svg(hash, codec, opts) -> String`
+### `to_svg(hash, codec, opts) -> Result<String, SvgError>`
 
 ```rust
 pub fn to_svg(
     hash: &[u8],
     codec: &Codec,
-    opts: SvgRenderOptions,
-) -> String;
+    opts: SvgOptions,
+) -> Result<String, SvgError>;
 ```
 
 Only supports shape modes (`CIRCLE`, `TRIANGLE`, `SQUARE`, `RECT`,
-`ROTATED_RECT`). Returns `Err` for `DCT` / `PIXEL`.
+`ROTATED_RECT`). Returns `Err(SvgError::UnsupportedShape(_))` for `DCT`.
 
 ## Options
 
@@ -73,20 +74,43 @@ pub struct EncodeOptions {
 pub struct DecodeOptions {
     pub base_size: u32,                  // default 256
     pub override_aspect: Option<f32>,
-    pub aa: Option<u32>,                 // shape supersample (1 / 2 / 4)
-    pub pixel_smooth: Option<PixelSmooth>,
+    pub aa: u32,                         // shape supersample (1 / 2 / 4)
+    pub pixel_smooth: PixelSmooth,
+    pub style: RenderStyle,              // visual styling (see below)
 }
 
-pub struct SvgRenderOptions {
+pub struct SvgOptions {
     pub base_size: u32,                  // default 256
     pub override_aspect: Option<f32>,
-    pub blur: f32,                       // Gaussian stdDeviation; 0 = off
+    pub style: RenderStyle,              // visual styling
+    #[deprecated(since = "0.3.0", note = "use style.blur; removed in 1.0")]
+    pub blur: f32,                       // use style.blur instead
 }
 
 pub enum PixelSmooth { Nearest, Bilinear }
 ```
 
 All structs implement `Default`.
+
+## `RenderStyle`
+
+```rust
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RenderStyle {
+    pub blur: f32,          // Gaussian stdDeviation in viewBox units
+    pub corner_radius: f32, // rect / square / rotrect only
+}
+```
+
+Independent of the codec byte format — same `(hash, codec)` with different
+`style` produces visually distinct output without changing the hash bytes.
+Default (`RenderStyle::default()`) takes the zero-cost fast path and is
+byte-identical to pre-0.3.0 output.
+
+`corner_radius` is silently ignored on non-rect-family codecs (circle /
+triangle / pixel / DCT) — the TS SDK catches this at compile time via
+conditional types; Python emits a `UserWarning`; Rust takes the silent
+path matching idiomatic data-in / data-out behavior.
 
 ## Codec
 

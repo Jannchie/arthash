@@ -5,7 +5,7 @@ the heavy lifting still happens in Rust.
 
 ```python
 from arthash import (
-    Codec, Preset, Palette,
+    Codec, Preset, Palette, RenderStyle,
     encode, decode, to_svg,
 )
 from arthash import palettes
@@ -26,15 +26,18 @@ Encode an image into a hash. `image` accepts:
 
 When `codec` is `None`, defaults to `Codec.dct()`.
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=None, pixel_smooth=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
 
 Returns `(width, height, rgba)` where `rgba` is a `numpy.ndarray` of shape
 `(h, w, 4)` and dtype `uint8`. When `codec` is `None`, defaults to `Codec.dct()`.
+`style` is a `RenderStyle` for blur and corner-rounding (see below).
 
-### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, blur=0.0) -> str`
+### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 
 Render a shape-mode hash as an SVG string. Only supports `CIRCLE` / `TRIANGLE`
 / `SQUARE` / `RECT` / `ROTATED_RECT`. DCT and PIXEL raise `ValueError`.
+`style` applies blur and corner-rounding; the `blur` kwarg is **deprecated
+since 0.3.0** — use `style=RenderStyle(blur=...)` instead. Removed in 1.0.
 
 ## `Codec`
 
@@ -119,6 +122,32 @@ Palette.from_hex(["#aabbcc", ...])
 
 # Bundled constants
 from arthash.palettes import PICO8, GAMEBOY, NES, MORANDI, MONO
+```
+
+## `RenderStyle`
+
+```python
+@dataclass
+class RenderStyle:
+    blur: float = 0.0          # Gaussian stdDeviation in viewBox units; 0 = sharp
+    corner_radius: float = 0.0 # rect / square / rotrect only; 0 = sharp corners
+```
+
+Independent of the codec byte format — same `(hash, codec)` with different
+`style` produces visually distinct output without changing the hash bytes.
+Default (both fields `0`) takes the zero-cost fast path.
+
+`corner_radius` on a non-rect-family codec (circle / triangle / pixel / DCT)
+emits a `UserWarning` and is silently ignored — the TS SDK catches this at
+compile time via conditional types; Python falls back to a runtime warning
+matching the same intent.
+
+```python
+from arthash import RenderStyle, decode, to_svg, Codec
+
+style = RenderStyle(blur=2.0, corner_radius=4.0)
+w, h, rgba = decode(hash_bytes, Codec.rect(n=32), style=style)
+svg = to_svg(hash_bytes, Codec.rect(n=32), style=style)
 ```
 
 ## `EncodeOptions` / search budget

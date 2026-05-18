@@ -16,7 +16,7 @@ use super::quant::{
     alpha_to_q, aspect_code, dim_to_q, q_to_alpha, q_to_dim, q_to_theta, quant_xy, read_color,
     theta_to_q, write_color,
 };
-use super::raster::{apply_quad, quad_row_range, EvalResult};
+use super::raster::{apply_quad, apply_rotated_rounded_rect_aa, quad_row_range, EvalResult};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
@@ -228,10 +228,21 @@ pub fn encode_body(bw: &mut BitWriter, rects: &[RotRect], tw: u32, th: u32, code
     }
 }
 
-pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: &mut [f32]) {
+/// Decode + render rotated rects into `canvas`. `corner_radius` is in canvas
+/// pixel units; `0` keeps the existing hard-edge `apply_quad` fast path
+/// byte-identical to pre-0.3.0 output.
+pub fn decode_render(
+    br: &mut BitReader,
+    codec: &Codec,
+    w: u32,
+    h: u32,
+    canvas: &mut [f32],
+    corner_radius: f32,
+) {
     let x_max = (1u32 << codec.cx_bits) - 1;
     let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
+    let use_aa = corner_radius > 0.0;
     for _ in 0..codec.n_shapes {
         let x_q = br.read(codec.cx_bits);
         let y_q = br.read(codec.cy_bits);
@@ -246,8 +257,16 @@ pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: 
         let rh = q_to_dim(h_q, h, codec.r_bits).round() as i32;
         let theta = q_to_theta(t_q, codec.theta_bits);
         let alpha = q_to_alpha(a_q, &alpha_levels);
-        let verts = rotrect_verts(cx, cy, rw, rh, theta);
-        apply_quad(canvas, h as i32, w as i32, verts, alpha, &color);
+        if use_aa {
+            apply_rotated_rounded_rect_aa(
+                canvas, h as i32, w as i32,
+                cx as f32, cy as f32, rw as f32, rh as f32,
+                theta, corner_radius, alpha, &color,
+            );
+        } else {
+            let verts = rotrect_verts(cx, cy, rw, rh, theta);
+            apply_quad(canvas, h as i32, w as i32, verts, alpha, &color);
+        }
     }
 }
 

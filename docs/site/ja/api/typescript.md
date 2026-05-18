@@ -6,9 +6,11 @@ npm パッケージ：[`arthash`](https://www.npmjs.com/package/arthash)。wasm-
 import {
   encode, decode, toSvg,
   encodeSync, decodeSync, toSvgSync,
+  toImageData, toImageBitmap,
   encodeImage, init,
   codec, palette, palettes,
   Preset, Shape,
+  type RenderStyle,
 } from "arthash";
 ```
 
@@ -95,10 +97,10 @@ interface SearchOptions {
 ### `decode(hash, codec, opts?)`
 
 ```ts
-decode(
+decode<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: DecodeOptions,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
 ): Promise<DecodeResult>
 
 interface DecodeOptions {
@@ -106,6 +108,7 @@ interface DecodeOptions {
   overrideAspect?: number;              // 格納されているアスペクト比を上書き
   aa?: number;                          // shape スーパーサンプル（1 / 2 / 4）
   pixelSmooth?: "nearest" | "bilinear"; // PIXEL のみ、デフォルト "nearest"
+  style?: RenderStyle;                  // 視覚スタイル（後述）
 }
 
 interface DecodeResult {
@@ -119,21 +122,51 @@ interface DecodeResult {
 
 同期版。先に `await init()` 完了が必要。
 
+### `toImageData(hash, codec, opts?)`
+
+ブラウザ専用。`ctx.putImageData(...)` にそのまま渡せる `ImageData` を返
+します。オプションは `decode` と同一。Node では throw します—`decode()` と
+お好みの画像ライブラリ（sharp / @napi-rs/canvas / jimp）を使ってください。
+
+```ts
+toImageData<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageData>
+```
+
+### `toImageBitmap(hash, codec, opts?)`
+
+ブラウザ専用。GPU アップロード（`drawImage`、`texSubImage2D`、worker
+`postMessage` の transfer list）に適した `ImageBitmap` を返します。
+オプションは `decode` と同一。
+
+```ts
+toImageBitmap<C extends Codec>(
+  hash: Uint8Array,
+  c: C,
+  opts?: DecodeOptions & { style?: RenderStyle<C> },
+): Promise<ImageBitmap>
+```
+
 ## SVG レンダリング
 
 ### `toSvg(hash, codec, opts?)`
 
 ```ts
-toSvg(
+toSvg<C extends Codec>(
   hash: Uint8Array,
-  c: Codec,
-  opts?: SvgRenderOptions,
+  c: C,
+  opts?: SvgRenderOptions & { style?: RenderStyle<C> },
 ): Promise<string>
 
 interface SvgRenderOptions {
   baseSize?: number;            // 長辺 px（viewBox 単位）、デフォルト 256
   overrideAspect?: number;
-  blur?: number;                // ガウスの stdDeviation（viewBox 単位）、0 = オフ
+  style?: RenderStyle;          // 視覚スタイル（後述）
+  /** @deprecated 0.3.0 以降—`style.blur` を使ってください。1.0 で削除。 */
+  blur?: number;
 }
 ```
 
@@ -142,6 +175,33 @@ interface SvgRenderOptions {
 ### `toSvgSync(hash, codec, opts?)`
 
 同期版。先に `await init()` 完了が必要。
+
+## RenderStyle
+
+```ts
+type RenderStyle<C extends Codec = Codec> = C extends {
+  kind: "rect" | "square" | "rotrect";
+} ? {
+  blur?: number;          // ガウスの stdDeviation（viewBox 単位）、0 = シャープ
+  cornerRadius?: number;  // 角丸半径（viewBox 単位）、rect ファミリーのみ
+} : {
+  blur?: number;
+  cornerRadius?: never;   // 非 rect ファミリーで設定するとコンパイルエラー
+};
+```
+
+`RenderStyle` は codec のバイト形式と独立しています—同じ `(hash, codec)`
+に異なる `style` を渡すと、ハッシュバイトを変えずに視覚的に異なる出力が
+得られます。デフォルト（両フィールド 0）はゼロコストの fast path。
+
+`<C>` ジェネリクスにより、`cornerRadius` は rect / square / rotrect codec
+だけで使えることが型レベルで強制されます—circle / triangle / pixel / dct
+codec に渡すとコンパイルエラー。PIXEL は意図的に除外（タイルグリッドに
+角丸を適用すると隣接セル間に縫い目が見える）。
+
+両フィールドは `decode` / `toSvg` / `toImageData` / `toImageBitmap` で
+同じ意味で適用され、`(hash, codec, style)` は raster と SVG の経路で
+視覚的に揃った出力を生みます。
 
 ## Codec
 

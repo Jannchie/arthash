@@ -28,12 +28,14 @@ pub mod bitio;
 pub mod codec;
 pub mod colorspace;
 pub mod dct;
+pub mod render;
 pub mod shape;
 
 mod api;
 
 pub use api::{decode, encode_rgb, encode_rgba, DecodeOptions, DecodeOutput, EncodeOptions};
 pub use codec::{Codec, CodecError, ColorMode, Palette, Preset, VALID_PALETTE_K};
+pub use render::{gaussian_blur_rgba8, RenderStyle};
 #[doc(hidden)]
 pub use codec::{CodecConfig, ShapeType};
 pub use shape::options::{SearchOptions, Strategy};
