@@ -33,10 +33,26 @@ function tomlVersion(file, section) {
   );
 }
 
+// Pull a workspace member's version out of a Cargo.lock by anchoring on
+// `name = "<crate>"` and reading the following `version = "..."`. We check
+// this because `cargo publish --locked` will refuse to run if the lockfile
+// disagrees with Cargo.toml, and we'd rather catch that drift in CI's
+// version-check step than in the publish step (where the error message is
+// far more confusing — see the v0.3.0 release postmortem).
+function lockVersion(file, crate) {
+  return extract(
+    file,
+    new RegExp(`name\\s*=\\s*"${crate}"\\s*\\nversion\\s*=\\s*"([^"]+)"`),
+    `[[package]] name="${crate}" → version`,
+  );
+}
+
 const sources = {
   VERSION: fs.readFileSync(path.join(REPO, "VERSION"), "utf8").trim(),
   "arthash-rs/Cargo.toml": tomlVersion("packages/arthash-rs/Cargo.toml", "package"),
+  "arthash-rs/Cargo.lock": lockVersion("packages/arthash-rs/Cargo.lock", "arthash"),
   "arthash-py/Cargo.toml": tomlVersion("packages/arthash-py/Cargo.toml", "package"),
+  "arthash-py/Cargo.lock": lockVersion("packages/arthash-py/Cargo.lock", "arthash-py"),
   "arthash-py/pyproject.toml": tomlVersion("packages/arthash-py/pyproject.toml", "project"),
   "arthash-py/__about__.py": extract(
     "packages/arthash-py/python/arthash/__about__.py",
@@ -49,6 +65,7 @@ const sources = {
     '"version"',
   ),
   "arthash-ts/wasm/Cargo.toml": tomlVersion("packages/arthash-ts/wasm/Cargo.toml", "package"),
+  "arthash-ts/wasm/Cargo.lock": lockVersion("packages/arthash-ts/wasm/Cargo.lock", "arthash-wasm"),
 };
 
 const canonical = sources["VERSION"];
