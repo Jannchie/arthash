@@ -1,6 +1,6 @@
 {
   "name": "@arthash/playground",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Browser playground for arthash — encode/decode timing and visual comparison.",

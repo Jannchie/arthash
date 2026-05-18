@@ -12,7 +12,7 @@
 
 [project]
 name = "arthash-workspace"
-version = "0.3.0"
+version = "0.3.1"
 description = "Workspace root for the arthash monorepo. Not a published package."
 requires-python = ">=3.11"
 dependencies = []

@@ -11,7 +11,7 @@ dependencies = [
 
 [[package]]
 name = "arthash-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "arthash",
  "js-sys",
