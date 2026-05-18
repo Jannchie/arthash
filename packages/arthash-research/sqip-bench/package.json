@@ -1,6 +1,6 @@
 {
   "name": "arthash-sqip-bench",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Node harness for serviced SQIP benchmarks against arthash. Not published.",
   "license": "MIT",
