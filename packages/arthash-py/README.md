@@ -24,7 +24,7 @@ maturin develop --uv -m packages/arthash-py/Cargo.toml
 ## Quick start
 
 ```python
-from arthash import encode, decode, to_svg, Codec, Preset
+from arthash import encode, decode, to_svg, Codec, Preset, RenderStyle
 from arthash.palettes import PICO8
 
 # DCT (default)
@@ -38,11 +38,21 @@ h = encode("photo.jpg", codec)
 # Factory + palette
 codec = Codec.triangle(n=24, palette=PICO8)
 h = encode("photo.jpg", codec, seed=0)
-svg = to_svg(h, codec, base_size=256, blur=8.0)     # circle/triangle/etc.
+svg = to_svg(h, codec, base_size=256,
+             style=RenderStyle(blur=8.0))           # circle/triangle/etc.
 ```
 
 `decode` always returns `(width, height, ndarray(h, w, 4))` regardless of
 codec — alpha is 255 except for DCT-with-alpha sources.
+
+## Visual styling — `RenderStyle`
+
+`decode` and `to_svg` accept a `style=RenderStyle(blur=…, corner_radius=…)`
+for visual softening. Both fields are applied identically across paths so
+raster and SVG outputs stay visually consistent. `corner_radius` is only
+honored for rect / square / rotated_rect codecs; other shapes silently
+ignore it. `to_svg(..., blur=...)` still works but is deprecated since
+0.3.0 — pass `style=RenderStyle(blur=...)` instead.
 
 ## Layout
 
