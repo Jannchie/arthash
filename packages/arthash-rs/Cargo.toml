@@ -1,6 +1,6 @@
 [package]
 name = "arthash"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 description = "Placeholder-image hash family — compact placeholder fingerprints for thumbnail and preview workflows. DCT / CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT / PIXEL modes share a unified Codec API."

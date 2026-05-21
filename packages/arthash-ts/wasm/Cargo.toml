@@ -1,6 +1,6 @@
 [package]
 name = "arthash-wasm"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 description = "wasm-bindgen wrapper around arthash-rs for the arthash package."

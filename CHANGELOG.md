@@ -1,3 +1,11 @@
+## v0.4.0
+
+[v0.3.1...v0.4.0](https://github.com/Jannchie/arthash/compare/v0.3.1...v0.4.0)
+
+### :sparkles: Features
+
+- **palette**: add support for non-power-of-two palettes - By [Jianqi Pan](mailto:jannchie@gmail.com) in [c630f3b](https://github.com/Jannchie/arthash/commit/c630f3b)
+
 ## v0.3.1
 
 [v0.3.0...v0.3.1](https://github.com/Jannchie/arthash/compare/v0.3.0...v0.3.1)

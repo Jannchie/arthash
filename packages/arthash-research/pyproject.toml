@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arthash-research"
-version = "0.3.1"
+version = "0.4.0"
 description = "Internal research / ablation / benchmark scripts for arthash. Not published."
 requires-python = ">=3.11"
 dependencies = [

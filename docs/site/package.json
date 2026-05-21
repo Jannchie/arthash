@@ -1,6 +1,6 @@
 {
   "name": "@arthash/docs",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "description": "arthash documentation site (VitePress, en/ja/zh).",
   "type": "module",

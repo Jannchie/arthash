@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "arthash"
-version = "0.3.1"
+version = "0.4.0"
 description = "Placeholder-image hash family — DCT / CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT / PIXEL modes share a unified Codec API. PyO3 binding to arthash-rs."
 readme = "README.md"
 requires-python = ">=3.11"
