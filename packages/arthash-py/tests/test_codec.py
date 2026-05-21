@@ -52,10 +52,20 @@ def test_palette_must_be_kx3():
         Codec(shape=ShapeType.CIRCLE, palette=bad)
 
 
-def test_palette_k_must_be_power_of_two():
+def test_palette_k_accepts_non_pow2():
+    # K = 24 (non-power-of-2) is now valid. Codec uses ceil(log₂K) = 5 bits
+    # per index, with bit patterns 24..31 unused.
     pal = np.zeros((24, 3), dtype=np.uint8)
-    with pytest.raises(ValueError, match="power of 2"):
-        Codec(shape=ShapeType.CIRCLE, palette=pal)  # 24 is not a power of 2
+    c = Codec(shape=ShapeType.CIRCLE, palette=pal)
+    assert c.palette_k == 24
+    assert c.palette_bits == 5
+
+
+def test_palette_k_must_be_in_range():
+    # K = 1 is too small (need at least 2 entries).
+    pal = np.zeros((1, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match=r"palette_k must be in"):
+        Codec(shape=ShapeType.CIRCLE, palette=pal)
 
 
 def test_palette_k_overflows_palette():

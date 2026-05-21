@@ -79,7 +79,11 @@ class Preset(str, enum.Enum):
     DETAIL_PIXEL = "detail_pixel"
 
 
-VALID_PALETTE_K = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024}
+MIN_PALETTE_K = 2
+MAX_PALETTE_K = 1024
+# Legacy alias for callers that imported this set; now a range check, not a
+# power-of-2 list. K need not be a power of 2.
+VALID_PALETTE_K = range(MIN_PALETTE_K, MAX_PALETTE_K + 1)
 
 
 @dataclass(frozen=True)
@@ -354,9 +358,9 @@ class Codec:
             effective = self.palette_k if self.palette_k is not None else K_total
             if effective > K_total:
                 raise ValueError(f"palette_k={effective} > palette length={K_total}")
-            if effective not in VALID_PALETTE_K:
+            if not (MIN_PALETTE_K <= effective <= MAX_PALETTE_K):
                 raise ValueError(
-                    f"palette_k must be a power of 2 in {sorted(VALID_PALETTE_K)}; got {effective}"
+                    f"palette_k must be in [{MIN_PALETTE_K}, {MAX_PALETTE_K}]; got {effective}"
                 )
             object.__setattr__(self, "palette_k", effective)
         elif self.palette_k is not None:
@@ -385,9 +389,13 @@ class Codec:
 
     @cached_property
     def palette_bits(self) -> int:
+        # ceil(log₂K). K need not be a power of 2 — `(K-1).bit_length()` is
+        # the exact integer ceil-log₂ formula and matches the Rust /
+        # TypeScript implementations.
         if not self.is_palette_mode:
             return 0
-        return int(round(math.log2(int(self.palette_k))))
+        k = int(self.palette_k)
+        return max(0, (k - 1).bit_length()) if k > 1 else 0
 
     @property
     def color_field_bits(self) -> int:

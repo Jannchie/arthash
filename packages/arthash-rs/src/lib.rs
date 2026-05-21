@@ -34,7 +34,7 @@ pub mod shape;
 mod api;
 
 pub use api::{decode, encode_rgb, encode_rgba, DecodeOptions, DecodeOutput, EncodeOptions};
-pub use codec::{Codec, CodecError, ColorMode, Palette, Preset, VALID_PALETTE_K};
+pub use codec::{Codec, CodecError, ColorMode, MAX_PALETTE_K, MIN_PALETTE_K, Palette, Preset};
 pub use render::{gaussian_blur_rgba8, RenderStyle};
 #[doc(hidden)]
 pub use codec::{CodecConfig, ShapeType};

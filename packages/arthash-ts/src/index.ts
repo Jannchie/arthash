@@ -302,7 +302,12 @@ function codecToSpecFields(c: Codec): SpecFields {
 }
 
 function colorFieldBits(s: SpecFields): number {
-  if (s.hasPalette) return Math.log2(Math.max(2, s.paletteK)) | 0;
+  if (s.hasPalette) {
+    // ceil(log₂K). `32 - clz32(K-1)` is exact for K ≥ 1 and avoids the
+    // floating-point hazards of `Math.ceil(Math.log2(K))` at K = 2ⁿ.
+    const k = Math.max(2, s.paletteK);
+    return 32 - Math.clz32(k - 1);
+  }
   return s.colorBits;
 }
 

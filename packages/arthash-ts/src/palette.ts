@@ -10,21 +10,23 @@
  * `export const palette = {...}` line, throwing TDZ.
  */
 
-/** sRGB palette — flat row-major bytes (length = 3·K, K ∈ {2,4,8,16,32,64,128,256,512,1024}). */
+/** sRGB palette — flat row-major bytes (length = 3·K, K ∈ [2, 1024]). K need
+ *  not be a power of 2; the codec uses `ceil(log₂K)` bits per index. */
 export interface Palette {
   bytes: Uint8Array;
   k?: number;
 }
 
-const VALID_PALETTE_K = new Set([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]);
+const MIN_PALETTE_K = 2;
+const MAX_PALETTE_K = 1024;
 
 /** Palette construction helpers. */
 export const palette = {
   /** Build a palette from an array of `[r, g, b]` triplets. */
   fromRgb(colors: ReadonlyArray<readonly [number, number, number]>): Palette {
-    if (!VALID_PALETTE_K.has(colors.length)) {
+    if (colors.length < MIN_PALETTE_K || colors.length > MAX_PALETTE_K) {
       throw new Error(
-        `palette must have K ∈ {2,4,8,…,1024} colors; got ${colors.length}`,
+        `palette K must be in [${MIN_PALETTE_K}, ${MAX_PALETTE_K}]; got ${colors.length}`,
       );
     }
     const bytes = new Uint8Array(colors.length * 3);

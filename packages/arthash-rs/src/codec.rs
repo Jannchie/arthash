@@ -60,8 +60,26 @@ impl ShapeType {
     }
 }
 
-/// Powers-of-two K allowed for palette mode (SPEC §4.4).
-pub const VALID_PALETTE_K: &[usize] = &[2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+/// Inclusive K range allowed for palette mode. Index width is `ceil_log2(K)`
+/// bits; K need not be a power of 2 (e.g. Oil-6 = 6 colors → 3 bits, two
+/// bit patterns unused), it just needs to fit. Upper bound matches the
+/// 10-bit index field allowed by SPEC §4.4.
+pub const MIN_PALETTE_K: usize = 2;
+pub const MAX_PALETTE_K: usize = 1024;
+
+/// Bits per palette index = `ceil(log₂ K)`. Returns 0 for `K ≤ 1`. Defined
+/// at the module level so both `Palette::bits` and `CodecConfig::palette_bits`
+/// share the same definition and stay in sync.
+#[inline]
+fn ceil_log2_palette_k(k: usize) -> u32 {
+    if k <= 1 {
+        return 0;
+    }
+    // `next_power_of_two(K)` rounds up to the smallest power of 2 ≥ K,
+    // whose trailing-zero count is exactly `ceil(log₂ K)`. Works for any
+    // K ≥ 2.
+    (k as u32).next_power_of_two().trailing_zeros()
+}
 
 // ---------------------------------------------------------------------------
 // Public API: Palette, ColorMode, Codec, Preset
@@ -72,8 +90,8 @@ pub const VALID_PALETTE_K: &[usize] = &[2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
 pub enum CodecError {
     /// Palette byte slice length is not a multiple of 3.
     PaletteLenNotMultipleOf3(usize),
-    /// Palette has fewer than 2 colors or its effective K is not one of
-    /// [`VALID_PALETTE_K`].
+    /// Palette has fewer than `MIN_PALETTE_K` colors or more than
+    /// `MAX_PALETTE_K`.
     PaletteKInvalid(usize),
     /// `palette_k` exceeds the number of colors in the palette.
     PaletteKOverflow { k: usize, len: usize },
@@ -86,7 +104,7 @@ impl std::fmt::Display for CodecError {
                 write!(f, "palette byte length ({n}) is not a multiple of 3")
             }
             Self::PaletteKInvalid(k) => {
-                write!(f, "palette K={k} must be a power of 2 in {VALID_PALETTE_K:?}")
+                write!(f, "palette K={k} must be in [{MIN_PALETTE_K}, {MAX_PALETTE_K}]")
             }
             Self::PaletteKOverflow { k, len } => {
                 write!(f, "palette_k={k} > palette length={len}")
@@ -97,9 +115,11 @@ impl std::fmt::Display for CodecError {
 
 impl std::error::Error for CodecError {}
 
-/// An sRGB palette of `K ∈ {2, 4, 8, … 1024}` colors. Shape codecs that carry
-/// a palette store `log₂K` bits per shape instead of the full color field —
-/// the palette itself is consensus knowledge, not stored in the hash.
+/// An sRGB palette of `K ∈ [MIN_PALETTE_K, MAX_PALETTE_K]` colors. Shape
+/// codecs that carry a palette store `ceil(log₂K)` bits per shape instead of
+/// the full color field; the palette itself is consensus knowledge, not
+/// stored in the hash. K need not be a power of 2 — a K=6 palette uses
+/// 3-bit indices with two bit patterns unused.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Palette {
@@ -109,14 +129,15 @@ pub struct Palette {
 
 impl Palette {
     /// Build a palette from flat row-major sRGB bytes (`length = 3·K`).
-    /// `K` is inferred as `length / 3` and must be in [`VALID_PALETTE_K`].
+    /// `K` is inferred as `length / 3` and must be in
+    /// `[MIN_PALETTE_K, MAX_PALETTE_K]`. K need not be a power of 2.
     pub fn new(srgb_bytes: impl Into<Vec<u8>>) -> Result<Self, CodecError> {
         let bytes = srgb_bytes.into();
         if bytes.len() % 3 != 0 {
             return Err(CodecError::PaletteLenNotMultipleOf3(bytes.len()));
         }
         let k = bytes.len() / 3;
-        if !VALID_PALETTE_K.contains(&k) {
+        if !(MIN_PALETTE_K..=MAX_PALETTE_K).contains(&k) {
             return Err(CodecError::PaletteKInvalid(k));
         }
         Ok(Self { bytes, k })
@@ -132,13 +153,13 @@ impl Palette {
     }
 
     /// Take only the first `k` colors of an over-allocated palette buffer.
-    /// `k` must be in [`VALID_PALETTE_K`] and `≤ self.len()`.
+    /// `k` must be in `[MIN_PALETTE_K, MAX_PALETTE_K]` and `≤ self.len()`.
     pub fn with_k(mut self, k: usize) -> Result<Self, CodecError> {
         let len = self.bytes.len() / 3;
         if k > len {
             return Err(CodecError::PaletteKOverflow { k, len });
         }
-        if !VALID_PALETTE_K.contains(&k) {
+        if !(MIN_PALETTE_K..=MAX_PALETTE_K).contains(&k) {
             return Err(CodecError::PaletteKInvalid(k));
         }
         self.k = k;
@@ -154,9 +175,10 @@ impl Palette {
         self.k == 0
     }
 
-    /// Bits per palette index (`log₂K`).
+    /// Bits per palette index (`ceil(log₂K)`). For K that is not a power
+    /// of 2, the upper bit patterns `K..2^bits` are reserved / unused.
     pub fn bits(&self) -> u32 {
-        (self.k as u32).trailing_zeros()
+        ceil_log2_palette_k(self.k)
     }
 
     /// Raw sRGB bytes of the active `K` colors (length `3·K`).
@@ -702,7 +724,7 @@ impl CodecConfig {
 
     pub(crate) fn palette_bits(&self) -> u32 {
         match self.effective_palette_k() {
-            Some(k) if k >= 2 => (k as u32).trailing_zeros(),
+            Some(k) if k >= MIN_PALETTE_K => ceil_log2_palette_k(k),
             _ => 0,
         }
     }
@@ -820,11 +842,47 @@ mod tests {
     }
 
     #[test]
-    fn palette_new_rejects_non_pow2_k() {
+    fn palette_new_accepts_non_pow2_k() {
+        // K=6 (Oil-6) and K=42 (Lospec500) were previously rejected. They
+        // are now valid; `bits()` returns ceil(log2(K)).
+        let oil = Palette::new(vec![0u8; 3 * 6]).expect("K=6 should be valid");
+        assert_eq!(oil.len(), 6);
+        assert_eq!(oil.bits(), 3); // ceil(log2(6)) = 3
+        let lospec500 = Palette::new(vec![0u8; 3 * 42]).expect("K=42 should be valid");
+        assert_eq!(lospec500.len(), 42);
+        assert_eq!(lospec500.bits(), 6); // ceil(log2(42)) = 6
+    }
+
+    #[test]
+    fn palette_new_rejects_k_out_of_range() {
+        // K=1 — too few colors.
         assert!(matches!(
-            Palette::new(vec![0u8; 3 * 6]),
-            Err(CodecError::PaletteKInvalid(6))
+            Palette::new(vec![0u8; 3 * 1]),
+            Err(CodecError::PaletteKInvalid(1))
         ));
+        // K=2048 — beyond the protocol's 10-bit index field.
+        assert!(matches!(
+            Palette::new(vec![0u8; 3 * 2048]),
+            Err(CodecError::PaletteKInvalid(2048))
+        ));
+    }
+
+    #[test]
+    fn ceil_log2_matches_pow2_case() {
+        // Sanity: backwards-compatible with the old trailing_zeros impl
+        // for every power-of-2 K in the legacy table.
+        for &k in &[2usize, 4, 8, 16, 32, 64, 128, 256, 512, 1024] {
+            assert_eq!(
+                ceil_log2_palette_k(k),
+                (k as u32).trailing_zeros(),
+                "K={k}",
+            );
+        }
+        // And the obvious non-power-of-2 cases.
+        assert_eq!(ceil_log2_palette_k(3), 2);
+        assert_eq!(ceil_log2_palette_k(6), 3);
+        assert_eq!(ceil_log2_palette_k(42), 6);
+        assert_eq!(ceil_log2_palette_k(500), 9);
     }
 
     #[test]
