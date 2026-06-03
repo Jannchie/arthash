@@ -33,10 +33,9 @@ import warnings
 
 from . import palettes
 from .__about__ import __version__
-from ._api import RenderStyle, decode, encode, to_svg
+from ._api import RenderStyle, decode, encode, encode_rgba, to_svg
 from ._codec import DEFAULT_CODEC, Codec, Preset, ShapeType
 from ._search import DEFAULT_SEARCH, SearchOptions
-
 
 # ---------- top-level preset shortcuts ----------
 # These mirror Preset.* but spare you the `Codec.preset(Preset.X)` ceremony
@@ -190,41 +189,42 @@ def detail_pixel() -> Codec:
 
 
 __all__ = [
-    "__version__",
-    "Codec",
     "DEFAULT_CODEC",
     "DEFAULT_SEARCH",
+    "Codec",
     "Preset",
     "RenderStyle",
     "SearchOptions",
     "ShapeType",
-    "decode",
-    "encode",
-    "palettes",
-    "to_svg",
+    "__version__",
     # active preset shortcuts
     "dct",
-    "small_triangle",
-    "small_circle",
-    "small_pixel",
-    "small_rect",
-    "small_square",
-    "medium_triangle",
-    "medium_circle",
-    "medium_pixel",
-    "medium_rect",
-    "medium_square",
-    "large_triangle",
+    "decode",
+    "detail_circle",
+    "detail_pixel",
+    "detail_triangle",
+    "encode",
+    "encode_rgba",
     "large_circle",
     "large_pixel",
     "large_rect",
     "large_square",
-    # deprecated pre-0.3 shortcuts
-    "tiny_dct",
-    "placeholder_triangle",
+    "large_triangle",
+    "medium_circle",
+    "medium_pixel",
+    "medium_rect",
+    "medium_square",
+    "medium_triangle",
+    "palettes",
     "placeholder_circle",
     "placeholder_pixel",
-    "detail_triangle",
-    "detail_circle",
-    "detail_pixel",
+    "placeholder_triangle",
+    "small_circle",
+    "small_pixel",
+    "small_rect",
+    "small_square",
+    "small_triangle",
+    # deprecated pre-0.3 shortcuts
+    "tiny_dct",
+    "to_svg",
 ]

@@ -21,7 +21,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Tuple
 
 import numpy as np
 from PIL import Image as PILImage
@@ -62,24 +62,32 @@ class RenderStyle:
 DCT_THUMB = 100
 SHAPE_THUMB = 48
 
-ImageInput = Union[str, Path, PILImage.Image, np.ndarray]
+ImageInput = str | Path | PILImage.Image | np.ndarray
 
 
-def _load_rgb_thumb(image: ImageInput, target_size: int) -> Tuple[np.ndarray, int, int]:
-    """(image, target) → (rgb_array (h, w, 3) uint8, w_orig, h_orig)."""
+def _load_thumb(
+    image: ImageInput, target_size: int, mode: str
+) -> Tuple[np.ndarray, int, int]:
+    """(image, target, "RGB" | "RGBA") → (array (h, w, C) uint8, w_orig, h_orig).
+
+    `mode` selects the pixel format: "RGB" drops any alpha channel, "RGBA"
+    preserves it (RGB / grayscale inputs gain a fully-opaque 255 alpha). The
+    long edge is scaled down to `target_size` with LANCZOS; smaller inputs pass
+    through at native size.
+    """
     if isinstance(image, (str, Path)):
         with PILImage.open(image) as im:
-            im = im.convert("RGB")
+            im = im.convert(mode)
             w_orig, h_orig = im.size
     elif isinstance(image, PILImage.Image):
-        im = image.convert("RGB")
+        im = image.convert(mode)
         w_orig, h_orig = im.size
     else:
         arr = np.asarray(image)
-        if arr.ndim == 3 and arr.shape[2] == 4:
+        if mode == "RGB" and arr.ndim == 3 and arr.shape[2] == 4:
             arr = arr[..., :3]
         h_orig, w_orig = arr.shape[:2]
-        im = PILImage.fromarray(arr).convert("RGB")
+        im = PILImage.fromarray(arr).convert(mode)
 
     longest = max(w_orig, h_orig)
     if longest > target_size:
@@ -91,13 +99,21 @@ def _load_rgb_thumb(image: ImageInput, target_size: int) -> Tuple[np.ndarray, in
     return np.asarray(im, dtype=np.uint8), w_orig, h_orig
 
 
+def _resolve_target(codec: Codec, target_size: int | None) -> int:
+    """Encoder thumbnail long-edge: explicit `target_size`, else the
+    codec-natural default (100 for DCT, 48 for shape / PIXEL)."""
+    if target_size is not None:
+        return int(target_size)
+    return DCT_THUMB if codec.shape == ShapeType.DCT else SHAPE_THUMB
+
+
 def encode(
     image: ImageInput,
     codec: Codec = DEFAULT_CODEC,
     *,
     seed: int = 0,
-    target_size: Optional[int] = None,
-    search: Optional[SearchOptions] = None,
+    target_size: int | None = None,
+    search: SearchOptions | None = None,
 ) -> bytes:
     """Encode an image to a placeholder hash under the given Codec.
 
@@ -113,9 +129,8 @@ def encode(
     if not isinstance(codec, Codec):
         raise TypeError(f"codec must be a Codec instance; got {type(codec).__name__}")
 
-    default_target = DCT_THUMB if codec.shape == ShapeType.DCT else SHAPE_THUMB
-    target = default_target if target_size is None else int(target_size)
-    arr, _w_orig, _h_orig = _load_rgb_thumb(image, target)
+    target = _resolve_target(codec, target_size)
+    arr, _w_orig, _h_orig = _load_thumb(image, target, "RGB")
     h, w = arr.shape[:2]
     rgb_bytes = arr.tobytes()
 
@@ -123,6 +138,42 @@ def encode(
     search_dict = search.to_native_dict() if search is not None else None
 
     return _native.encode_rgb(rgb_bytes, w, h, codec_dict, seed, search_dict)
+
+
+def encode_rgba(
+    image: ImageInput,
+    codec: Codec = DEFAULT_CODEC,
+    *,
+    seed: int = 0,
+    target_size: int | None = None,
+    search: SearchOptions | None = None,
+) -> bytes:
+    """Encode an image *with its alpha channel* to a placeholder hash.
+
+    Differs from `encode` only in how alpha is treated:
+
+    * **DCT** — the alpha channel is encoded natively (DCT-with-alpha output),
+      so transparency survives the round-trip.
+    * **shape / PIXEL** — the binding composites the image over an opaque
+      WHITE background before fitting, i.e. transparent regions read as white
+      (these modes have no alpha field in the byte format).
+
+    All other arguments behave exactly as in `encode`; see its docstring for
+    `target_size` / `search`. RGB / grayscale inputs are accepted too and get
+    a fully-opaque alpha, making the result identical to `encode` for them.
+    """
+    if not isinstance(codec, Codec):
+        raise TypeError(f"codec must be a Codec instance; got {type(codec).__name__}")
+
+    target = _resolve_target(codec, target_size)
+    arr, _w_orig, _h_orig = _load_thumb(image, target, "RGBA")
+    h, w = arr.shape[:2]
+    rgba_bytes = np.ascontiguousarray(arr).tobytes()
+
+    codec_dict = codec.to_native_dict()
+    search_dict = search.to_native_dict() if search is not None else None
+
+    return _native.encode_rgba(rgba_bytes, w, h, codec_dict, seed, search_dict)
 
 
 def _resolve_corner_radius(codec: Codec, requested: float) -> float:
@@ -147,10 +198,10 @@ def decode(
     codec: Codec = DEFAULT_CODEC,
     *,
     base_size: int = 256,
-    override_aspect: Optional[float] = None,
+    override_aspect: float | None = None,
     pixel_smooth: str = "nearest",
     aa: int = 1,
-    style: Optional[RenderStyle] = None,
+    style: RenderStyle | None = None,
 ) -> Tuple[int, int, np.ndarray]:
     """Decode hash bytes to an RGBA preview at `base_size` long-edge.
 
@@ -169,7 +220,11 @@ def decode(
     radius_val = _resolve_corner_radius(codec, float(s.corner_radius))
 
     codec_dict = codec.to_native_dict()
-    w, h, rgba_bytes = _native.decode(
+    # `decode_to_numpy` hands back a 1-D uint8 array that OWNS the Rust render
+    # buffer (writable, zero-copy) — reshaping is a view, so we avoid the
+    # `bytes` round-trip + `np.frombuffer(...).copy()` the old `decode` path
+    # needed to get a writable array.
+    w, h, flat = _native.decode_to_numpy(
         bytes(hash_bytes),
         codec_dict,
         int(base_size),
@@ -179,8 +234,7 @@ def decode(
         blur_val,
         radius_val,
     )
-    arr = np.frombuffer(rgba_bytes, dtype=np.uint8).reshape(h, w, 4).copy()
-    return w, h, arr
+    return w, h, flat.reshape(h, w, 4)
 
 
 def to_svg(
@@ -188,9 +242,9 @@ def to_svg(
     codec: Codec = DEFAULT_CODEC,
     *,
     base_size: int = 256,
-    override_aspect: Optional[float] = None,
-    blur: Optional[float] = None,
-    style: Optional[RenderStyle] = None,
+    override_aspect: float | None = None,
+    blur: float | None = None,
+    style: RenderStyle | None = None,
 ) -> str:
     """Render a shape-mode hash as a compact SVG string.
 

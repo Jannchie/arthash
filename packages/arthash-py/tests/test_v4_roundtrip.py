@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
-from arthash import Codec, DEFAULT_CODEC, ShapeType, decode, encode
+from arthash import DEFAULT_CODEC, Codec, ShapeType, decode, encode
 
 
 def test_default_codec_is_dct():
@@ -51,7 +50,7 @@ def test_dct_roundtrip_reproduces_color(rgb_solid_red):
     """Solid red in → mostly-red preview out. DCT is lossy but DC color
     survives intact through encode/decode."""
     hash_bytes = encode(rgb_solid_red)
-    w, h, rgba = decode(hash_bytes, base_size=32)
+    _w, _h, rgba = decode(hash_bytes, base_size=32)
     r_mean = rgba[..., 0].mean()
     g_mean = rgba[..., 1].mean()
     b_mean = rgba[..., 2].mean()
@@ -69,5 +68,5 @@ def test_dct_explicit_codec_matches_default(rgb_random_seed42):
 @pytest.mark.parametrize("base_size", [32, 64, 128, 256])
 def test_dct_decode_respects_base_size(rgb_solid_red, base_size):
     hash_bytes = encode(rgb_solid_red)
-    w, h, rgba = decode(hash_bytes, base_size=base_size)
+    w, h, _rgba = decode(hash_bytes, base_size=base_size)
     assert max(w, h) == base_size

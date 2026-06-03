@@ -19,10 +19,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
-
 from arthash import Codec, ShapeType, encode
 from arthash.palettes import PICO8
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 VECTORS_PATH = REPO_ROOT / "docs" / "test-vectors" / "vectors.json"
@@ -32,7 +30,9 @@ VECTORS_PATH = REPO_ROOT / "docs" / "test-vectors" / "vectors.json"
 
 def _solid(h: int, w: int, rgb: list[int]) -> np.ndarray:
     arr = np.zeros((h, w, 3), dtype=np.uint8)
-    arr[..., 0] = rgb[0]; arr[..., 1] = rgb[1]; arr[..., 2] = rgb[2]
+    arr[..., 0] = rgb[0]
+    arr[..., 1] = rgb[1]
+    arr[..., 2] = rgb[2]
     return arr
 
 

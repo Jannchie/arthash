@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from arthash import Codec, ShapeType, decode, encode
 from arthash.palettes import PICO8
-
 
 # ----------------------------- PIXEL -----------------------------
 

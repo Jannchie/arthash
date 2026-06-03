@@ -8,7 +8,6 @@ import warnings
 
 import numpy as np
 import pytest
-
 from arthash import (
     Codec,
     RenderStyle,

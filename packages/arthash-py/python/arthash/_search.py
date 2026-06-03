@@ -27,7 +27,7 @@ class SearchOptions:
     n_random: int = 64
     n_topk: int = 1
     hill_climb_steps: int = 40
-    hill_climb_max_age: "int | None" = 30
+    hill_climb_max_age: int | None = 30
     n_attempts: int = 4
 
     def to_native_dict(self) -> dict:

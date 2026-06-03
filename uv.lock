@@ -22,7 +22,7 @@ members = [
 
 [[package]]
 name = "arthash"
-version = "0.3.1"
+version = "0.4.0"
 source = { editable = "packages/arthash-py" }
 dependencies = [
     { name = "numpy" },
@@ -37,7 +37,7 @@ requires-dist = [
 
 [[package]]
 name = "arthash-research"
-version = "0.3.1"
+version = "0.4.0"
 source = { editable = "packages/arthash-research" }
 dependencies = [
     { name = "arthash" },
@@ -64,7 +64,7 @@ requires-dist = [
 
 [[package]]
 name = "arthash-workspace"
-version = "0.3.1"
+version = "0.4.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

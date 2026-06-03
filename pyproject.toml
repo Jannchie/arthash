@@ -42,7 +42,21 @@ extend-exclude = ["dist", ".venv", "packages/*/dist"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
-ignore = ["E741", "UP006", "UP035"]
+ignore = [
+  "E741",
+  "UP006",
+  "UP035",
+  # ShapeType / Preset deliberately use the `(str, Enum)` mixin (not 3.11+
+  # `StrEnum`): they are FFI/wire enums and StrEnum changes `str()` / format
+  # semantics across the language boundary.
+  "UP042",
+  # Documentation deliberately uses real typographic Unicode — `×` for image
+  # dimensions (48×48), `–` (en dash) for ranges, `σ` for blur sigma. These
+  # are correct, not homoglyph mistakes.
+  "RUF001", # ambiguous char in string
+  "RUF002", # ambiguous char in docstring
+  "RUF003", # ambiguous char in comment
+]
 
 [tool.ruff.format]
 quote-style = "double"

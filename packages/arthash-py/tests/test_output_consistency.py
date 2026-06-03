@@ -15,7 +15,6 @@ from typing import Tuple
 
 import numpy as np
 import pytest
-
 from arthash import Codec, RenderStyle, decode, encode, to_svg
 
 resvg_py = pytest.importorskip("resvg_py")

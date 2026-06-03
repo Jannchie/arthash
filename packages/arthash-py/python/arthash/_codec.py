@@ -20,7 +20,6 @@ import enum
 import math
 from dataclasses import dataclass, replace
 from functools import cached_property
-from typing import Optional
 
 import numpy as np
 
@@ -108,15 +107,15 @@ class Codec:
     # ROTATED_RECT only: bits for theta in [0, π). Unused by other modes.
     theta_bits: int = 5
 
-    palette: Optional[np.ndarray] = None     # (K, 3) uint8 sRGB
-    palette_k: Optional[int] = None
-    alpha_levels: Optional[np.ndarray] = None
-    grid_aspect: Optional[float] = None      # PIXEL only
+    palette: np.ndarray | None = None     # (K, 3) uint8 sRGB
+    palette_k: int | None = None
+    alpha_levels: np.ndarray | None = None
+    grid_aspect: float | None = None      # PIXEL only
 
     # ---------- factory methods ----------
 
     @classmethod
-    def dct(cls) -> "Codec":
+    def dct(cls) -> Codec:
         """V4 thumbhash-style placeholder (~21 B). Default codec."""
         return cls(shape=ShapeType.DCT)
 
@@ -125,9 +124,9 @@ class Codec:
         cls,
         n: int = 12,
         *,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-    ) -> "Codec":
+    ) -> Codec:
         """SQIP-style overlapping circles."""
         return cls(
             shape=ShapeType.CIRCLE, n_shapes=n,
@@ -139,9 +138,9 @@ class Codec:
         cls,
         n: int = 12,
         *,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-    ) -> "Codec":
+    ) -> Codec:
         """Primitive-style triangle mosaic."""
         return cls(
             shape=ShapeType.TRIANGLE, n_shapes=n,
@@ -153,9 +152,9 @@ class Codec:
         cls,
         n: int = 12,
         *,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-    ) -> "Codec":
+    ) -> Codec:
         """Axis-aligned squares."""
         return cls(
             shape=ShapeType.SQUARE, n_shapes=n,
@@ -167,9 +166,9 @@ class Codec:
         cls,
         n: int = 12,
         *,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-    ) -> "Codec":
+    ) -> Codec:
         """Axis-aligned rectangles."""
         return cls(
             shape=ShapeType.RECT, n_shapes=n,
@@ -182,9 +181,9 @@ class Codec:
         n: int = 12,
         *,
         theta_bits: int = 5,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-    ) -> "Codec":
+    ) -> Codec:
         """Rotated rectangles. `theta_bits` tunes the angle step (5 ⇒ ~5.6°)."""
         return cls(
             shape=ShapeType.ROTATED_RECT, n_shapes=n, theta_bits=theta_bits,
@@ -196,10 +195,10 @@ class Codec:
         cls,
         n: int = 12,
         *,
-        palette: Optional[np.ndarray] = None,
+        palette: np.ndarray | None = None,
         color_bits: int = 16,
-        grid_aspect: Optional[float] = None,
-    ) -> "Codec":
+        grid_aspect: float | None = None,
+    ) -> Codec:
         """Retro pixel mosaic. `grid_aspect` pins the grid shape."""
         return cls(
             shape=ShapeType.PIXEL, n_shapes=n,
@@ -208,7 +207,7 @@ class Codec:
         )
 
     @classmethod
-    def preset(cls, p: Preset) -> "Codec":
+    def preset(cls, p: Preset) -> Codec:
         """Named codec recipe — see [`Preset`]. Deprecated pre-0.3 names are
         accepted and produce the same Codec as their replacement."""
         if p in (Preset.DCT, Preset.TINY_DCT):
@@ -247,7 +246,7 @@ class Codec:
 
     # ---------- byte-compatibility check ----------
 
-    def is_byte_compatible_with(self, other: "Codec") -> bool:
+    def is_byte_compatible_with(self, other: Codec) -> bool:
         """True iff hashes produced by `self` decode correctly under `other`.
 
         Compares only the SPEC fields that drive the byte layout (shape,
@@ -290,7 +289,7 @@ class Codec:
         }
         if self.palette is not None:
             out["palette_hex"] = [
-                "{:02x}{:02x}{:02x}".format(int(r), int(g), int(b))
+                f"{int(r):02x}{int(g):02x}{int(b):02x}"
                 for r, g, b in self.palette[: self.palette_k]
             ]
             out["palette_k"] = int(self.palette_k)
@@ -299,7 +298,7 @@ class Codec:
         return out
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Codec":
+    def from_dict(cls, d: dict) -> Codec:
         """Inverse of [`to_dict`]."""
         kwargs: dict = {
             "shape": ShapeType(d["shape"]),
@@ -325,11 +324,11 @@ class Codec:
 
     # ---------- builders ----------
 
-    def with_palette(self, palette: np.ndarray) -> "Codec":
+    def with_palette(self, palette: np.ndarray) -> Codec:
         """Return a copy of this codec switched to palette indexing."""
         return replace(self, palette=palette)
 
-    def with_color_bits(self, bits: int) -> "Codec":
+    def with_color_bits(self, bits: int) -> Codec:
         """Return a copy with continuous-color mode at the given bit depth."""
         return replace(self, palette=None, palette_k=None, color_bits=bits)
 
@@ -436,7 +435,7 @@ class Codec:
         return math.ceil(bits / 8)
 
     @cached_property
-    def palette_linear(self) -> Optional[np.ndarray]:
+    def palette_linear(self) -> np.ndarray | None:
         if not self.is_palette_mode:
             return None
         from ._colorspace import srgb_u8_to_linear

@@ -9,10 +9,7 @@ from __future__ import annotations
 
 import time
 
-import numpy as np
-import pytest
-
-from arthash import Codec, DEFAULT_SEARCH, SearchOptions, ShapeType, encode
+from arthash import DEFAULT_SEARCH, Codec, SearchOptions, ShapeType, encode
 
 
 def test_default_search_is_backward_compatible(rgb_random_seed42):

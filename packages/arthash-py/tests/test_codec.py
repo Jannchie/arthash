@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
-from arthash import Codec, DEFAULT_CODEC, Preset, ShapeType
+from arthash import DEFAULT_CODEC, Codec, Preset, ShapeType
 from arthash.palettes import PICO8
-
 
 # ----------------------------- defaults -----------------------------
 
@@ -172,7 +170,8 @@ def test_bytes_total_triangle_palette():
 
 def test_codec_is_frozen():
     c = Codec()
-    with pytest.raises(Exception):
+    # Frozen dataclass → assignment raises FrozenInstanceError (an AttributeError subclass).
+    with pytest.raises(AttributeError):
         c.n_shapes = 99  # type: ignore[misc]
 
 
@@ -261,12 +260,22 @@ def test_with_color_bits_drops_palette():
 
 def test_top_level_shortcuts_match_preset():
     from arthash import (
-        dct, small_triangle, small_circle, small_pixel,
-        small_rect, small_square,
-        medium_triangle, medium_circle, medium_pixel,
-        medium_rect, medium_square,
-        large_triangle, large_circle, large_pixel,
-        large_rect, large_square,
+        dct,
+        large_circle,
+        large_pixel,
+        large_rect,
+        large_square,
+        large_triangle,
+        medium_circle,
+        medium_pixel,
+        medium_rect,
+        medium_square,
+        medium_triangle,
+        small_circle,
+        small_pixel,
+        small_rect,
+        small_square,
+        small_triangle,
     )
     pairs = [
         (dct, Preset.DCT),
@@ -293,8 +302,13 @@ def test_top_level_shortcuts_match_preset():
 def test_deprecated_shortcuts_emit_warning():
     import pytest
     from arthash import (
-        tiny_dct, placeholder_triangle, placeholder_circle, placeholder_pixel,
-        detail_triangle, detail_circle, detail_pixel,
+        detail_circle,
+        detail_pixel,
+        detail_triangle,
+        placeholder_circle,
+        placeholder_pixel,
+        placeholder_triangle,
+        tiny_dct,
     )
     # Each deprecated shortcut emits DeprecationWarning and still returns a
     # codec byte-compatible with its new-name replacement.

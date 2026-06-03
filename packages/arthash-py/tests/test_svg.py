@@ -5,7 +5,6 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 import pytest
-
 from arthash import Codec, ShapeType, encode, to_svg
 from arthash.palettes import PICO8
 
@@ -129,6 +128,7 @@ def test_deprecated_blur_kwarg_still_works(rgb_random_seed42):
     """`to_svg(blur=...)` is deprecated since 0.3.0 — emits a warning but
     still produces the correct output. The deprecation window goes until 1.0."""
     import warnings
+
     from arthash import RenderStyle
     codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
     h = encode(rgb_random_seed42, codec, seed=0)
@@ -142,6 +142,7 @@ def test_deprecated_blur_kwarg_still_works(rgb_random_seed42):
 
 def test_style_blur_wins_over_deprecated_blur(rgb_random_seed42):
     import warnings
+
     from arthash import RenderStyle
     codec = Codec(shape=ShapeType.TRIANGLE, n_shapes=4)
     h = encode(rgb_random_seed42, codec, seed=0)
@@ -186,6 +187,7 @@ def test_corner_radius_on_circle_warns_and_ignored(rgb_random_seed42):
     value is silently dropped — matches the TS conditional-type behavior
     (caught at compile time there, at runtime here)."""
     import warnings
+
     from arthash import RenderStyle
     codec = Codec(shape=ShapeType.CIRCLE, n_shapes=4)
     h = encode(rgb_random_seed42, codec, seed=0)
