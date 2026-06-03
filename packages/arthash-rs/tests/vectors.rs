@@ -55,8 +55,8 @@ fn build_input(spec: &serde_json::Value) -> (u32, u32, Vec<u8>) {
         "random" => {
             // numpy PCG64-DXSM sequence is not reproduced here; tests that
             // use this input are skipped for byte-equality assertions.
-            for i in 0..n * 3 {
-                rgb[i] = (i as u8).wrapping_mul(137);
+            for (i, byte) in rgb.iter_mut().enumerate().take(n * 3) {
+                *byte = (i as u8).wrapping_mul(137);
             }
         }
         _ => panic!("unknown input kind: {}", kind),
