@@ -1,7 +1,7 @@
 # arthash-rs encoder optimizations
 
 This document is the living record of performance work on the shape-mode
-encoders (CIRCLE / TRIANGLE). The goal is to keep enough breadcrumbs
+encoders (CIRCLE / TRIANGLE / SQUARE / RECT / ROTATED_RECT). The goal is to keep enough breadcrumbs
 behind each optimization that a future maintainer can answer two
 questions without re-running anything:
 
@@ -334,6 +334,94 @@ Match `BENCH_TRI_N_RANDOM` analogously to sweep TRIANGLE.
 
 ---
 
+## Opt 4 — Incremental `Integral2D` canvas rebuild (RECT / SQUARE)
+
+**Status:** always on. No flag.
+**Bit-exact:** yes — `hash_hex` verified byte-for-byte identical across all
+15 (image × shape) combinations in the bench below.
+**Module:** `shape::integral2d`.
+
+### What it does
+
+RECT and SQUARE break the "one contiguous span per row" assumption the 1D
+`Integral` (Opt 1) relies on — an axis-aligned rectangle's ΔSSE is the
+classic Viola-Jones 4-corner lookup on a **2D** prefix sum. So rect/square
+fit through `Integral2D` instead, which keeps the canvas-dependent series
+(`c`, `c²`, `t·c`) as full 2D cumulative sums.
+
+The cost is the rebuild after each `apply_*` commit. In a 2D prefix sum,
+changing one pixel shifts every cell below and to the right of it. The old
+`update_canvas` rebuilt the entire `0..h` grid on every commit — O(h·w)
+even when the committed shape only touched a few rows near the bottom.
+`update_canvas_from_row(ymin)` rebuilds only rows `[ymin, h)`, where `ymin`
+is the committed shape's bbox top; the rows above it are unchanged and their
+prefix carries forward untouched.
+
+### Numerical equivalence
+
+Bit-identical to a full rebuild. `accumulate_row(ymin)` reads its "above"
+slot — the prefix over the unchanged rows `< ymin` — and walks downward in
+exactly the same order a `0..h` rebuild would, so every emitted cell matches.
+Confirmed empirically: the `hash_hex` of all 15 (image, shape) combos is
+byte-for-byte identical between v0.4.0 and this opt, and the `recon_mse`
+column matches to the last digit.
+
+### Performance
+
+60-iter median on a Windows 11 machine, 48×48 inputs, `n_shapes=12`.
+`baseline` is v0.4.0 (full `0..h` rebuild); `current` is
+`update_canvas_from_row`. ROTRECT is included as a **control**: it fits
+through the 1D `Integral` (quad path), not `Integral2D`, so it should *not*
+move.
+
+| image / shape        | baseline (µs) | current (µs) |              Δ |
+| -------------------- | ------------: | -----------: | -------------: |
+| gradient / square    |         731.7 |        664.5 |        −9.2 % |
+| gradient / rect      |         811.8 |        751.8 |        −7.4 % |
+| quadrants / square   |         656.0 |        598.8 |        −8.7 % |
+| quadrants / rect     |         743.4 |        696.5 |        −6.3 % |
+| noise / square       |         632.5 |        569.9 |        −9.9 % |
+| noise / rect         |         634.9 |        545.0 |       −14.2 % |
+| gradient / rotrect   |        3011.7 |       3199.7 | +6.2 % (ctrl) |
+| quadrants / rotrect  |        2167.5 |       2212.8 | +2.1 % (ctrl) |
+| noise / rotrect      |        1389.6 |       1385.5 | −0.3 % (ctrl) |
+
+SQUARE and RECT drop 6–14 %; the `min_us` column (less scheduler noise)
+tells the same story at −9 to −16 %. ROTRECT stays within run-to-run noise,
+confirming the win is specific to the `Integral2D` path. CIRCLE / TRIANGLE
+(1D `Integral`, already incremental via `update_canvas_rows` since Opt 1)
+are likewise flat and omitted.
+
+### Related changes in the same release (bit-exact, smaller effect)
+
+* **α-sweep sum reuse for CIRCLE / TRIANGLE / ROTRECT.** Extends the Opt 1
+  α-sweep refactor: `eval_{circle,triangle,quad}_integral_with_sums` return
+  the collected `ShapeSums` so the fitter finalizes every α level without a
+  second collect on the winning geometry. Standalone effect is noise-grade
+  (≤2 %, same ceiling argument as the α-sweep refactor above) — kept for the
+  cleaner primitive, not the speed.
+* **`Residual::rebuild_from`.** The residual CDF (Opt 3) is now rebuilt
+  incrementally from the committed shape's first changed pixel instead of
+  the full `0..n`. Bit-identical: same left-to-right f32 accumulation, seeded
+  from `cdf[start_idx]`.
+* **Fused DCT colorspace** (`dct::colorspace::rgb_u8_to_oklab_channels`):
+  sRGB→linear and linear→Oklab in one pass, 6 intermediate `Vec`s down to 3.
+  ~5 % off DCT encode (measured with `examples/bench`, not this hillclimb
+  table — DCT has no hill-climb).
+
+### Public API added
+
+* `arthash::shape::integral2d::Integral2D::update_canvas_from_row(target, canvas, ymin)`
+  — incremental canvas-series rebuild.
+* `arthash::shape::integral::eval_{circle,triangle,quad}_integral_with_sums`
+  — evaluator variants that also return `ShapeSums` for α-sweep reuse.
+* `arthash::shape::residual::Residual::rebuild_from(target, canvas, start_idx)`.
+
+No JS-facing knob: the WASM glue / `arthash` / playground inherit the faster
+rect/square search automatically.
+
+---
+
 ## Reproducing the data
 
 ```sh
@@ -377,7 +465,9 @@ Ranked by expected impact, not yet implemented:
    the integral image upfront, but Stage 1 candidates only touch
    `~bbox_height` rows per eval. Building rows on first access could
    save ~10 % on the n_random phase. Hash-preserving. Adds a row-built
-   bitmap to the data structure.
+   bitmap to the data structure. (The *commit-time* analogue — rebuilding
+   incrementally instead of fully — already shipped for `Integral2D` in
+   Opt 4; this item is the remaining *build-time* lazy-init half.)
 3. **`f32` prefix sums in `Integral`** — would halve memory bandwidth in
    `update_canvas_rows`. Accumulated reassociation error at row width 48
    is `48 × ε_f32 ≈ 6 × 10⁻⁶`, on the edge of the f32 ΔSSE resolution
