@@ -34,6 +34,10 @@ pub enum ShapeType {
 }
 
 impl ShapeType {
+    // Named `from_str` (not the `FromStr` trait) on purpose: this is the FFI
+    // wire-name contract shared with the Python and WASM bindings. Renaming it
+    // would break those call sites, so the trait-shadowing lint is suppressed.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "dct" => Some(Self::Dct),
@@ -193,39 +197,14 @@ impl Palette {
 /// * [`ColorMode::Rgb888`] — 24 bits per color (more fidelity, larger hash).
 /// * [`ColorMode::Palette`] — `log₂K` bits per palette index. The palette is
 ///   consensus knowledge; it is not stored in the hash.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum ColorMode {
+    #[default]
     Rgb565,
     Rgb888,
     Palette(Palette),
-}
-
-impl Default for ColorMode {
-    fn default() -> Self {
-        ColorMode::Rgb565
-    }
-}
-
-impl ColorMode {
-    pub(crate) fn color_bits(&self) -> u32 {
-        match self {
-            ColorMode::Rgb565 => 16,
-            ColorMode::Rgb888 => 24,
-            // Palette mode stores indices, but `color_bits` retains the
-            // continuous fallback width so non-palette consumers can still
-            // ask. Codec dispatch uses `is_palette()` to branch first.
-            ColorMode::Palette(_) => 16,
-        }
-    }
-
-    pub(crate) fn palette(&self) -> Option<&Palette> {
-        match self {
-            ColorMode::Palette(p) => Some(p),
-            _ => None,
-        }
-    }
 }
 
 /// Named presets — battle-tested codec recipes you can drop in without
@@ -420,11 +399,12 @@ impl From<Preset> for Codec {
 /// Two codecs that compare equal (`==`) decode each other's hashes byte-for-byte.
 /// For a looser check (e.g. ignoring quirks like `alpha_levels`), use
 /// [`Codec::is_byte_compatible_with`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "kind"))]
 pub enum Codec {
     /// V4 thumbhash-style frequency-domain placeholder (~21 B).
+    #[default]
     Dct,
     /// SQIP-style overlapping circles.
     Circle { n: u32, color: ColorMode },
@@ -453,12 +433,6 @@ pub enum Codec {
     /// normal usage.
     #[doc(hidden)]
     Raw(CodecConfig),
-}
-
-impl Default for Codec {
-    fn default() -> Self {
-        Codec::Dct
-    }
 }
 
 impl Codec {
@@ -786,9 +760,9 @@ impl CodecConfig {
     /// adds a fixed quantized block per SPEC §3.5).
     pub(crate) fn bytes_total(&self, has_alpha: bool) -> usize {
         if matches!(self.shape, ShapeType::Dct) {
-            let header = if has_alpha { 48 } else { 40 };
-            let n_l_max = 28;
-            return (header + 4 * (n_l_max + 16 + if has_alpha { 24 } else { 0 }) + 7) / 8;
+            let header: usize = if has_alpha { 48 } else { 40 };
+            let n_l_max: usize = 28;
+            return (header + 4 * (n_l_max + 16 + if has_alpha { 24 } else { 0 })).div_ceil(8);
         }
         let bits = self.header_bits() + self.n_shapes * self.per_shape_bits();
         bits.div_ceil(8) as usize
@@ -855,9 +829,9 @@ mod tests {
 
     #[test]
     fn palette_new_rejects_k_out_of_range() {
-        // K=1 — too few colors.
+        // K=1 (3 bytes = one RGB color) — too few colors.
         assert!(matches!(
-            Palette::new(vec![0u8; 3 * 1]),
+            Palette::new(vec![0u8; 3]),
             Err(CodecError::PaletteKInvalid(1))
         ));
         // K=2048 — beyond the protocol's 10-bit index field.

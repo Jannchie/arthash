@@ -72,11 +72,6 @@ impl Rng {
         }
     }
 
-    /// Pick one of two values: -1 or +1.
-    pub fn sign(&mut self) -> i32 {
-        if self.next_u64() & 1 == 0 { -1 } else { 1 }
-    }
-
     /// Gaussian step with magnitude forced to at least 1, sign preserved.
     /// Used by the shape hill-climb to avoid wasted evals: with raw Gaussian
     /// truncation (`(normal()*σ) as i32`), ~30 % of draws round to 0 and

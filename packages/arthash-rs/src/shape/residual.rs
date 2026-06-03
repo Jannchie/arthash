@@ -34,9 +34,23 @@ impl Residual {
     /// Full rebuild — call after every `apply_*` commit. Target is constant
     /// across the fit, so the caller passes the same `target` slice each time.
     pub fn rebuild(&mut self, target: &[f32], canvas: &[f32]) {
-        let mut acc = 0.0f32;
+        self.rebuild_from(target, canvas, 0);
+    }
+
+    /// Incremental rebuild: only pixels with flat (row-major) index
+    /// `≥ start_idx` changed since the last rebuild — pass the committed
+    /// shape's `bbox_ymin * w` so the unchanged top rows are skipped. Seeds
+    /// the accumulator from `cdf[start_idx]` (the prefix sum over the
+    /// unchanged region) and recomputes only the tail.
+    ///
+    /// Bit-identical to a full `rebuild`: same left-to-right f32 accumulation
+    /// order and the same seed value, so `cdf` — and hence the sampler's
+    /// `partition_point` and the whole search trajectory — is unchanged.
+    pub fn rebuild_from(&mut self, target: &[f32], canvas: &[f32], start_idx: usize) {
         let n = self.h * self.w;
-        for i in 0..n {
+        let start = start_idx.min(n);
+        let mut acc = self.cdf[start];
+        for i in start..n {
             let p = i * 3;
             let dr = target[p] - canvas[p];
             let dg = target[p + 1] - canvas[p + 1];

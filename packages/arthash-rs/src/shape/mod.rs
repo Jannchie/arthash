@@ -8,6 +8,7 @@
 //! + `encode_rgb` / `decode` / `to_svg` re-exports at the crate root.
 
 pub(crate) mod circle;
+pub(crate) mod common;
 pub(crate) mod integral;
 pub(crate) mod integral2d;
 pub mod options; // SearchOptions / Strategy are part of the public API.
@@ -26,5 +27,7 @@ pub(crate) mod triangle;
 pub use options::SearchOptions;
 
 /// Encoder thumbnail long-edge — search-quality knob, NOT byte-format.
-/// Mirrors Python's THUMB=48 default.
+/// Mirrors Python's THUMB=48 default. Only consumed by the `image-io`
+/// resize path in [`crate::api::encode_image`], so it is gated to match.
+#[cfg(feature = "image-io")]
 pub(crate) const THUMB: u32 = 48;

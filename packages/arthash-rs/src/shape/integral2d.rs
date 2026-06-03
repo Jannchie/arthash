@@ -19,11 +19,11 @@
 //!
 //! ## Update cost
 //!
-//! After every `apply_*` the canvas-dependent series (`c`, `c²`, `t·c`) need
-//! a full rebuild from the touched row onward — propagating the 2D prefix
-//! through every subsequent row. We do a simple full rebuild because at
-//! thumb sizes (48×48) it's already only ~35K ops per commit, dominated by
-//! the per-eval savings. The target-only series (`t`, `t²`) are built once.
+//! After every `apply_*` the canvas-dependent series (`c`, `c²`, `t·c`) are
+//! rebuilt from the touched row onward via
+//! [`Integral2D::update_canvas_from_row`]: a 2D prefix shift propagates
+//! through every row below a changed row, but the rows above the bbox top are
+//! untouched and skipped. The target-only series (`t`, `t²`) are built once.
 
 use super::raster::{EvalResult, ShapeSums};
 #[cfg(feature = "bench-counters")]
@@ -68,10 +68,19 @@ impl Integral2D {
         }
     }
 
-    /// Full rebuild of canvas-dependent series only (`c`, `c²`, `t·c`).
-    /// Target series are static for the duration of a fit.
-    pub fn update_canvas(&mut self, target: &[f32], canvas: &[f32]) {
-        for y in 0..self.h {
+    /// Rebuild canvas-dependent series (`c`, `c²`, `t·c`) for rows `≥ ymin`.
+    /// Target series (`t`, `t²`) are static for the duration of a fit.
+    ///
+    /// Only the rows from the last `apply_*`'s bbox top (`ymin`) onward had
+    /// their canvas pixels change. In a 2D prefix sum every row below a
+    /// changed row also shifts, so we rebuild from `ymin` down to `h-1` — but
+    /// the rows above `ymin` are untouched and skipped. This is bit-identical
+    /// to a full `0..h` rebuild: `accumulate_row(ymin)` reads its "above" slot
+    /// (the prefix over the unchanged rows `< ymin`) and walks downward in the
+    /// same order, so every emitted cell matches the full-rebuild value.
+    pub fn update_canvas_from_row(&mut self, target: &[f32], canvas: &[f32], ymin: i32) {
+        let lo = ymin.max(0).min(self.h as i32) as usize;
+        for y in lo..self.h {
             self.accumulate_row(target, canvas, y, /*canvas_only=*/ true);
         }
     }

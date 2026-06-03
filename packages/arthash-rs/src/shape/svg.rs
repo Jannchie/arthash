@@ -29,7 +29,7 @@
 //! still returns [`SvgError::UnsupportedShape`].
 
 use super::pixel::pixel_grid;
-use super::quant::{aspect_from_code, q_to_alpha, q_to_r, read_color};
+use super::quant::{aspect_from_code, dequant_xy, q_to_alpha, q_to_r, read_color};
 use super::rect::decode_rect_at;
 use super::rotrect::decode_rotrect_at;
 use super::square::decode_square_at;
@@ -205,11 +205,7 @@ fn corner_attr(r: f32) -> String {
 }
 
 fn circle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
-    let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
-    let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
-    let w_m1 = (w as f32 - 1.0).max(0.0);
-    let h_m1 = (h as f32 - 1.0).max(0.0);
     for _ in 0..codec.n_shapes {
         let x_q = br.read(codec.cx_bits);
         let y_q = br.read(codec.cy_bits);
@@ -217,8 +213,7 @@ fn circle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out:
         let color_linear = read_color(br, codec);
         let a_q = br.read(codec.alpha_bits);
 
-        let cx = ((x_q as f32) / x_max * w_m1).round() as i32;
-        let cy = ((y_q as f32) / y_max * h_m1).round() as i32;
+        let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
         let r = (q_to_r(r_q, w, h, codec.r_bits).round() as i32).max(1);
         let alpha = q_to_alpha(a_q, &alpha_levels);
         let fill = color_to_hex(&color_linear);
@@ -233,18 +228,15 @@ fn circle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out:
 }
 
 fn triangle_elements(br: &mut BitReader, codec: &CodecConfig, w: u32, h: u32, out: &mut String) {
-    let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
-    let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
-    let w_m1 = (w as f32 - 1.0).max(0.0);
-    let h_m1 = (h as f32 - 1.0).max(0.0);
     for _ in 0..codec.n_shapes {
         let mut verts = [(0i32, 0i32); 3];
         for v in verts.iter_mut() {
             let x_q = br.read(codec.cx_bits);
             let y_q = br.read(codec.cy_bits);
-            v.0 = ((x_q as f32) / x_max * w_m1).round() as i32;
-            v.1 = ((y_q as f32) / y_max * h_m1).round() as i32;
+            let (vx, vy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
+            v.0 = vx;
+            v.1 = vy;
         }
         let color_linear = read_color(br, codec);
         let alpha = q_to_alpha(br.read(codec.alpha_bits), &alpha_levels);
@@ -833,7 +825,7 @@ mod tests {
             &bytes,
             &codec,
             SvgOptions {
-                blur: 6.0,
+                style: RenderStyle { blur: 6.0, corner_radius: 0.0 },
                 ..SvgOptions::default()
             },
         )

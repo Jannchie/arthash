@@ -420,8 +420,11 @@ pub fn apply_quad(
     if xmin > xmax || ymin > ymax {
         return;
     }
-    let area2 = (v[1].0 - v[0].0) * (v[2].1 - v[0].1)
-        - (v[1].1 - v[0].1) * (v[2].0 - v[0].0);
+    // Edge/area math in i64 to stay overflow-safe at large decode sizes
+    // (see apply_triangle). Within i32 range the sign tests are identical, so
+    // encode commits (thumb-size) are byte-for-byte unchanged.
+    let area2 = (v[1].0 - v[0].0) as i64 * (v[2].1 - v[0].1) as i64
+        - (v[1].1 - v[0].1) as i64 * (v[2].0 - v[0].0) as i64;
     if area2 == 0 {
         return;
     }
@@ -429,15 +432,15 @@ pub fn apply_quad(
 
     // Precompute 4 edge functions e_i(x, y) = (x_{i+1}-x_i)(y-y_i) - (y_{i+1}-y_i)(x-x_i).
     // Inside is e_i ≥ 0 for sign_pos else ≤ 0.
-    let mut a = [0i32; 4]; // ∂e/∂x
-    let mut b = [0i32; 4]; // ∂e/∂y
-    let mut row_e = [0i32; 4]; // value at (xmin, ymin)
+    let mut a = [0i64; 4]; // ∂e/∂x
+    let mut b = [0i64; 4]; // ∂e/∂y
+    let mut row_e = [0i64; 4]; // value at (xmin, ymin)
     for i in 0..4 {
         let j = (i + 1) % 4;
-        a[i] = -(v[j].1 - v[i].1);
-        b[i] = v[j].0 - v[i].0;
-        row_e[i] = (v[j].0 - v[i].0) * (ymin - v[i].1)
-            - (v[j].1 - v[i].1) * (xmin - v[i].0);
+        a[i] = -((v[j].1 - v[i].1) as i64);
+        b[i] = (v[j].0 - v[i].0) as i64;
+        row_e[i] = (v[j].0 - v[i].0) as i64 * (ymin - v[i].1) as i64
+            - (v[j].1 - v[i].1) as i64 * (xmin - v[i].0) as i64;
     }
     let one_ma = 1.0 - alpha;
     for y in ymin..=ymax {
@@ -617,7 +620,12 @@ pub fn apply_triangle(
     let (vx0, vy0) = v[0];
     let (vx1, vy1) = v[1];
     let (vx2, vy2) = v[2];
-    let area2 = (vx1 - vx0) * (vy2 - vy0) - (vy1 - vy0) * (vx2 - vx0);
+    // Edge/area math in i64: at large decode sizes (base_size · aa) the
+    // products reach ~size², which overflows i32 (wraps in release → wrong
+    // coverage). i64 holds them exactly; within i32 range the sign tests are
+    // identical, so encode commits (thumb-size) stay byte-for-byte unchanged.
+    let area2 = (vx1 - vx0) as i64 * (vy2 - vy0) as i64
+        - (vy1 - vy0) as i64 * (vx2 - vx0) as i64;
     if area2 == 0 {
         return;
     }
@@ -629,15 +637,18 @@ pub fn apply_triangle(
         return;
     }
     let sign_pos = area2 > 0;
-    let d_e0_dx = -(vy1 - vy0);
-    let d_e0_dy = vx1 - vx0;
-    let d_e1_dx = -(vy2 - vy1);
-    let d_e1_dy = vx2 - vx1;
-    let d_e2_dx = -(vy0 - vy2);
-    let d_e2_dy = vx0 - vx2;
-    let mut row_e0 = (vx1 - vx0) * (ymin - vy0) - (vy1 - vy0) * (xmin - vx0);
-    let mut row_e1 = (vx2 - vx1) * (ymin - vy1) - (vy2 - vy1) * (xmin - vx1);
-    let mut row_e2 = (vx0 - vx2) * (ymin - vy2) - (vy0 - vy2) * (xmin - vx2);
+    let d_e0_dx = -((vy1 - vy0) as i64);
+    let d_e0_dy = (vx1 - vx0) as i64;
+    let d_e1_dx = -((vy2 - vy1) as i64);
+    let d_e1_dy = (vx2 - vx1) as i64;
+    let d_e2_dx = -((vy0 - vy2) as i64);
+    let d_e2_dy = (vx0 - vx2) as i64;
+    let mut row_e0 = (vx1 - vx0) as i64 * (ymin - vy0) as i64
+        - (vy1 - vy0) as i64 * (xmin - vx0) as i64;
+    let mut row_e1 = (vx2 - vx1) as i64 * (ymin - vy1) as i64
+        - (vy2 - vy1) as i64 * (xmin - vx1) as i64;
+    let mut row_e2 = (vx0 - vx2) as i64 * (ymin - vy2) as i64
+        - (vy0 - vy2) as i64 * (xmin - vx2) as i64;
     let one_ma = 1.0 - alpha;
     for y in ymin..=ymax {
         let mut e0 = row_e0;

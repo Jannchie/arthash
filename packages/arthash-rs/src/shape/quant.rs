@@ -130,6 +130,25 @@ pub fn quant_xy(cx: f32, cy: f32, tw: u32, th: u32, cx_bits: u32, cy_bits: u32) 
     (x_q, y_q)
 }
 
+/// Inverse of [`quant_xy`]: dequantize a packed `(x_q, y_q)` center back to
+/// canvas pixel coordinates. The single source of truth for center decoding —
+/// shared by every shape's `decode_render`, the `decode_*_at` helpers, and the
+/// SVG emitters, so this formula can't silently drift between the three.
+///
+/// `x_max` is floored at 1 (degenerate `cx_bits == 0`) and the canvas extent is
+/// computed in f32 with a `.max(0.0)` guard, so a 1-pixel / zero-width canvas
+/// can't underflow. For all valid configs (`cx_bits ≥ 1`, `w ≥ 1`) this matches
+/// the historical per-call formulas bit-for-bit.
+pub fn dequant_xy(x_q: u32, y_q: u32, w: u32, h: u32, cx_bits: u32, cy_bits: u32) -> (i32, i32) {
+    let x_max = (((1u32 << cx_bits) - 1).max(1)) as f32;
+    let y_max = (((1u32 << cy_bits) - 1).max(1)) as f32;
+    let w_m1 = (w as f32 - 1.0).max(0.0);
+    let h_m1 = (h as f32 - 1.0).max(0.0);
+    let cx = (x_q as f32 / x_max * w_m1).round() as i32;
+    let cy = (y_q as f32 / y_max * h_m1).round() as i32;
+    (cx, cy)
+}
+
 // --- per-axis extent (RECT / ROTATED_RECT width and height; SQUARE side) ---
 //
 // Log-spaced quantization between `dim_min = max(1, max_dim/24)` and

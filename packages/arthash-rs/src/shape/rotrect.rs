@@ -10,19 +10,18 @@
 //! same shape). The byte width is `codec.theta_bits` — default 5 bits = 32
 //! levels ≈ 5.6° resolution.
 
-use super::integral::{collect_quad_sums_integral, eval_quad_integral, Integral};
+use super::integral::{eval_quad_integral_with_sums, Integral};
 use super::options::SearchOptions;
 use super::quant::{
-    alpha_to_q, aspect_code, dim_to_q, q_to_alpha, q_to_dim, q_to_theta, quant_xy, read_color,
-    theta_to_q, write_color,
+    alpha_to_q, aspect_code, dequant_xy, dim_to_q, q_to_alpha, q_to_dim, q_to_theta, quant_xy,
+    read_color, theta_to_q, write_color,
 };
-use super::raster::{apply_quad, apply_rotated_rounded_rect_aa, quad_row_range, EvalResult};
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::raster::{apply_quad, apply_rotated_rounded_rect_aa, quad_row_range, ShapeSums};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::CodecConfig as Codec;
-
-const FIXED_HILL_CLIMB_ALPHA: f32 = 0.5;
 
 #[derive(Clone, Debug)]
 pub struct RotRect {
@@ -55,21 +54,6 @@ fn rotrect_verts(cx: i32, cy: i32, w: i32, h: i32, theta: f32) -> [(i32, i32); 4
     out
 }
 
-fn mean_rgb(target: &[f32]) -> [f32; 3] {
-    let n = target.len() / 3;
-    let mut acc = [0.0f64; 3];
-    for i in 0..n {
-        acc[0] += target[i * 3] as f64;
-        acc[1] += target[i * 3 + 1] as f64;
-        acc[2] += target[i * 3 + 2] as f64;
-    }
-    [
-        (acc[0] / n as f64) as f32,
-        (acc[1] / n as f64) as f32,
-        (acc[2] / n as f64) as f32,
-    ]
-}
-
 pub fn fit_rotrects(
     target: &[f32],
     h: u32,
@@ -79,12 +63,7 @@ pub fn fit_rotrects(
     search: &SearchOptions,
 ) -> ([f32; 3], Vec<RotRect>) {
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut residual = Residual::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
@@ -97,7 +76,11 @@ pub fn fit_rotrects(
     let sigma_wh = (1u32).max(long_edge * 6 / 100) as f64;
     let sigma_theta: f64 = std::f64::consts::PI / 12.0; // ≈15° per step
     let init_max = (2u32).max(long_edge * 25 / 100) as i64;
-    let dim_max = w.max(h) as i32;
+    // Lower-bound the clamp ceiling at the init floor (2): on degenerate
+    // canvases (e.g. 1×1) `w.max(h)` can be < 2, which would make the
+    // `clamp(2, dim_max)` below panic with `min > max`. Real thumbnails are
+    // ≥48 px so this never changes the search trajectory / bytes.
+    let dim_max = (w.max(h) as i32).max(2);
 
     let use_max_age = search.hill_climb_max_age.is_some();
     let hard_cap = if use_max_age { 10_000 } else { search.hill_climb_steps };
@@ -109,23 +92,27 @@ pub fn fit_rotrects(
     for _ in 0..codec.n_shapes {
         let mut best_delta_climb: f32 = -1e-3;
         let mut best_geom: Option<(i32, i32, i32, i32, f32)> = None;
+        // Winning geometry's sums, reused for the Stage-3 α-sweep.
+        let mut best_climb_sums = ShapeSums::new();
 
         for _attempt in 0..search.n_attempts {
             // Stage 1.
             let mut best_d = f32::INFINITY;
             let mut best_init: Option<(i32, i32, i32, i32, f32)> = None;
+            let mut best_init_sums = ShapeSums::new();
             for _ in 0..search.n_random {
                 let (cx, cy) = residual.sample(&mut rng);
                 let rw = rng.range(2, init_max + 1) as i32;
                 let rh = rng.range(2, init_max + 1) as i32;
                 let theta = rng.next_f64() as f32 * std::f32::consts::PI;
                 let verts = rotrect_verts(cx, cy, rw, rh, theta);
-                let res = eval_quad_integral(
+                let (res, sums) = eval_quad_integral_with_sums(
                     &integral, h, w, verts, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_d {
                     best_d = res.delta_sse;
                     best_init = Some((cx, cy, rw, rh, theta));
+                    best_init_sums = sums;
                 }
             }
             let Some((mut cx, mut cy, mut rw, mut rh, mut theta)) = best_init else { continue };
@@ -133,6 +120,7 @@ pub fn fit_rotrects(
             // Stage 2 — 5 axes (cx, cy, w, h, theta).
             let mut best_local_delta = best_d;
             let mut best_local_geom = (cx, cy, rw, rh, theta);
+            let mut best_local_sums = best_init_sums;
             let mut age: u32 = 0;
             for _ in 0..hard_cap {
                 let which = rng.range(0, 5);
@@ -148,13 +136,14 @@ pub fn fit_rotrects(
                     }
                 }
                 let verts = rotrect_verts(ncx, ncy, nw, nh, nt);
-                let res = eval_quad_integral(
+                let (res, sums) = eval_quad_integral_with_sums(
                     &integral, h, w, verts, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_local_delta {
                     cx = ncx; cy = ncy; rw = nw; rh = nh; theta = nt;
                     best_local_delta = res.delta_sse;
                     best_local_geom = (cx, cy, rw, rh, theta);
+                    best_local_sums = sums;
                     age = 0;
                 } else {
                     age += 1;
@@ -168,6 +157,7 @@ pub fn fit_rotrects(
             if best_local_delta < best_delta_climb {
                 best_delta_climb = best_local_delta;
                 best_geom = Some(best_local_geom);
+                best_climb_sums = best_local_sums;
             }
         }
 
@@ -184,19 +174,7 @@ pub fn fit_rotrects(
                 0u32,
             ),
             Some((cx, cy, rw, rh, theta)) => {
-                let verts = rotrect_verts(cx, cy, rw, rh, theta);
-                let sums = collect_quad_sums_integral(&integral, h, w, verts);
-                let mut best_a_delta = f32::INFINITY;
-                let mut chosen = EvalResult { delta_sse: 0.0, color: null_color, pidx: 0 };
-                let mut chosen_alpha = null_alpha;
-                for &a in &alpha_levels {
-                    let res = sums.finalize(a, pal_ref);
-                    if res.delta_sse < best_a_delta {
-                        best_a_delta = res.delta_sse;
-                        chosen = res;
-                        chosen_alpha = a;
-                    }
-                }
+                let (chosen_alpha, chosen) = alpha_sweep(&best_climb_sums, &alpha_levels, pal_ref);
                 (cx, cy, rw, rh, theta, chosen_alpha, chosen.color, chosen.pidx)
             }
         };
@@ -205,7 +183,7 @@ pub fn fit_rotrects(
         apply_quad(&mut canvas, h as i32, w as i32, verts, alpha, &color);
         let (ymin, ymax) = quad_row_range(verts, h);
         integral.update_canvas_rows(target, &canvas, ymin, ymax);
-        residual.rebuild(target, &canvas);
+        residual.rebuild_from(target, &canvas, ymin as usize * w as usize);
         rects.push(RotRect { cx, cy, w: rw, h: rh, theta, alpha, color, pidx });
     }
     (bg, rects)
@@ -239,8 +217,6 @@ pub fn decode_render(
     canvas: &mut [f32],
     corner_radius: f32,
 ) {
-    let x_max = (1u32 << codec.cx_bits) - 1;
-    let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
     let use_aa = corner_radius > 0.0;
     for _ in 0..codec.n_shapes {
@@ -251,8 +227,7 @@ pub fn decode_render(
         let t_q = br.read(codec.theta_bits);
         let color = read_color(br, codec);
         let a_q = br.read(codec.alpha_bits);
-        let cx = (x_q as f32 / x_max as f32 * (w - 1) as f32).round() as i32;
-        let cy = (y_q as f32 / y_max as f32 * (h - 1) as f32).round() as i32;
+        let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
         let rw = q_to_dim(w_q, w, codec.r_bits).round() as i32;
         let rh = q_to_dim(h_q, h, codec.r_bits).round() as i32;
         let theta = q_to_theta(t_q, codec.theta_bits);
@@ -298,11 +273,7 @@ pub fn decode_rotrect_at(
     w: u32,
     h: u32,
 ) -> (i32, i32, i32, i32, f32, [f32; 3], f32) {
-    let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
-    let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
-    let w_m1 = (w as f32 - 1.0).max(0.0);
-    let h_m1 = (h as f32 - 1.0).max(0.0);
     let x_q = br.read(codec.cx_bits);
     let y_q = br.read(codec.cy_bits);
     let w_q = br.read(codec.r_bits);
@@ -310,8 +281,7 @@ pub fn decode_rotrect_at(
     let t_q = br.read(codec.theta_bits);
     let color = read_color(br, codec);
     let alpha = q_to_alpha(br.read(codec.alpha_bits), &alpha_levels);
-    let cx = ((x_q as f32) / x_max * w_m1).round() as i32;
-    let cy = ((y_q as f32) / y_max * h_m1).round() as i32;
+    let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
     let rw = q_to_dim(w_q, w, codec.r_bits).round() as i32;
     let rh = q_to_dim(h_q, h, codec.r_bits).round() as i32;
     let theta_rad = q_to_theta(t_q, codec.theta_bits);

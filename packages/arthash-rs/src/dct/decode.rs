@@ -101,11 +101,16 @@ pub fn decode_dct(
     base_size: u32,
     override_aspect: Option<f32>,
 ) -> (u32, u32, Vec<u8>) {
-    assert!(hash.len() >= 5, "hash too short");
+    // Truncated / empty hashes degrade gracefully (missing bytes read as 0)
+    // instead of panicking, matching the zero-fill policy that `BitReader`
+    // already gives shape decoders. For a well-formed hash (len ≥ 5, or ≥ 6
+    // with alpha) `hdr_byte` returns exactly `hash[i]`, so decoded output is
+    // byte-for-byte identical to the previous direct-indexing path.
+    let hdr_byte = |i: usize| hash.get(i).copied().unwrap_or(0);
 
     let header24: u32 =
-        (hash[0] as u32) | ((hash[1] as u32) << 8) | ((hash[2] as u32) << 16);
-    let header16: u32 = (hash[3] as u32) | ((hash[4] as u32) << 8);
+        (hdr_byte(0) as u32) | ((hdr_byte(1) as u32) << 8) | ((hdr_byte(2) as u32) << 16);
+    let header16: u32 = (hdr_byte(3) as u32) | ((hdr_byte(4) as u32) << 8);
 
     let l_dc = (header24 & 63) as f32 / 63.0;
     let p_dc_companded = ((header24 >> 6) & 63) as f32 / 31.5 - 1.0;
@@ -124,9 +129,9 @@ pub fn decode_dct(
     let (lx, ly) = derive_lx_ly(aspect, has_alpha);
 
     let (a_dc, a_scale, ac_start) = if has_alpha {
-        assert!(hash.len() >= 6);
-        let a_dc = (hash[5] & 0x0f) as f32 / 15.0;
-        let a_scale = ((hash[5] >> 4) & 0x0f) as f32 / 15.0;
+        let b5 = hdr_byte(5);
+        let a_dc = (b5 & 0x0f) as f32 / 15.0;
+        let a_scale = ((b5 >> 4) & 0x0f) as f32 / 15.0;
         (a_dc, a_scale, 6usize)
     } else {
         (1.0, 1.0, 5usize)

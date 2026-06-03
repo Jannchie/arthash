@@ -4,12 +4,14 @@
 //! Gaussian hill-climb, m independent attempts. After the climb, sweep all
 //! quantized alphas to pick the best for the chosen geometry.
 
-use super::integral::{collect_circle_sums_integral, eval_circle_integral, Integral};
+use super::integral::{eval_circle_integral, eval_circle_integral_with_sums, Integral};
 use super::options::{SearchOptions, Strategy};
 use super::quant::{
-    alpha_to_q, aspect_code, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color, write_color,
+    alpha_to_q, aspect_code, dequant_xy, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color,
+    write_color,
 };
-use super::raster::{apply_circle, EvalResult};
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::raster::{apply_circle, ShapeSums};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
@@ -35,9 +37,6 @@ pub struct Circle {
     pub pidx: u32,
 }
 
-/// α held fixed during the shape-only hill-climb (matches primitive's α=128).
-const FIXED_HILL_CLIMB_ALPHA: f32 = 0.5;
-
 /// Greedy fit of exactly `codec.n_shapes` circles. Returns (background,
 /// circles).  `target` is row-major `(h, w, 3)` float32 linear-RGB.
 pub fn fit_circles(
@@ -54,21 +53,6 @@ pub fn fit_circles(
     }
 }
 
-fn mean_rgb(target: &[f32]) -> [f32; 3] {
-    let n = target.len() / 3;
-    let mut acc = [0.0f64; 3];
-    for i in 0..n {
-        acc[0] += target[i * 3] as f64;
-        acc[1] += target[i * 3 + 1] as f64;
-        acc[2] += target[i * 3 + 2] as f64;
-    }
-    [
-        (acc[0] / n as f64) as f32,
-        (acc[1] / n as f64) as f32,
-        (acc[2] / n as f64) as f32,
-    ]
-}
-
 fn fit_primitive(
     target: &[f32],
     h: u32,
@@ -78,12 +62,7 @@ fn fit_primitive(
     search: &SearchOptions,
 ) -> ([f32; 3], Vec<Circle>) {
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut residual = Residual::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
@@ -112,21 +91,26 @@ fn fit_primitive(
     for _ in 0..codec.n_shapes {
         let mut best_delta_climb: f32 = -1e-3;
         let mut best_geom: Option<(i32, i32, i32)> = None;
+        // Sums of the winning geometry, carried out of the hill-climb so the
+        // Stage-3 α-sweep doesn't re-collect what an eval already computed.
+        let mut best_climb_sums = ShapeSums::new();
 
         for _attempt in 0..search.n_attempts {
             // Stage 1: pick single best of n_random tiny-start candidates,
             // with centers sampled proportional to current residual.
             let mut best_d = f32::INFINITY;
             let mut best_init: Option<(i32, i32, i32)> = None;
+            let mut best_init_sums = ShapeSums::new();
             for _ in 0..search.n_random {
                 let (cx, cy) = residual.sample(&mut rng);
                 let r = rng.range(1, r_init_max + 1) as i32;
-                let res = eval_circle_integral(
+                let (res, sums) = eval_circle_integral_with_sums(
                     &integral, h, w, cx, cy, r, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_d {
                     best_d = res.delta_sse;
                     best_init = Some((cx, cy, r));
+                    best_init_sums = sums;
                 }
             }
             let Some((mut cx, mut cy, mut r)) = best_init else { continue };
@@ -134,6 +118,7 @@ fn fit_primitive(
             // Stage 2: Gaussian hill-climb on shape only (α fixed).
             let mut best_local_delta = best_d;
             let mut best_local_geom = (cx, cy, r);
+            let mut best_local_sums = best_init_sums;
             let mut age: u32 = 0;
             for _ in 0..hard_cap {
                 let which = rng.range(0, 3);
@@ -143,7 +128,7 @@ fn fit_primitive(
                     1 => ncy = (cy + rng.normal_step(sigma_pos)).clamp(0, h as i32 - 1),
                     _ => nr = (r + rng.normal_step(sigma_r)).clamp(1, r_max_global),
                 }
-                let res = eval_circle_integral(
+                let (res, sums) = eval_circle_integral_with_sums(
                     &integral, h, w, ncx, ncy, nr, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_local_delta {
@@ -152,6 +137,7 @@ fn fit_primitive(
                     r = nr;
                     best_local_delta = res.delta_sse;
                     best_local_geom = (cx, cy, r);
+                    best_local_sums = sums;
                     age = 0;
                 } else {
                     age += 1;
@@ -166,10 +152,12 @@ fn fit_primitive(
             if best_local_delta < best_delta_climb {
                 best_delta_climb = best_local_delta;
                 best_geom = Some(best_local_geom);
+                best_climb_sums = best_local_sums;
             }
         }
 
-        // Stage 3: alpha sweep — collect once, finalize K times.
+        // Stage 3: alpha sweep — reuse the winning geometry's sums (already
+        // collected during the hill-climb) instead of re-scanning.
         let (cx, cy, r, alpha, color, pidx) = match best_geom {
             None => (
                 w as i32 / 2,
@@ -180,22 +168,7 @@ fn fit_primitive(
                 0u32,
             ),
             Some((cx, cy, r)) => {
-                let sums = collect_circle_sums_integral(&integral, h, w, cx, cy, r);
-                let mut best_a_delta = f32::INFINITY;
-                let mut chosen = EvalResult {
-                    delta_sse: 0.0,
-                    color: null_color,
-                    pidx: 0,
-                };
-                let mut chosen_alpha = null_alpha;
-                for &a in &alpha_levels {
-                    let res = sums.finalize(a, pal_ref);
-                    if res.delta_sse < best_a_delta {
-                        best_a_delta = res.delta_sse;
-                        chosen = res;
-                        chosen_alpha = a;
-                    }
-                }
+                let (chosen_alpha, chosen) = alpha_sweep(&best_climb_sums, &alpha_levels, pal_ref);
                 (cx, cy, r, chosen_alpha, chosen.color, chosen.pidx)
             }
         };
@@ -203,7 +176,7 @@ fn fit_primitive(
         apply_circle(&mut canvas, h as i32, w as i32, cx, cy, r, alpha, &color);
         let (ymin, ymax) = circle_row_range(cy, r, h);
         integral.update_canvas_rows(target, &canvas, ymin, ymax);
-        residual.rebuild(target, &canvas);
+        residual.rebuild_from(target, &canvas, ymin as usize * w as usize);
         circles.push(Circle { cx, cy, r, alpha, color, pidx });
     }
     (bg, circles)
@@ -220,12 +193,7 @@ fn fit_topk_uniform(
     // Historical strategy — log-spaced radii, uniform random pool, top-K
     // hill-climb with [-step, step] perturbation + step-decay.
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
@@ -353,10 +321,11 @@ pub fn encode_body(
     th: u32,
     codec: &Codec,
 ) {
+    let alpha_levels = codec.alpha_levels_owned();
     for c in circles {
         let (x_q, y_q) = quant_xy(c.cx as f32, c.cy as f32, tw, th, codec.cx_bits, codec.cy_bits);
         let r_q = r_to_q(c.r as f32, tw, th, codec.r_bits);
-        let a_q = alpha_to_q(c.alpha, &codec.alpha_levels_owned());
+        let a_q = alpha_to_q(c.alpha, &alpha_levels);
         bw.write(x_q, codec.cx_bits);
         bw.write(y_q, codec.cy_bits);
         bw.write(r_q, codec.r_bits);
@@ -367,8 +336,6 @@ pub fn encode_body(
 
 /// Decode + render N circles onto `canvas` (linear-RGB float32, h*w*3).
 pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: &mut [f32]) {
-    let x_max = (1u32 << codec.cx_bits) - 1;
-    let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
     for _ in 0..codec.n_shapes {
         let x_q = br.read(codec.cx_bits);
@@ -376,8 +343,7 @@ pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: 
         let r_q = br.read(codec.r_bits);
         let color = read_color(br, codec);
         let a_q = br.read(codec.alpha_bits);
-        let cx = (x_q as f32 / x_max as f32 * (w - 1) as f32).round() as i32;
-        let cy = (y_q as f32 / y_max as f32 * (h - 1) as f32).round() as i32;
+        let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
         let r = q_to_r(r_q, w, h, codec.r_bits).round() as i32;
         let alpha = q_to_alpha(a_q, &alpha_levels);
         apply_circle(canvas, h as i32, w as i32, cx, cy, r, alpha, &color);

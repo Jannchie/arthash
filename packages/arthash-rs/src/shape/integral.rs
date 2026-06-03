@@ -112,13 +112,11 @@ impl Integral {
                 acc_tc[ch] += tv * cv;
             }
             let slot = base + (x + 1) * 3;
-            for ch in 0..3 {
-                self.t[slot + ch] = acc_t[ch];
-                self.t2[slot + ch] = acc_t2[ch];
-                self.c[slot + ch] = acc_c[ch];
-                self.c2[slot + ch] = acc_c2[ch];
-                self.tc[slot + ch] = acc_tc[ch];
-            }
+            self.t[slot..slot + 3].copy_from_slice(&acc_t);
+            self.t2[slot..slot + 3].copy_from_slice(&acc_t2);
+            self.c[slot..slot + 3].copy_from_slice(&acc_c);
+            self.c2[slot..slot + 3].copy_from_slice(&acc_c2);
+            self.tc[slot..slot + 3].copy_from_slice(&acc_tc);
         }
     }
 
@@ -144,11 +142,9 @@ impl Integral {
                 acc_tc[ch] += tv * cv;
             }
             let slot = base + (x + 1) * 3;
-            for ch in 0..3 {
-                self.c[slot + ch] = acc_c[ch];
-                self.c2[slot + ch] = acc_c2[ch];
-                self.tc[slot + ch] = acc_tc[ch];
-            }
+            self.c[slot..slot + 3].copy_from_slice(&acc_c);
+            self.c2[slot..slot + 3].copy_from_slice(&acc_c2);
+            self.tc[slot..slot + 3].copy_from_slice(&acc_tc);
         }
     }
 
@@ -233,6 +229,27 @@ pub fn eval_circle_integral(
     collect_circle_sums_integral(integral, h, w, cx, cy, r).finalize(alpha, palette)
 }
 
+/// Like [`eval_circle_integral`] but also returns the collected [`ShapeSums`],
+/// so the caller can run the α-sweep on the winning geometry without a second
+/// O(bbox_height) collect. The sums depend only on geometry + integral state
+/// (not α), so reusing them is bit-identical to re-collecting.
+pub fn eval_circle_integral_with_sums(
+    integral: &Integral,
+    h: u32,
+    w: u32,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    alpha: f32,
+    palette: Option<&super::palette::PaletteIndex>,
+) -> (EvalResult, ShapeSums) {
+    #[cfg(feature = "bench-counters")]
+    counters::EVAL_CIRCLE.with(|c| c.set(c.get() + 1));
+    let sums = collect_circle_sums_integral(integral, h, w, cx, cy, r);
+    let res = sums.finalize(alpha, palette);
+    (res, sums)
+}
+
 /// Collect per-channel sums for a circle via the integral path — the
 /// expensive part of `eval_circle_integral`, without the α-dependent
 /// finalize. Used to amortize α-sweep cost on a fixed geometry.
@@ -303,6 +320,29 @@ pub fn eval_triangle_integral(
     counters::EVAL_TRIANGLE.with(|c| c.set(c.get() + 1));
     collect_triangle_sums_integral(integral, h, w, vx0, vy0, vx1, vy1, vx2, vy2)
         .finalize(alpha, palette)
+}
+
+/// Like [`eval_triangle_integral`] but also returns the collected
+/// [`ShapeSums`] for α-sweep reuse (bit-identical: sums are α-independent).
+#[allow(clippy::too_many_arguments)]
+pub fn eval_triangle_integral_with_sums(
+    integral: &Integral,
+    h: u32,
+    w: u32,
+    vx0: i32,
+    vy0: i32,
+    vx1: i32,
+    vy1: i32,
+    vx2: i32,
+    vy2: i32,
+    alpha: f32,
+    palette: Option<&super::palette::PaletteIndex>,
+) -> (EvalResult, ShapeSums) {
+    #[cfg(feature = "bench-counters")]
+    counters::EVAL_TRIANGLE.with(|c| c.set(c.get() + 1));
+    let sums = collect_triangle_sums_integral(integral, h, w, vx0, vy0, vx1, vy1, vx2, vy2);
+    let res = sums.finalize(alpha, palette);
+    (res, sums)
 }
 
 /// Triangle analogue of [`collect_circle_sums_integral`].
@@ -396,19 +436,23 @@ pub fn collect_triangle_sums_integral(
 }
 
 /// Rotated-rect (or general convex 4-vertex polygon) ΔSSE via the same
-/// per-row half-plane span as the triangle path, with one extra edge.
+/// per-row half-plane span as the triangle path, with one extra edge. Also
+/// returns the collected [`ShapeSums`] so the fitter can α-sweep the winning
+/// geometry without a second collect (bit-identical: sums are α-independent).
 #[allow(clippy::too_many_arguments)]
-pub fn eval_quad_integral(
+pub fn eval_quad_integral_with_sums(
     integral: &Integral,
     h: u32,
     w: u32,
     v: [(i32, i32); 4],
     alpha: f32,
     palette: Option<&super::palette::PaletteIndex>,
-) -> EvalResult {
+) -> (EvalResult, ShapeSums) {
     #[cfg(feature = "bench-counters")]
     counters::EVAL_ROTRECT.with(|c| c.set(c.get() + 1));
-    collect_quad_sums_integral(integral, h, w, v).finalize(alpha, palette)
+    let sums = collect_quad_sums_integral(integral, h, w, v);
+    let res = sums.finalize(alpha, palette);
+    (res, sums)
 }
 
 /// Quad analogue of [`collect_triangle_sums_integral`]. Vertices may be in

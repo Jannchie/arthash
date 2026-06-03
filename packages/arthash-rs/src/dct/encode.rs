@@ -1,8 +1,6 @@
 //! V4 DCT encoder. SPEC §5.1.
 
-use super::colorspace::{
-    linear_rgb_to_oklab_channels, rgb_to_oklab_channels, rgb_u8_to_linear_planes,
-};
+use super::colorspace::{rgb_to_oklab_channels, rgb_u8_to_oklab_channels};
 
 /// AC compander powers (encoder applies `sign(c)·|c|^p`, decoder inverts).
 const COMPANDER_POWER_L: f32 = 0.6;
@@ -49,16 +47,21 @@ fn triangular_indices(nx: usize, ny: usize) -> Vec<(usize, usize)> {
     out
 }
 
-/// Project a single channel onto DCT-II and pick the triangular-mask values.
-/// Returns (dc, ac vec).
+/// Project a single channel onto DCT-II and pick the triangular-mask values
+/// using caller-supplied cosine bases. Returns (dc, ac vec).
 ///
 /// Implementation: two SIMD GEMMs via `matrixmultiply::sgemm`.
 ///   tmp(ny × w) = cy_basis(ny × h)  · channel(h × w)
 ///   f  (ny × nx) = tmp     (ny × w)  · cx_basisᵀ(w × nx)
-fn dct_channel_raw(channel: &[f32], h: usize, w: usize, nx: usize, ny: usize) -> (f32, Vec<f32>) {
-    let cx_basis = cosine_basis(w, nx); // (nx, w) row-major
-    let cy_basis = cosine_basis(h, ny); // (ny, h) row-major
-
+fn dct_channel_with_basis(
+    channel: &[f32],
+    h: usize,
+    w: usize,
+    nx: usize,
+    ny: usize,
+    cx_basis: &[f32], // (nx, w) row-major
+    cy_basis: &[f32], // (ny, h) row-major
+) -> (f32, Vec<f32>) {
     let mut tmp = vec![0.0f32; ny * w];
     unsafe {
         // C = α·A·B + β·C, all row-major (rsa = lda, csa = 1 for row-major).
@@ -95,6 +98,14 @@ fn dct_channel_raw(channel: &[f32], h: usize, w: usize, nx: usize, ny: usize) ->
         ac.push(f[cy_i * nx + cx_i]);
     }
     (dc, ac)
+}
+
+/// Convenience wrapper that builds the `(nx, w)` and `(ny, h)` cosine bases
+/// then projects. Used for channels whose bases aren't shared with another.
+fn dct_channel_raw(channel: &[f32], h: usize, w: usize, nx: usize, ny: usize) -> (f32, Vec<f32>) {
+    let cx_basis = cosine_basis(w, nx);
+    let cy_basis = cosine_basis(h, ny);
+    dct_channel_with_basis(channel, h, w, nx, ny, &cx_basis, &cy_basis)
 }
 
 #[inline]
@@ -265,8 +276,12 @@ pub fn encode_dct(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
     let (l_ch, p_ch, q_ch) = rgb_to_oklab_channels(&rr, &gg, &bb);
 
     let (l_dc, l_ac) = dct_channel_raw(&l_ch, h, w, lx.max(3), ly.max(3));
-    let (p_dc, p_ac) = dct_channel_raw(&p_ch, h, w, 3, 3);
-    let (q_dc, q_ac) = dct_channel_raw(&q_ch, h, w, 3, 3);
+    // P and Q both project onto a (3,3) mask — build their shared cosine
+    // bases once instead of recomputing the identical matrices per channel.
+    let cx3 = cosine_basis(w, 3);
+    let cy3 = cosine_basis(h, 3);
+    let (p_dc, p_ac) = dct_channel_with_basis(&p_ch, h, w, 3, 3, &cx3, &cy3);
+    let (q_dc, q_ac) = dct_channel_with_basis(&q_ch, h, w, 3, 3, &cx3, &cy3);
     let (a_dc, a_ac) = if has_alpha {
         dct_channel_raw(&alpha, h, w, 5, 5)
     } else {
@@ -359,9 +374,9 @@ pub fn encode_dct_rgb_opaque(w: u32, h: u32, rgb: &[u8]) -> Vec<u8> {
     let n = w * h;
     assert_eq!(rgb.len(), n * 3, "RGB buffer length mismatch");
 
-    // sRGB u8 → linear-RGB f32 via 256-LUT (3 lookups per pixel, no powf).
-    let (rl, gl, bl) = rgb_u8_to_linear_planes(rgb, n);
-    let (l_ch, p_ch, q_ch) = linear_rgb_to_oklab_channels(&rl, &gl, &bl);
+    // sRGB u8 → Oklab channels in one fused pass (256-LUT sRGB→linear + LMS
+    // projection; no intermediate linear-RGB Vecs, no per-pixel powf).
+    let (l_ch, p_ch, q_ch) = rgb_u8_to_oklab_channels(rgb, n);
 
     // Aspect (SPEC §4.2)
     let raw_aspect = (w as f32) / (h as f32);
@@ -379,8 +394,11 @@ pub fn encode_dct_rgb_opaque(w: u32, h: u32, rgb: &[u8]) -> Vec<u8> {
     };
 
     let (l_dc, l_ac) = dct_channel_raw(&l_ch, h, w, lx.max(3), ly.max(3));
-    let (p_dc, p_ac) = dct_channel_raw(&p_ch, h, w, 3, 3);
-    let (q_dc, q_ac) = dct_channel_raw(&q_ch, h, w, 3, 3);
+    // P and Q share the same (3,3) cosine bases — build them once.
+    let cx3 = cosine_basis(w, 3);
+    let cy3 = cosine_basis(h, 3);
+    let (p_dc, p_ac) = dct_channel_with_basis(&p_ch, h, w, 3, 3, &cx3, &cy3);
+    let (q_dc, q_ac) = dct_channel_with_basis(&q_ch, h, w, 3, 3, &cx3, &cy3);
 
     let l_scale = search_optimal_scale(&l_ac, 5, COMPANDER_POWER_L);
     let p_scale = search_optimal_scale(&p_ac, 4, COMPANDER_POWER_PQ);
@@ -447,8 +465,8 @@ mod tests {
     #[test]
     fn cosine_basis_first_row_is_one() {
         let b = cosine_basis(4, 2);
-        for x in 0..4 {
-            assert!((b[x] - 1.0).abs() < 1e-6);
+        for &val in b.iter().take(4) {
+            assert!((val - 1.0).abs() < 1e-6);
         }
     }
 }

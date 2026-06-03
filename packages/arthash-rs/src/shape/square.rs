@@ -8,15 +8,15 @@
 use super::integral2d::{collect_rect_sums_integral, eval_rect_integral, Integral2D};
 use super::options::SearchOptions;
 use super::quant::{
-    alpha_to_q, aspect_code, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color, write_color,
+    alpha_to_q, aspect_code, dequant_xy, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color,
+    write_color,
 };
-use super::raster::{apply_rect, apply_rounded_rect_aa, EvalResult};
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::raster::{apply_rect, apply_rounded_rect_aa};
 use super::residual::Residual;
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::CodecConfig as Codec;
-
-const FIXED_HILL_CLIMB_ALPHA: f32 = 0.5;
 
 #[derive(Clone, Debug)]
 pub struct Square {
@@ -38,21 +38,6 @@ fn square_bounds(cx: i32, cy: i32, s: i32) -> (i32, i32, i32, i32) {
     (x0, y0, x1, y1)
 }
 
-fn mean_rgb(target: &[f32]) -> [f32; 3] {
-    let n = target.len() / 3;
-    let mut acc = [0.0f64; 3];
-    for i in 0..n {
-        acc[0] += target[i * 3] as f64;
-        acc[1] += target[i * 3 + 1] as f64;
-        acc[2] += target[i * 3 + 2] as f64;
-    }
-    [
-        (acc[0] / n as f64) as f32,
-        (acc[1] / n as f64) as f32,
-        (acc[2] / n as f64) as f32,
-    ]
-}
-
 pub fn fit_squares(
     target: &[f32],
     h: u32,
@@ -62,12 +47,7 @@ pub fn fit_squares(
     search: &SearchOptions,
 ) -> ([f32; 3], Vec<Square>) {
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral2D::build(target, &canvas, h, w);
     let mut residual = Residual::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
@@ -159,25 +139,15 @@ pub fn fit_squares(
             Some((cx, cy, s)) => {
                 let (x0, y0, x1, y1) = square_bounds(cx, cy, s);
                 let sums = collect_rect_sums_integral(&integral, x0, y0, x1, y1);
-                let mut best_a_delta = f32::INFINITY;
-                let mut chosen = EvalResult { delta_sse: 0.0, color: null_color, pidx: 0 };
-                let mut chosen_alpha = null_alpha;
-                for &a in &alpha_levels {
-                    let res = sums.finalize(a, pal_ref);
-                    if res.delta_sse < best_a_delta {
-                        best_a_delta = res.delta_sse;
-                        chosen = res;
-                        chosen_alpha = a;
-                    }
-                }
+                let (chosen_alpha, chosen) = alpha_sweep(&sums, &alpha_levels, pal_ref);
                 (cx, cy, s, chosen_alpha, chosen.color, chosen.pidx)
             }
         };
 
         let (x0, y0, x1, y1) = square_bounds(cx, cy, s);
         apply_rect(&mut canvas, h as i32, w as i32, x0, y0, x1, y1, alpha, &color);
-        integral.update_canvas(target, &canvas);
-        residual.rebuild(target, &canvas);
+        integral.update_canvas_from_row(target, &canvas, y0);
+        residual.rebuild_from(target, &canvas, y0.max(0) as usize * w as usize);
         squares.push(Square { cx, cy, s, alpha, color, pidx });
     }
     (bg, squares)
@@ -207,8 +177,6 @@ pub fn decode_render(
     canvas: &mut [f32],
     corner_radius: f32,
 ) {
-    let x_max = (1u32 << codec.cx_bits) - 1;
-    let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
     let use_aa = corner_radius > 0.0;
     for _ in 0..codec.n_shapes {
@@ -217,8 +185,7 @@ pub fn decode_render(
         let s_q = br.read(codec.r_bits);
         let color = read_color(br, codec);
         let a_q = br.read(codec.alpha_bits);
-        let cx = (x_q as f32 / x_max as f32 * (w - 1) as f32).round() as i32;
-        let cy = (y_q as f32 / y_max as f32 * (h - 1) as f32).round() as i32;
+        let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
         let s = q_to_r(s_q, w, h, codec.r_bits).round() as i32;
         let alpha = q_to_alpha(a_q, &alpha_levels);
         if use_aa {
@@ -261,18 +228,13 @@ pub fn decode_square_at(
     w: u32,
     h: u32,
 ) -> (i32, i32, i32, [f32; 3], f32) {
-    let x_max = ((1u32 << codec.cx_bits) - 1) as f32;
-    let y_max = ((1u32 << codec.cy_bits) - 1) as f32;
     let alpha_levels = codec.alpha_levels_owned();
-    let w_m1 = (w as f32 - 1.0).max(0.0);
-    let h_m1 = (h as f32 - 1.0).max(0.0);
     let x_q = br.read(codec.cx_bits);
     let y_q = br.read(codec.cy_bits);
     let s_q = br.read(codec.r_bits);
     let color = read_color(br, codec);
     let alpha = q_to_alpha(br.read(codec.alpha_bits), &alpha_levels);
-    let cx = ((x_q as f32) / x_max * w_m1).round() as i32;
-    let cy = ((y_q as f32) / y_max * h_m1).round() as i32;
+    let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
     let s = q_to_r(s_q, w, h, codec.r_bits).round() as i32;
     (cx, cy, s, color, alpha)
 }

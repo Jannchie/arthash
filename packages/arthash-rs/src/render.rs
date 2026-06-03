@@ -209,12 +209,13 @@ mod tests {
         // Two passes of separable Gaussian = full 2D Gaussian with peak
         // ratio 1/(2π·σ²). At σ=1.5 → 255·0.0707 ≈ 18.
         assert!(peak < 255, "peak should drop below input after blur, got {peak}");
-        assert!(peak >= 15 && peak <= 25, "expected 2D Gaussian peak ≈ 18, got {peak}");
+        assert!((15..=25).contains(&peak), "expected 2D Gaussian peak ≈ 18, got {peak}");
         let neighbor = rgba[(cy * w as usize + cx + 1) * 4];
         assert!(neighbor > 0, "immediate neighbor should receive energy");
         assert!(neighbor < peak, "neighbor should be dimmer than peak");
-        // Far-away pixel should be essentially zero (Gaussian falls off fast).
-        let far = rgba[(0 * w as usize + 0) * 4];
+        // Far-away pixel (top-left corner, index 0) should be essentially zero
+        // (Gaussian falls off fast).
+        let far = rgba[0];
         assert!(far < 5, "far corner should be ~0, got {far}");
     }
 

@@ -5,12 +5,13 @@
 //! 17° min-angle gate (absorbs 5-bit grid snap noise) to keep decoded
 //! triangles ≥ 15° — matches Python's discipline.
 
-use super::integral::{collect_triangle_sums_integral, eval_triangle_integral, Integral};
+use super::integral::{eval_triangle_integral, eval_triangle_integral_with_sums, Integral};
 use super::options::{SearchOptions, Strategy};
 use super::quant::{
-    alpha_to_q, aspect_code, q_to_alpha, quant_xy, read_color, write_color,
+    alpha_to_q, aspect_code, dequant_xy, q_to_alpha, quant_xy, read_color, write_color,
 };
-use super::raster::apply_triangle;
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::raster::{apply_triangle, ShapeSums};
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
 use crate::codec::CodecConfig as Codec;
@@ -29,8 +30,6 @@ pub struct Triangle {
     pub color: [f32; 3],
     pub pidx: u32,
 }
-
-const FIXED_HILL_CLIMB_ALPHA: f32 = 0.5;
 
 /// sin²(17°) — pre-quant threshold (absorbs 5-bit grid snap noise so the
 /// stored geometry has ≥ 15° internal angles).
@@ -87,8 +86,8 @@ fn hill_climb_gaussian(
     rng: &mut Rng,
     sigma: f64,
     max_age: Option<u32>,
-) -> ([(i32, i32); 3], f32, [f32; 3], u32) {
-    let res0 = eval_triangle_integral(
+) -> ([(i32, i32); 3], f32, [f32; 3], u32, ShapeSums) {
+    let (res0, sums0) = eval_triangle_integral_with_sums(
         integral, h, w,
         verts[0].0, verts[0].1, verts[1].0, verts[1].1, verts[2].0, verts[2].1,
         fixed_alpha, palette,
@@ -96,6 +95,7 @@ fn hill_climb_gaussian(
     let mut best_delta = res0.delta_sse;
     let mut best_color = res0.color;
     let mut best_pidx = res0.pidx;
+    let mut best_sums = sums0;
     let mut age: u32 = 0;
     for _ in 0..n_steps {
         let which = rng.range(0, 3) as usize;
@@ -123,7 +123,7 @@ fn hill_climb_gaussian(
             }
             continue;
         };
-        let res = eval_triangle_integral(
+        let (res, sums) = eval_triangle_integral_with_sums(
             integral, h, w,
             cand[0].0, cand[0].1, cand[1].0, cand[1].1, cand[2].0, cand[2].1,
             fixed_alpha, palette,
@@ -133,6 +133,7 @@ fn hill_climb_gaussian(
             best_delta = res.delta_sse;
             best_color = res.color;
             best_pidx = res.pidx;
+            best_sums = sums;
             age = 0;
         } else {
             age += 1;
@@ -143,36 +144,7 @@ fn hill_climb_gaussian(
             }
         }
     }
-    (verts, best_delta, best_color, best_pidx)
-}
-
-fn pick_best_alpha(
-    integral: &Integral,
-    h: u32,
-    w: u32,
-    verts: [(i32, i32); 3],
-    alpha_levels: &[f32],
-    palette: Option<&super::palette::PaletteIndex>,
-) -> (f32, f32, [f32; 3], u32) {
-    // Collect once, finalize K times — geometry is fixed.
-    let sums = collect_triangle_sums_integral(
-        integral, h, w,
-        verts[0].0, verts[0].1, verts[1].0, verts[1].1, verts[2].0, verts[2].1,
-    );
-    let mut best_delta = f32::INFINITY;
-    let mut best_alpha = alpha_levels[0];
-    let mut best_color = [0.0f32; 3];
-    let mut best_pidx = 0u32;
-    for &a in alpha_levels {
-        let res = sums.finalize(a, palette);
-        if res.delta_sse < best_delta {
-            best_delta = res.delta_sse;
-            best_alpha = a;
-            best_color = res.color;
-            best_pidx = res.pidx;
-        }
-    }
-    (best_alpha, best_delta, best_color, best_pidx)
+    (verts, best_delta, best_color, best_pidx, best_sums)
 }
 
 pub fn fit_triangles(
@@ -189,21 +161,6 @@ pub fn fit_triangles(
     }
 }
 
-fn mean_rgb(target: &[f32]) -> [f32; 3] {
-    let n = target.len() / 3;
-    let mut acc = [0.0f64; 3];
-    for i in 0..n {
-        acc[0] += target[i * 3] as f64;
-        acc[1] += target[i * 3 + 1] as f64;
-        acc[2] += target[i * 3 + 2] as f64;
-    }
-    [
-        (acc[0] / n as f64) as f32,
-        (acc[1] / n as f64) as f32,
-        (acc[2] / n as f64) as f32,
-    ]
-}
-
 fn fit_primitive(
     target: &[f32],
     h: u32,
@@ -213,12 +170,7 @@ fn fit_primitive(
     search: &SearchOptions,
 ) -> ([f32; 3], Vec<Triangle>) {
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
@@ -237,6 +189,7 @@ fn fit_primitive(
     for _ in 0..codec.n_shapes {
         let mut best_delta_climb: f32 = -1e-3;
         let mut best_verts: Option<[(i32, i32); 3]> = None;
+        let mut best_climb_sums = ShapeSums::new();
 
         for _attempt in 0..search.n_attempts {
             // Stage 1: best of n_random tiny-cluster random.
@@ -257,7 +210,7 @@ fn fit_primitive(
             let Some(v0) = best_init else { continue };
 
             // Stage 2: Gaussian hill climb.
-            let (v, d, _c, _p) = hill_climb_gaussian(
+            let (v, d, _c, _p, sums) = hill_climb_gaussian(
                 &integral, h, w, v0,
                 FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 hard_cap, &mut rng, sigma, search.hill_climb_max_age,
@@ -265,14 +218,15 @@ fn fit_primitive(
             if d < best_delta_climb {
                 best_delta_climb = d;
                 best_verts = Some(v);
+                best_climb_sums = sums;
             }
         }
 
         let (verts, alpha, color, pidx) = match best_verts {
             None => (fallback_verts, null_alpha, bg, 0u32),
             Some(v) => {
-                let (a, _d, c, p) = pick_best_alpha(&integral, h, w, v, &alpha_levels, pal_ref);
-                (v, a, c, p)
+                let (a, eval) = alpha_sweep(&best_climb_sums, &alpha_levels, pal_ref);
+                (v, a, eval.color, eval.pidx)
             }
         };
         apply_triangle(&mut canvas, h as i32, w as i32, verts, alpha, &color);
@@ -294,12 +248,7 @@ fn fit_topk_uniform(
     // Uniform random pool over full canvas + off-canvas margin, top-K
     // uniform-step climb. Historical arthash mode.
     let bg = mean_rgb(target);
-    let mut canvas = vec![0.0f32; (h * w * 3) as usize];
-    for i in 0..(h * w) as usize {
-        canvas[i * 3] = bg[0];
-        canvas[i * 3 + 1] = bg[1];
-        canvas[i * 3 + 2] = bg[2];
-    }
+    let mut canvas = filled_canvas(bg, h, w);
     let mut integral = Integral::build(target, &canvas, h, w);
     let mut rng = Rng::new(seed);
     let alpha_levels = codec.alpha_levels_owned();
@@ -455,16 +404,15 @@ pub fn encode_body(
 }
 
 pub fn decode_render(br: &mut BitReader, codec: &Codec, w: u32, h: u32, canvas: &mut [f32]) {
-    let x_max = (1u32 << codec.cx_bits) - 1;
-    let y_max = (1u32 << codec.cy_bits) - 1;
     let alpha_levels = codec.alpha_levels_owned();
     for _ in 0..codec.n_shapes {
         let mut verts = [(0i32, 0i32); 3];
         for vert in verts.iter_mut() {
             let x_q = br.read(codec.cx_bits);
             let y_q = br.read(codec.cy_bits);
-            vert.0 = (x_q as f32 / x_max as f32 * (w - 1) as f32).round() as i32;
-            vert.1 = (y_q as f32 / y_max as f32 * (h - 1) as f32).round() as i32;
+            let (vx, vy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
+            vert.0 = vx;
+            vert.1 = vy;
         }
         let color = read_color(br, codec);
         let alpha = q_to_alpha(br.read(codec.alpha_bits), &alpha_levels);

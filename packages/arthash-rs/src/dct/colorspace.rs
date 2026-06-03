@@ -48,47 +48,29 @@ fn srgb_to_linear_u8_lut() -> &'static [f32; 256] {
     static LUT: OnceLock<[f32; 256]> = OnceLock::new();
     LUT.get_or_init(|| {
         let mut t = [0.0f32; 256];
-        for i in 0..256 {
-            t[i] = srgb_to_linear_f(i as f32 / 255.0);
+        for (i, slot) in t.iter_mut().enumerate() {
+            *slot = srgb_to_linear_f(i as f32 / 255.0);
         }
         t
     })
 }
 
-/// Pack `(R, G, B)` u8 planes (sRGB) directly to linear-RGB f32 planes via
-/// the 256-LUT — bypasses the per-pixel `powf(2.4)` in `srgb_to_linear_f`.
-/// Used by the opaque DCT fast path.
-pub fn rgb_u8_to_linear_planes(
-    rgb: &[u8],
-    n: usize,
-) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+/// sRGB-u8 interleaved `(R,G,B)` → Oklab `(L, a·AB_SCALE, b·AB_SCALE)` planes
+/// in a single fused pass. Combines the 256-entry sRGB→linear LUT with the
+/// LMS+cbrt Oklab projection so the intermediate linear-RGB never lands in
+/// heap Vecs (3 output allocations instead of 6). The per-pixel arithmetic
+/// order is identical to the old `rgb_u8_to_linear_planes` +
+/// `linear_rgb_to_oklab_channels` pair it replaced, so output is byte-for-byte
+/// unchanged. Used by the opaque DCT fast path.
+pub fn rgb_u8_to_oklab_channels(rgb: &[u8], n: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let lut = srgb_to_linear_u8_lut();
-    let mut r = vec![0.0f32; n];
-    let mut g = vec![0.0f32; n];
-    let mut b = vec![0.0f32; n];
-    for i in 0..n {
-        r[i] = lut[rgb[i * 3] as usize];
-        g[i] = lut[rgb[i * 3 + 1] as usize];
-        b[i] = lut[rgb[i * 3 + 2] as usize];
-    }
-    (r, g, b)
-}
-
-/// Linear-RGB f32 planes → Oklab `(L, a*AB_SCALE, b*AB_SCALE)` planes.
-/// Skips the sRGB→linear step (caller did it via LUT).
-pub fn linear_rgb_to_oklab_channels(
-    r: &[f32],
-    g: &[f32],
-    b: &[f32],
-) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
-    let n = r.len();
     let mut l_out = vec![0.0f32; n];
     let mut a_out = vec![0.0f32; n];
     let mut b_out = vec![0.0f32; n];
     for i in 0..n {
-        let rl = r[i];
-        let gl = g[i];
-        let bl = b[i];
+        let rl = lut[rgb[i * 3] as usize];
+        let gl = lut[rgb[i * 3 + 1] as usize];
+        let bl = lut[rgb[i * 3 + 2] as usize];
         let lm = M1[0][0] * rl + M1[0][1] * gl + M1[0][2] * bl;
         let mm = M1[1][0] * rl + M1[1][1] * gl + M1[1][2] * bl;
         let sm = M1[2][0] * rl + M1[2][1] * gl + M1[2][2] * bl;
