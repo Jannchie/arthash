@@ -14,8 +14,9 @@ use arthash::{
     to_svg as rs_to_svg, Codec, CodecConfig, DecodeOptions, EncodeOptions, PixelSmooth,
     RenderStyle, SearchOptions, ShapeType, Strategy, SvgError, SvgOptions,
 };
-use js_sys::{Array, Reflect};
+use js_sys::{Array, Reflect, Uint8Array};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 // ---------------------------------------------------------------------------
 // JS-object parsing helpers
@@ -52,6 +53,13 @@ fn get_u8_array(obj: &JsValue, key: &str) -> Option<Vec<u8>> {
     if v.is_undefined() || v.is_null() {
         return None;
     }
+    // Fast path: the TS SDK sends `palette` as a real `Uint8Array`, so bulk-copy
+    // its backing bytes in one shot rather than marshalling element-by-element
+    // through `Array::get` (one JS call + f64 round-trip per byte).
+    if let Ok(u8arr) = v.clone().dyn_into::<Uint8Array>() {
+        return Some(u8arr.to_vec());
+    }
+    // Fallback: a plain JS array-of-numbers (kept for hand-built callers).
     let arr = Array::from(&v);
     let len = arr.length() as usize;
     let mut out = Vec::with_capacity(len);
@@ -203,11 +211,13 @@ pub struct DecodeResult {
 
 #[wasm_bindgen]
 impl DecodeResult {
-    /// Returns a freshly-allocated Uint8Array containing the RGBA bytes
-    /// (row-major, 4 bytes per pixel).
-    #[wasm_bindgen(getter)]
-    pub fn rgba(&self) -> Vec<u8> {
-        self.rgba.clone()
+    /// Consume the result and hand back its RGBA bytes (row-major, 4 B/px),
+    /// moving the buffer into the returned Uint8Array instead of cloning it.
+    /// This frees the `DecodeResult`, so read `w` / `h` BEFORE calling — any
+    /// field access afterwards throws (the wasm pointer is taken).
+    #[wasm_bindgen(js_name = intoRgba)]
+    pub fn into_rgba(self) -> Vec<u8> {
+        self.rgba
     }
 }
 

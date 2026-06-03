@@ -481,9 +481,12 @@ function codecToFfi(c: Codec): Record<string, unknown> {
   if (c.kind === "raw") {
     const out: Record<string, unknown> = {};
     assignSnakeCase(out, c.spec as unknown as Record<string, unknown>, {
+      // Pass the Uint8Array straight through — the wasm `get_u8_array` helper
+      // bulk-copies a typed array, so converting to a number[] here would just
+      // add an allocation + per-byte marshalling on both sides.
       palette: (v) => {
         const arr = v as Uint8Array;
-        return arr.length > 0 ? Array.from(arr) : undefined;
+        return arr.length > 0 ? arr : undefined;
       },
     });
     return out;
@@ -506,7 +509,7 @@ function codecToFfi(c: Codec): Record<string, unknown> {
   } else {
     out.color_bits = 16;
     const pal = color.palette;
-    out.palette = Array.from(pal.bytes);
+    out.palette = pal.bytes; // Uint8Array — bulk-copied by the wasm side.
     if (pal.k !== undefined) out.palette_k = pal.k;
   }
   return out;
@@ -650,8 +653,11 @@ export function decodeSync<C extends Codec>(
     (style as { cornerRadius?: number } | undefined)?.cornerRadius,
     style?.blur,
   );
-  const out: DecodeResult = { w: r.w, h: r.h, rgba: r.rgba };
-  r.free();
+  // Read w/h first, then `intoRgba()` moves the buffer out AND frees the
+  // wasm-side result (no separate `free()`, no clone of the RGBA bytes).
+  const w = r.w;
+  const h = r.h;
+  const out: DecodeResult = { w, h, rgba: r.intoRgba() };
   return out;
 }
 
