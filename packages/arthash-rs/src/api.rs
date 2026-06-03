@@ -21,6 +21,49 @@ use crate::shape::square::{decode_render as square_decode, encode_square};
 use crate::shape::triangle::{decode_render as triangle_decode, encode_triangle};
 use crate::shape::SearchOptions;
 
+/// Error from the fallible `try_encode_*` entry points.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EncodeError {
+    /// Input buffer is shorter than `width · height · channels` — encoding
+    /// would read past the end. (Longer-than-needed buffers are accepted.)
+    BufferTooShort { expected: usize, got: usize },
+}
+
+impl std::fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BufferTooShort { expected, got } => write!(
+                f,
+                "input buffer too short: need at least {expected} bytes, got {got}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for EncodeError {}
+
+/// Error from the fallible [`try_decode`] entry point.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecodeError {
+    /// Hash is shorter than the codec's minimum length, so it cannot be a
+    /// valid encoding under this codec (likely a truncated hash or a codec
+    /// mismatch). [`decode`] would zero-fill into a garbage placeholder.
+    HashTooShort { expected: usize, got: usize },
+}
+
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HashTooShort { expected, got } => write!(
+                f,
+                "hash too short for codec: need at least {expected} bytes, got {got}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
 /// Encoder knobs that affect shape-mode search cost/fidelity. Ignored by
 /// DCT and PIXEL (both deterministic).
 #[derive(Clone, Copy, Debug, Default)]
@@ -80,17 +123,64 @@ fn rgb_u8_to_linear_flat(rgb: &[u8]) -> Vec<f32> {
 /// * `w`, `h`: pixel dimensions. For shape modes, callers should resize to
 ///   `shape::THUMB = 48` long-edge first. For DCT, `≤ 100`.
 /// * `rgb`: row-major flat `(h, w, 3)` u8 sRGB, length `h*w*3`.
+///
+/// # Panics
+/// Panics if `rgb` is shorter than `w·h·3`. Use [`try_encode_rgb`] at FFI /
+/// untrusted boundaries to get an [`EncodeError`] instead of a panic.
 pub fn encode_rgb(rgb: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
+    match try_encode_rgb(rgb, w, h, codec, opts) {
+        Ok(bytes) => bytes,
+        Err(e) => panic!("encode_rgb: {e}"),
+    }
+}
+
+/// Fallible [`encode_rgb`]: returns [`EncodeError::BufferTooShort`] instead of
+/// panicking when `rgb` is shorter than `w·h·3`. Hashes for valid input are
+/// byte-identical to [`encode_rgb`].
+pub fn try_encode_rgb(
+    rgb: &[u8],
+    w: u32,
+    h: u32,
+    codec: &Codec,
+    opts: EncodeOptions,
+) -> Result<Vec<u8>, EncodeError> {
+    let expected = (w as usize).saturating_mul(h as usize).saturating_mul(3);
+    if rgb.len() < expected {
+        return Err(EncodeError::BufferTooShort { expected, got: rgb.len() });
+    }
     let cfg = codec.to_config();
-    encode_rgb_cfg(rgb, w, h, &cfg, opts)
+    Ok(encode_rgb_cfg(rgb, w, h, &cfg, opts))
 }
 
 /// Encode raw RGBA at `(w, h)`. For shape modes the alpha is ignored
 /// (caller should composite over an opaque background first if needed).
+///
+/// # Panics
+/// Panics if `rgba` is shorter than `w·h·4`. Use [`try_encode_rgba`] for a
+/// fallible variant.
 pub fn encode_rgba(rgba: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptions) -> Vec<u8> {
+    match try_encode_rgba(rgba, w, h, codec, opts) {
+        Ok(bytes) => bytes,
+        Err(e) => panic!("encode_rgba: {e}"),
+    }
+}
+
+/// Fallible [`encode_rgba`]: returns [`EncodeError::BufferTooShort`] instead of
+/// panicking when `rgba` is shorter than `w·h·4`.
+pub fn try_encode_rgba(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    codec: &Codec,
+    opts: EncodeOptions,
+) -> Result<Vec<u8>, EncodeError> {
+    let expected = (w as usize).saturating_mul(h as usize).saturating_mul(4);
+    if rgba.len() < expected {
+        return Err(EncodeError::BufferTooShort { expected, got: rgba.len() });
+    }
     let cfg = codec.to_config();
     if matches!(cfg.shape, ShapeType::Dct) {
-        return crate::dct::encode_dct(w, h, rgba);
+        return Ok(crate::dct::encode_dct(w, h, rgba));
     }
     // Composite over white into RGB, then encode.
     let n = (w * h) as usize;
@@ -103,7 +193,7 @@ pub fn encode_rgba(rgba: &[u8], w: u32, h: u32, codec: &Codec, opts: EncodeOptio
             rgb[i * 3 + c] = v.clamp(0.0, 255.0) as u8;
         }
     }
-    encode_rgb_cfg(&rgb, w, h, &cfg, opts)
+    Ok(encode_rgb_cfg(&rgb, w, h, &cfg, opts))
 }
 
 fn encode_rgb_cfg(rgb: &[u8], w: u32, h: u32, cfg: &CodecConfig, opts: EncodeOptions) -> Vec<u8> {
@@ -147,6 +237,29 @@ pub fn decode(hash: &[u8], codec: &Codec, opts: DecodeOptions) -> DecodeOutput {
     let cfg = codec.to_config();
     let (w, h, rgba) = decode_cfg(hash, &cfg, opts);
     DecodeOutput { width: w, height: h, rgba }
+}
+
+/// Fallible [`decode`]: returns [`DecodeError::HashTooShort`] when `hash` is
+/// shorter than the codec's minimum length (a truncated hash or codec
+/// mismatch) instead of silently zero-filling into a garbage placeholder.
+/// Hashes that pass the length check decode identically to [`decode`].
+pub fn try_decode(
+    hash: &[u8],
+    codec: &Codec,
+    opts: DecodeOptions,
+) -> Result<DecodeOutput, DecodeError> {
+    let cfg = codec.to_config();
+    // DCT's `bytes_total` is a fixed-format upper bound (actual length varies
+    // with dropped AC), so only require its fixed header; shape/PIXEL have an
+    // exact `header + n·per_shape` length.
+    let min_len = match cfg.shape {
+        ShapeType::Dct => 5,
+        _ => cfg.bytes_total(false),
+    };
+    if hash.len() < min_len {
+        return Err(DecodeError::HashTooShort { expected: min_len, got: hash.len() });
+    }
+    Ok(decode(hash, codec, opts))
 }
 
 fn decode_cfg(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
@@ -386,7 +499,7 @@ mod tests {
         let mut buf = Vec::with_capacity((w * h * 3) as usize);
         for y in 0..h {
             for x in 0..w {
-                let on = ((x / cell) + (y / cell)) % 2 == 0;
+                let on = ((x / cell) + (y / cell)).is_multiple_of(2);
                 let c: [u8; 3] = if on { [220, 60, 60] } else { [40, 80, 200] };
                 buf.extend_from_slice(&c);
             }
@@ -457,5 +570,35 @@ mod tests {
         // anything because every cell carries the same color).
         assert_eq!(sharp.rgba.len(), blurred.rgba.len());
         assert_eq!(sharp.rgba, blurred.rgba);
+    }
+
+    #[test]
+    fn try_encode_rejects_short_buffer_else_matches() {
+        let codec = Codec::circle(8);
+        let short = vec![0u8; 10]; // far less than 48*48*3
+        assert!(matches!(
+            try_encode_rgb(&short, 48, 48, &codec, EncodeOptions::default()),
+            Err(EncodeError::BufferTooShort { .. })
+        ));
+        // Exact-length buffer succeeds and is byte-identical to encode_rgb.
+        let rgb = solid_rgb(48, 48, [10, 20, 30]);
+        let a = try_encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default()).unwrap();
+        let b = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn try_decode_rejects_short_hash_else_matches() {
+        let codec = Codec::circle(8);
+        let rgb = solid_rgb(48, 48, [10, 20, 30]);
+        let hash = encode_rgb(&rgb, 48, 48, &codec, EncodeOptions::default());
+        assert!(matches!(
+            try_decode(&hash[..2], &codec, DecodeOptions::default()),
+            Err(DecodeError::HashTooShort { .. })
+        ));
+        // Full hash decodes identically to the infallible path.
+        let a = try_decode(&hash, &codec, DecodeOptions::default()).unwrap();
+        let b = decode(&hash, &codec, DecodeOptions::default());
+        assert_eq!(a.rgba, b.rgba);
     }
 }
