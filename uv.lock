@@ -70,9 +70,11 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "arthash" },
-    { name = "arthash-research" },
     { name = "pytest" },
     { name = "ruff" },
+]
+research = [
+    { name = "arthash-research" },
 ]
 
 [package.metadata]
@@ -80,10 +82,10 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "arthash", editable = "packages/arthash-py" },
-    { name = "arthash-research", editable = "packages/arthash-research" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.7" },
 ]
+research = [{ name = "arthash-research", editable = "packages/arthash-research" }]
 
 [[package]]
 name = "blurhash"

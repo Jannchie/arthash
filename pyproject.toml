@@ -29,10 +29,19 @@ arthash = { workspace = true }
 arthash-research = { workspace = true }
 
 [dependency-groups]
+# Default group: just the package-under-test + its lint/test tools. Kept
+# deliberately lean so `uv sync` (and CI) never needs the `thash` sibling
+# checkout or the heavy science stack — those live in `research` below.
 dev = [
   "pytest>=8",
   "ruff>=0.7",
   "arthash",
+]
+# Opt-in group for the ablation / benchmark scripts. Pulls in arthash-research
+# → thash (../thumbhash-py) + scikit-image/numba/pandas/scipy. Requires the
+# sibling thumbhash-py checkout, so it is NOT synced by default:
+#     uv sync --group research
+research = [
   "arthash-research",
 ]
 
