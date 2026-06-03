@@ -14,6 +14,10 @@
 //!   * We measure end-to-end `encode_rgb` / `decode` — i.e. the same
 //!     surface a PyO3 / napi-rs binding would expose.
 
+// Bench scratch: inline `(label, codec-factory, size)` tuple tables — clarity
+// over lint compliance here.
+#![allow(clippy::type_complexity)]
+
 use std::time::Instant;
 
 use arthash::{decode, encode_rgb, Codec, DecodeOptions, EncodeOptions};
@@ -112,9 +116,12 @@ fn main() {
     }
 
     // Shape modes — 48x48 thumbnails.
-    let shapes: [(&str, fn(u32) -> Codec, u32); 3] = [
+    let shapes: [(&str, fn(u32) -> Codec, u32); 6] = [
         ("circle", Codec::circle, 12),
         ("triangle", Codec::triangle, 12),
+        ("square", Codec::square, 12),
+        ("rect", Codec::rect, 12),
+        ("rotrect", Codec::rotated_rect, 12),
         ("pixel", Codec::pixel, 12),
     ];
     for (name, make, n_shapes) in shapes {
@@ -126,7 +133,7 @@ fn main() {
         let (warmup, iters) = if name == "pixel" {
             (10, 100)
         } else {
-            (3, 15)
+            (10, 60)
         };
 
         let mut hash: Vec<u8> = Vec::new();

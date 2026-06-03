@@ -5,6 +5,10 @@
 //! Run with:
 //!     cargo run --release --example bench_palette
 
+// Bench scratch: inline `(codec-factory, label)` tuple table — clarity over
+// lint compliance here.
+#![allow(clippy::type_complexity)]
+
 use std::time::Instant;
 
 use arthash::{encode_rgb, Codec, ColorMode, EncodeOptions, Palette};

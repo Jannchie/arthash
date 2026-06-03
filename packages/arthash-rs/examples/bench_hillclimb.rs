@@ -23,6 +23,10 @@
 //! All shape budgets use the SDK's mode-specific defaults
 //! (`SearchOptions::default()` for circle, `triangle_default()` for triangle).
 
+// Bench scratch: the `(label, codec-factory)` tables below are deliberately
+// inline tuples rather than named structs — clarity over lint compliance here.
+#![allow(clippy::type_complexity)]
+
 use std::time::Instant;
 
 use arthash::shape::raster::counters;
@@ -76,7 +80,7 @@ fn quadrants_rgb(w: u32, h: u32) -> Vec<u8> {
 fn noise_rgb(w: u32, h: u32) -> Vec<u8> {
     let n = (w * h) as usize;
     let mut rgb = vec![0u8; n * 3];
-    let mut state: u64 = 0xC0FFEE_F00D_BEEFu64;
+    let mut state: u64 = 0x00C0_FFEE_F00D_BEEFu64;
     for slot in rgb.iter_mut() {
         // xorshift64
         let mut x = state;
