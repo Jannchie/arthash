@@ -1,0 +1,106 @@
+name: CI
+
+# Continuous-integration gate for every push to main and every PR. The
+# release workflows (crates-publish / npm-publish / wheels) only run on tags
+# and assume green; this is the workflow that actually keeps `main` green.
+#
+# Mirrors the root `package.json` `lint` + `test` scripts so a contributor
+# can reproduce CI locally with `pnpm run lint && pnpm run test`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same ref cancels the previous in-flight run — PRs that
+# get force-pushed shouldn't keep burning runners on stale commits. (Release
+# workflows do NOT cancel; CI is safe to.)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # Rust core: clippy as a hard gate (`-D warnings`) + the full test
+  # suite. `--all-targets --all-features` is intentionally stricter than
+  # the `lint:rs` npm script (default features only) — it also lints the
+  # tests/examples and the `image-io` / `serde` / `bench-counters` paths.
+  # `--locked` refuses to proceed if Cargo.lock drifted from Cargo.toml,
+  # matching the release workflows.
+  # ------------------------------------------------------------------
+  rust:
+    name: rust · clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/arthash-rs
+      - name: clippy (deny warnings)
+        run: cargo clippy --manifest-path packages/arthash-rs/Cargo.toml --all-targets --all-features --locked -- -D warnings
+      - name: test
+        run: cargo test --manifest-path packages/arthash-rs/Cargo.toml --all-features --locked
+
+  # ------------------------------------------------------------------
+  # Python binding: ruff lint + pytest. `uv sync` builds the `arthash`
+  # extension from the local Rust source via the maturin build backend
+  # (it's a uv workspace member), so pytest exercises THIS commit's
+  # native code — hence the Rust toolchain + cache are required here too.
+  # ------------------------------------------------------------------
+  python:
+    name: python · ruff + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/arthash-rs
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: build extension + sync dev deps
+        run: uv sync
+      - name: ruff
+        run: uv run ruff check packages/arthash-py
+      - name: pytest
+        run: uv run pytest packages/arthash-py/tests
+
+  # ------------------------------------------------------------------
+  # TypeScript SDK: build the wasm+ts bundle, then run vitest. Setup
+  # mirrors playground.yml exactly (pnpm + node 24 + wasm32 target +
+  # pinned wasm-bindgen-cli); `wasm-opt` comes from the `binaryen` npm
+  # devDependency, so no extra system install is needed. The build must
+  # run before `test` because the vitest suite imports the generated
+  # wasm glue from wasm/pkg.
+  # ------------------------------------------------------------------
+  typescript:
+    name: typescript · build + vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/arthash-rs
+            packages/arthash-ts/wasm
+      # Pin wasm-bindgen-cli to the wasm-bindgen library version in
+      # packages/arthash-ts/wasm/Cargo.toml — the two MUST agree exactly.
+      # Bump in lockstep with the Cargo.toml dep (and npm-publish.yml).
+      - name: install wasm-bindgen-cli
+        run: cargo install -f --locked wasm-bindgen-cli --version 0.2.121
+      - run: pnpm install --frozen-lockfile
+      - name: build arthash (wasm + ts)
+        run: pnpm --filter arthash run build
+      - name: vitest
+        run: pnpm --filter arthash run test
