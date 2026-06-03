@@ -1,3 +1,39 @@
+## v0.5.0
+
+[v0.4.0...v0.5.0](https://github.com/Jannchie/arthash/compare/v0.4.0...v0.5.0)
+
+### :sparkles: Features
+
+- **rs**: RGBA encode and fallible try_* API with typed errors - By [Jianqi Pan](mailto:jannchie@gmail.com) in [44926ab](https://github.com/Jannchie/arthash/commit/44926ab)
+- **py**: expose encode_rgba and preset shortcuts, unify thumbnail loaders - By [Jianqi Pan](mailto:jannchie@gmail.com) in [0090f94](https://github.com/Jannchie/arthash/commit/0090f94)
+
+### :zap: Performance
+
+- **rs**: byte-compatible incremental rebuild, alpha-sweep sum reuse, fused colorspace - By [Jianqi Pan](mailto:jannchie@gmail.com) in [d0cf419](https://github.com/Jannchie/arthash/commit/d0cf419)
+- **ts**: zero-copy RGBA extraction via intoRgba() - By [Jianqi Pan](mailto:jannchie@gmail.com) in [8ffd58e](https://github.com/Jannchie/arthash/commit/8ffd58e)
+
+### :adhesive_bandage: Fixes
+
+- **deps**: resolve thash from PyPI instead of the ../thumbhash-py sibling - By [Jianqi Pan](mailto:jannchie@gmail.com) in [9ef1c22](https://github.com/Jannchie/arthash/commit/9ef1c22)
+- **ci**: use `uv sync --frozen` so the lock check never reads the thumbhash-py sibling - By [Jianqi Pan](mailto:jannchie@gmail.com) in [6a730c9](https://github.com/Jannchie/arthash/commit/6a730c9)
+- **ci**: move research deps to opt-in group so `uv sync` works without thumbhash-py - By [Jianqi Pan](mailto:jannchie@gmail.com) in [8d9632e](https://github.com/Jannchie/arthash/commit/8d9632e)
+
+### :memo: Documentation
+
+- **perf**: document Opt 4 incremental Integral2D rebuild; freeze historical PoC table - By [Jianqi Pan](mailto:jannchie@gmail.com) in [5097db7](https://github.com/Jannchie/arthash/commit/5097db7)
+
+### :white_check_mark: Tests
+
+- add byte-compat regression harness (golden + properties + vectors) - By [Jianqi Pan](mailto:jannchie@gmail.com) in [a1c3b2d](https://github.com/Jannchie/arthash/commit/a1c3b2d)
+
+### :construction_worker: CI
+
+- add GitHub Actions workflow - By [Jianqi Pan](mailto:jannchie@gmail.com) in [165bcea](https://github.com/Jannchie/arthash/commit/165bcea)
+
+### :wrench: Chores
+
+- **bench**: extend coverage to rect/square/rotrect - By [Jianqi Pan](mailto:jannchie@gmail.com) in [92490c1](https://github.com/Jannchie/arthash/commit/92490c1)
+
 ## v0.4.0
 
 [v0.3.1...v0.4.0](https://github.com/Jannchie/arthash/compare/v0.3.1...v0.4.0)
