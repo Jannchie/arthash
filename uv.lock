@@ -59,7 +59,7 @@ requires-dist = [
     { name = "pywavelets", specifier = ">=1.9.0" },
     { name = "scikit-image", specifier = ">=0.22" },
     { name = "scipy", specifier = ">=1.17.1" },
-    { name = "thash", editable = "../thumbhash-py" },
+    { name = "thash", specifier = ">=1.2.0" },
 ]
 
 [[package]]
@@ -722,26 +722,11 @@ wheels = [
 
 [[package]]
 name = "thash"
-source = { editable = "../thumbhash-py" }
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", marker = "extra == 'all'", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'numpy'", specifier = ">=1.24" },
-    { name = "pillow", marker = "extra == 'all'", specifier = ">=10" },
-    { name = "pillow", marker = "extra == 'pillow'", specifier = ">=10" },
-]
-provides-extras = ["all", "numpy", "pillow"]
-
-[package.metadata.requires-dev]
-bench = [
-    { name = "numpy", specifier = ">=1.24" },
-    { name = "pillow", specifier = ">=10" },
-]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "ruff", specifier = ">=0.7" },
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/f7/153f70fa55217f70e5ca4074e763aa2e02ba70be5110015d467dc65af68b/thash-1.2.0.tar.gz", hash = "sha256:9ef438bfe9f89f2e68ff4114edc171c41bacf756d93710754dcba2489f398894", size = 18246, upload-time = "2026-05-14T11:59:17.419Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/60/d0455462d3a66b046789153bc3fca02ac75faa40d8ddf7c871dd94d78cc3/thash-1.2.0-py3-none-any.whl", hash = "sha256:c0cf95171cf87b1d08c79d0dda61e6f07b19398bf330fc8d70b9ffbea447b98a", size = 19954, upload-time = "2026-05-14T11:59:18.308Z" },
 ]
 
 [[package]]

@@ -21,10 +21,12 @@ dependencies = []
 members = ["packages/arthash-py", "packages/arthash-research"]
 
 [tool.uv.sources]
-# Sibling checkout of thumbhash-py — pulled into arthash-research's
-# dependencies so we can compare against thash without re-publishing.
-# Path is relative to this file.
-thash = { path = "../thumbhash-py", editable = true }
+# `thash` is resolved from PyPI (published thumbhash-py). It used to be
+# overridden to an editable `../thumbhash-py` sibling checkout for co-dev, but
+# that made `uv sync`/`uv run` fail anywhere the sibling is absent (CI). The
+# published release exposes the same API arthash-research's baselines use, so
+# no local checkout is needed. To co-develop thumbhash-py locally, re-add:
+#   thash = { path = "../thumbhash-py", editable = true }
 arthash = { workspace = true }
 arthash-research = { workspace = true }
 

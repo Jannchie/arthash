@@ -61,14 +61,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      # `--frozen` installs the committed lockfile as-is WITHOUT the lock
-      # currency check. That check reads metadata from every path source in
-      # the workspace graph — including `thash` (editable `../thumbhash-py`),
-      # the research-only sibling checkout that doesn't exist on CI runners.
-      # Frozen skips it; arthash-research/thash live in the non-default
-      # `research` group so they're never in the default install set anyway.
       - name: build extension + sync dev deps
-        run: uv sync --frozen
+        run: uv sync
       - name: ruff
         run: uv run ruff check packages/arthash-py
       - name: pytest

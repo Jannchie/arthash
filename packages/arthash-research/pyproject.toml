@@ -14,7 +14,7 @@ description = "Internal research / ablation / benchmark scripts for arthash. Not
 requires-python = ">=3.11"
 dependencies = [
   "arthash",
-  "thash",
+  "thash>=1.2.0",
   "blurhash>=1.1.5",
   "scikit-image>=0.22",
   "numba>=0.65",
