@@ -109,7 +109,14 @@ strongest single piece of evidence for the paper's central claim.
 
 ---
 
-## 2. Contribution: quantization-aware joint refinement
+## 2. Control: does a better search objective help? (quantization-aware refinement)
+
+> **Framing note.** In the paper this section is *not* a contribution — it is the
+> first of three controls (refinement / weighting / entropy) that rule out the
+> objective and the serialization, localizing the bottleneck to primitive
+> expressiveness. It improves PSNR but not perception; that negative result is
+> the point.
+
 
 The greedy fitter places each primitive against the residual of the ones before
 it and never revisits the choice. We add an opt-in **backfitting** pass
