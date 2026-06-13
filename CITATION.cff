@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use arthash or the placeholder rate-distortion study, please cite it as below."
+title: "arthash: a compact placeholder-image hash with geometric primitives"
+abstract: >-
+  A compact placeholder-image hash (17–400 bytes) that fits geometric primitives
+  (circles, triangles, rectangles) or DCT coefficients to a thumbnail, in Rust
+  with Python and TypeScript bindings. Accompanied by the first perceptual
+  rate-distortion study of sub-300-byte image placeholders.
+type: software
+authors:
+  - family-names: Pan
+    given-names: Jianqi
+    email: jannchie@gmail.com
+url: "https://github.com/Jannchie/arthash"
+repository-code: "https://github.com/Jannchie/arthash"
+license: MIT
+keywords:
+  - image placeholder
+  - ultra-low bitrate
+  - rate-distortion
+  - perceptual quality
+  - geometric primitives
+preferred-citation:
+  type: conference-paper
+  title: >-
+    Geometric Primitives Dominate the Perceptual Frontier of Sub-300-Byte
+    Image Placeholders
+  authors:
+    - family-names: Pan
+      given-names: Jianqi
+  year: 2026
+  notes: "Preprint, under review."
