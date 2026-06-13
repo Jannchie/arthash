@@ -1,0 +1,17 @@
+Image placeholders - the low-fidelity previews shown while a full image loads -
+are ubiquitous in production systems (BlurHash, ThumbHash, SQIP) yet have never
+been evaluated in the academic literature, and the sub-300-byte regime they
+occupy lies below where standard codecs operate. This is a measurement paper: we
+present the first perceptual rate-distortion study of that regime, putting
+industrial placeholder formats, a faithful reimplementation of the closest
+academic prior (Marwood et al., ICIP 2018), and the smallest attainable
+JPEG/WebP on common ground across Kodak and CLIC under PSNR, SSIM, LPIPS, and
+DISTS. The measurement yields one counter-intuitive finding. Geometric
+primitives Pareto-dominate the perceptual frontier - a 20-byte circle hash beats
+a 166-byte BlurHash on LPIPS - while every frequency/smoothing representation
+collapses on it, including the MSE-optimal Marwood mesh, which wins PSNR yet
+loses LPIPS 2.4x. In this regime PSNR is anti-correlated with perceptual quality.
+Three controls (a quantization-aware search refinement, perceptual objective
+weighting, and entropy coding) each fail to move the perceptual frontier, ruling
+out the search objective and the serialization and localizing the binding
+constraint to primitive expressiveness.

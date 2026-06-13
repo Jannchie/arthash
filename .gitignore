@@ -59,5 +59,15 @@ bench/*.png
 # Paper figures are copied/regenerated from bench/ (see paper/README.md).
 paper/figures/
 
+# arXiv submission build artifacts (regenerate via paper/SUBMISSION.md §1).
+# Committed sources: main.tex + arxiv-abstract.txt. SUBMISSION.md stays local
+# (personal pre-submission notes); the tarball and staging/verify dirs are
+# reproducible, so they all stay out of git.
+paper/SUBMISSION.md
+paper/arxiv-build/
+paper/arxiv-verify/
+paper/*.tar.gz
+paper/main.pdf
+
 # Windows shell crash dumps
 *.stackdump
