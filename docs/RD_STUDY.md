@@ -78,6 +78,35 @@ optimized one, so we do not lean on it; thumbhash uses its Rust binding and is a
 fair fast-but-weak point.) Spending ~1 ms more than a DCT hash to drop LPIPS by
 ~0.28 is the trade the shape modes offer.
 
+### 1.2 vs the academic baseline (Marwood ICIP'18)
+
+The closest academic prior is Marwood et al., *Representing Images in 200 Bytes*
+(ICIP 2018): grid-vertex Delaunay triangulation (connectivity recomputed at
+decode, so it costs no bytes), palette vertex colors, Gouraud interpolation, and
+ANS entropy coding. No implementation was ever released, so we reimplement it
+faithfully (`scripts/paper/marwood_baseline.py`) with error-driven greedy vertex
+placement, palette coordinate descent, and an **ideal-entropy byte model** (a
+perfect arithmetic coder — deliberately generous to the baseline). On the
+paper's own setting (221 px, ~200 B) the reimpl reaches the reported magnitude
+(~24 dB on simple Kodak content, 16–20 dB on hard; the paper's 1024-image
+ImageNet mean is ~25 dB and Kodak is harder), so it is not a strawman.
+
+On our protocol (Kodak, 100 px → 256 px):
+
+| bytes | Marwood PSNR / LPIPS | nearest arthash | PSNR / LPIPS |
+| ---: | --- | --- | --- |
+| 84 | 18.81 / 0.720 | triangle-12 (77 B) | 18.45 / **0.626** |
+| 187 | 20.33 / 0.627 | triangle-12 (77 B) | 18.45 / **0.626** |
+| 187 | 20.33 / 0.627 | triangle-24 (150 B) | 19.37 / **0.571** |
+
+The split *is* the thesis, in one comparison: **Marwood wins PSNR** (its Gouraud
+mesh is MSE-optimal, ~0.5–1 dB higher at equal bytes) but **loses LPIPS
+decisively** — arthash triangle-12 matches Marwood's *187-byte* LPIPS at **77
+bytes (2.4× smaller)** and is better at every rate. Gouraud interpolation smooths
+away exactly the structure LPIPS rewards — the same failure mode as blurhash.
+Optimizing PSNR optimizes the wrong metric for placeholders; this is the
+strongest single piece of evidence for the paper's central claim.
+
 ---
 
 ## 2. Contribution: quantization-aware joint refinement
@@ -202,24 +231,24 @@ rate-distortion baselines — "first perceptual R-D study of industrial sub-300-
 placeholders" is defensible. Must-cite / must-contrast:
 
 - **Marwood et al., "Representing Images in 200 Bytes" (ICIP 2018)** — closest
-  prior work (≤200 B triangulation + entropy coding) but PSNR/SSIM only, no
-  perceptual metric, no placeholder baselines, no <100 B regime.
+  prior work (≤200 B triangulation + entropy coding); reimplemented and compared
+  in §1.2. PSNR/SSIM only, no perceptual metric, no placeholder baselines — and
+  on LPIPS it is dominated 2.4× by arthash.
 - **GaussianImage (ECCV 2024)** — quantization-aware primitive fine-tuning +
   entropy coding, but at 0.1–1 bpp with differentiable Gaussians, an order of
   magnitude above our budget.
 - **Figueras i Ventura et al. (IEEE TIP 2006)** and in-loop matching-pursuit
   quantization — the rate-distortion-primitive lineage.
 
+**Done:** R-D vs industrial formats (§1), encode-latency Pareto (§1.1), Marwood
+ICIP'18 reimplementation and comparison (§1.2), three bounding ablations (§2–3).
+
 **Remaining work to harden the measurement.**
 
 1. Widen the corpora (add DIV2K-valid) and report variance, so the Pareto claim
    is not Kodak/CLIC-specific.
-2. Add the **encode-latency vs quality** Pareto — arthash's second axis (≈50×
-   faster than SQIP at comparable shape counts); the data is cheap to collect.
-3. Bring the **SQIP** geometric baseline and a **Marwood-ICIP'18** reference
-   (reported values or a triangulation reimplementation) onto the same axes —
-   SQIP is the most direct prior art and the strongest "we are smaller and
-   faster" contrast.
+2. Get SQIP's LPIPS onto the §1.2 axes (its `sharp` dependency is currently
+   broken locally; latency is already in §1.1).
 
 If a positive algorithmic contribution is wanted on top of the measurement, the
 only untested lever is expressiveness itself — mixed-primitive fitting (pick the

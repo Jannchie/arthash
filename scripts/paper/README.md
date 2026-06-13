@@ -38,6 +38,7 @@ LANCZOS ground truth. Metrics: bytes, PSNR, SSIM, LPIPS(alex), DISTS.
 | `entropy_eval.py [--train ds] [--test ds]` | Entropy-coding headroom: static per-field model cross-entropy vs the fixed-width wire size. |
 | `speed_benchmark.py` | Encode-latency vs LPIPS Pareto (joins `rd_results_kodak.csv`) → `bench/speed_quality_kodak.png`. Run `rd_benchmark.py kodak` first. |
 | `perceptual_poc.py` | Weighted-objective ablation (edge / center / saliency) — the negative result behind RD_STUDY §2.2. |
+| `marwood_baseline.py [--validate]` | Faithful reimpl of Marwood ICIP'18 (grid Delaunay + palette Gouraud + ideal-entropy bytes); `--validate` checks strength vs the paper anchor, default run plots arthash vs Marwood (RD_STUDY §1.2). |
 
 ```bash
 uv run python scripts/paper/rd_benchmark.py kodak clic
