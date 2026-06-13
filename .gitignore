@@ -56,5 +56,8 @@ bench/clic/
 bench/div2k/
 bench/*.png
 
+# Paper figures are copied/regenerated from bench/ (see paper/README.md).
+paper/figures/
+
 # Windows shell crash dumps
 *.stackdump
