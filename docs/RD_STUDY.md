@@ -104,10 +104,36 @@ minimizing squared error shrinks/merges primitives in flat regions to shave SSE
 while giving up edge structure that LPIPS rewards. Triangles are the exception
 because they natively carry oriented edges.
 
-**Implication that reframes the paper:** for sub-300-byte placeholders, L2 is
-the wrong objective. Refinement is best understood not as the contribution but
-as the *infrastructure* that lets any objective be optimized — the next step
-plugs a perceptual objective into it (see §4).
+**Implication:** for sub-300-byte placeholders, L2 is the wrong objective.
+The natural fix — optimize a perceptual proxy instead — is tested next and,
+notably, does not work.
+
+### 2.2 Negative result: perceptual weighting does not help
+
+If L2 is the wrong objective, the obvious move is a perceptually-weighted one:
+minimize `Σ w·(t−c)²` with a per-pixel weight `w` that emphasizes whatever the
+eye cares about. Weighted SSE stays compatible with the fast integral-image
+evaluation (carry `Σw`, `Σw·t`, `Σw·t²` instead of plain pixel sums), so it is
+cheap to deploy — *if it helps*. We measured whether it does, before building it
+in Rust, with a pure-numpy greedy circle fitter run under identical RNG so the
+only variable is the weight map (`scripts/paper/perceptual_poc.py`).
+
+Three cues, Kodak-8, 12 circles, vs the uniform-L2 baseline (LPIPS 0.700):
+
+| weight cue | PSNR | LPIPS | ΔLPIPS |
+| --- | ---: | ---: | ---: |
+| edge (Sobel ×4) | 16.68 | 0.704 | +0.6% |
+| center prior (×4) | 16.90 | 0.703 | +0.4% |
+| saliency (×4) | 16.65 | 0.700 | −0.0% |
+| saliency (×8) | 16.34 | 0.696 | −0.5% |
+
+None of them helps: edge and center weighting make LPIPS *worse*, and the best
+(strong saliency) buys −0.5% LPIPS while giving up 0.65 dB PSNR and swinging
+wildly per image. Twelve solid circles cannot represent edges, so steering the
+objective toward edges/subjects just sacrifices the flat-region coverage LPIPS
+also rewards. **The objective is not the lever — the primitives' expressiveness
+is.** This is consistent with §1, where triangles (which carry oriented edges)
+already out-perform circles perceptually.
 
 ---
 
@@ -137,7 +163,14 @@ serialization** — which also pre-empts the obvious reviewer question.
 
 ---
 
-## 4. Positioning and next step
+## 4. Positioning
+
+The three negative results (§2.1 L2 refinement, §2.2 perceptual weighting, §3
+entropy coding) converge on one thesis the measurement supports: **at sub-300-byte
+budgets the binding constraint is the primitives' expressiveness, not the search
+objective or the serialization.** That is the paper's spine — a rate-distortion
+characterization of the regime, with the negative results bounding where the
+gains can and cannot come from.
 
 **Novelty.** No peer-reviewed paper evaluates blurhash / thumbhash / SQIP as
 rate-distortion baselines — "first perceptual R-D study of industrial sub-300-byte
@@ -152,10 +185,18 @@ placeholders" is defensible. Must-cite / must-contrast:
 - **Figueras i Ventura et al. (IEEE TIP 2006)** and in-loop matching-pursuit
   quantization — the rate-distortion-primitive lineage.
 
-**Next.** A perceptually-weighted fitting objective. Precompute a per-pixel
-weight map `w` (Sobel edge magnitude → later saliency) and minimize
-`Σ w·(t−c)²`. The key tractability point: weighted SSE still admits the
-O(1)/O(h) integral-image evaluation if the integral images carry `Σw`, `Σw·t`,
-`Σw·t²` instead of plain pixel sums — so the fast hill-climb survives. Opt-in,
-byte-format-preserving. This directly attacks the §2.1 divergence and is
-expected to be the paper's primary contribution.
+**Remaining work to harden the measurement.**
+
+1. Widen the corpora (add DIV2K-valid) and report variance, so the Pareto claim
+   is not Kodak/CLIC-specific.
+2. Add the **encode-latency vs quality** Pareto — arthash's second axis (≈50×
+   faster than SQIP at comparable shape counts); the data is cheap to collect.
+3. Bring the **SQIP** geometric baseline and a **Marwood-ICIP'18** reference
+   (reported values or a triangulation reimplementation) onto the same axes —
+   SQIP is the most direct prior art and the strongest "we are smaller and
+   faster" contrast.
+
+If a positive algorithmic contribution is wanted on top of the measurement, the
+only untested lever is expressiveness itself — mixed-primitive fitting (pick the
+best primitive type per step) or soft/differentiable edges — not another
+objective tweak.
