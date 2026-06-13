@@ -10,7 +10,7 @@ use super::quant::{
     alpha_to_q, aspect_code, dequant_xy, q_to_alpha, q_to_r, quant_xy, r_to_q, read_color,
     write_color,
 };
-use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, refine_shapes, FIXED_HILL_CLIMB_ALPHA};
 use super::raster::{apply_circle, ShapeSums};
 use super::residual::Residual;
 use super::rng::Rng;
@@ -83,12 +83,111 @@ fn fit_primitive(
         search.hill_climb_steps
     };
 
+    let params = CircleSearchParams { sigma_pos, sigma_r, r_init_max, r_max_global, hard_cap };
+
     let null_color = bg;
     let null_alpha = alpha_levels[0];
     let fallback_radius = (2i32).max((w.min(h) / 4) as i32);
     let mut circles: Vec<Circle> = Vec::with_capacity(codec.n_shapes as usize);
 
     for _ in 0..codec.n_shapes {
+        let found = search_circle(
+            &integral, &residual, &mut rng, h, w, search, pal_ref, &alpha_levels, &params,
+        );
+        let Circle { cx, cy, r, alpha, color, pidx } = match found {
+            None => Circle {
+                cx: w as i32 / 2,
+                cy: h as i32 / 2,
+                r: fallback_radius,
+                alpha: null_alpha,
+                color: null_color,
+                pidx: 0,
+            },
+            Some((c, _delta)) => c,
+        };
+
+        apply_circle(&mut canvas, h as i32, w as i32, cx, cy, r, alpha, &color);
+        let (ymin, ymax) = circle_row_range(cy, r, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
+        residual.rebuild_from(target, &canvas, ymin as usize * w as usize);
+        circles.push(Circle { cx, cy, r, alpha, color, pidx });
+    }
+
+    // Joint refinement (backfitting) — see `refine_shapes`. `apply_quantized`
+    // wire-quantizes each circle before rasterizing; `do_search` rebuilds the
+    // integral/residual against the shape-removed canvas and returns an
+    // already-quantized candidate, so the accept test judges decoder output.
+    let apply_quantized = |cv: &mut [f32], c: &Circle| {
+        let q = quantize_circle(c, w, h, codec, &alpha_levels);
+        apply_circle(cv, h as i32, w as i32, q.cx, q.cy, q.r, q.alpha, &q.color);
+    };
+    let do_search = |canvas_wo: &[f32]| -> Option<Circle> {
+        let integral_wo = Integral::build(target, canvas_wo, h, w);
+        let residual_wo = Residual::build(target, canvas_wo, h, w);
+        search_circle(&integral_wo, &residual_wo, &mut rng, h, w, search, pal_ref, &alpha_levels, &params)
+            .map(|(c, _)| quantize_circle(&c, w, h, codec, &alpha_levels))
+    };
+    refine_shapes(target, bg, h, w, &mut circles, search.refine_passes, apply_quantized, do_search);
+    (bg, circles)
+}
+
+/// Round-trip a circle through the wire bit layout so refinement judges the
+/// shape the decoder will actually render, not its continuous-domain ideal.
+fn quantize_circle(c: &Circle, w: u32, h: u32, codec: &Codec, alpha_levels: &[f32]) -> Circle {
+    let mut bw = BitWriter::new();
+    let (x_q, y_q) = quant_xy(c.cx as f32, c.cy as f32, w, h, codec.cx_bits, codec.cy_bits);
+    bw.write(x_q, codec.cx_bits);
+    bw.write(y_q, codec.cy_bits);
+    bw.write(r_to_q(c.r as f32, w, h, codec.r_bits), codec.r_bits);
+    write_color(&mut bw, &c.color, c.pidx, codec);
+    bw.write(alpha_to_q(c.alpha, alpha_levels), codec.alpha_bits);
+    let bytes = bw.finish();
+    let mut br = BitReader::new(&bytes);
+    let x_q = br.read(codec.cx_bits);
+    let y_q = br.read(codec.cy_bits);
+    let r_q = br.read(codec.r_bits);
+    let color = read_color(&mut br, codec);
+    let a_q = br.read(codec.alpha_bits);
+    let (cx, cy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
+    Circle {
+        cx,
+        cy,
+        r: q_to_r(r_q, w, h, codec.r_bits).round() as i32,
+        alpha: q_to_alpha(a_q, alpha_levels),
+        color,
+        pidx: c.pidx,
+    }
+}
+
+/// Canvas-derived constants for the primitive-style circle search, hoisted so
+/// the greedy loop and refinement passes share identical settings.
+struct CircleSearchParams {
+    sigma_pos: f64,
+    sigma_r: f64,
+    r_init_max: i64,
+    r_max_global: i32,
+    hard_cap: u32,
+}
+
+/// Stage 1–3 of the primitive fit for a single circle against the canvas state
+/// captured by `integral`/`residual`. Returns the best circle and its ΔSSE at
+/// the swept α, or None when nothing beats the -1e-3 improvement threshold.
+/// Extracted verbatim from the greedy loop — the RNG draw sequence must not
+/// change, or default (refine_passes = 0) outputs stop being byte-identical.
+#[allow(clippy::too_many_arguments)]
+fn search_circle(
+    integral: &Integral,
+    residual: &Residual,
+    rng: &mut Rng,
+    h: u32,
+    w: u32,
+    search: &SearchOptions,
+    pal_ref: Option<&super::palette::PaletteIndex>,
+    alpha_levels: &[f32],
+    params: &CircleSearchParams,
+) -> Option<(Circle, f32)> {
+    let CircleSearchParams { sigma_pos, sigma_r, r_init_max, r_max_global, hard_cap } = *params;
+    {
         let mut best_delta_climb: f32 = -1e-3;
         let mut best_geom: Option<(i32, i32, i32)> = None;
         // Sums of the winning geometry, carried out of the hill-climb so the
@@ -102,10 +201,10 @@ fn fit_primitive(
             let mut best_init: Option<(i32, i32, i32)> = None;
             let mut best_init_sums = ShapeSums::new();
             for _ in 0..search.n_random {
-                let (cx, cy) = residual.sample(&mut rng);
+                let (cx, cy) = residual.sample(rng);
                 let r = rng.range(1, r_init_max + 1) as i32;
                 let (res, sums) = eval_circle_integral_with_sums(
-                    &integral, h, w, cx, cy, r, FIXED_HILL_CLIMB_ALPHA, pal_ref,
+                    integral, h, w, cx, cy, r, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_d {
                     best_d = res.delta_sse;
@@ -129,7 +228,7 @@ fn fit_primitive(
                     _ => nr = (r + rng.normal_step(sigma_r)).clamp(1, r_max_global),
                 }
                 let (res, sums) = eval_circle_integral_with_sums(
-                    &integral, h, w, ncx, ncy, nr, FIXED_HILL_CLIMB_ALPHA, pal_ref,
+                    integral, h, w, ncx, ncy, nr, FIXED_HILL_CLIMB_ALPHA, pal_ref,
                 );
                 if res.delta_sse < best_local_delta {
                     cx = ncx;
@@ -158,28 +257,24 @@ fn fit_primitive(
 
         // Stage 3: alpha sweep — reuse the winning geometry's sums (already
         // collected during the hill-climb) instead of re-scanning.
-        let (cx, cy, r, alpha, color, pidx) = match best_geom {
-            None => (
-                w as i32 / 2,
-                h as i32 / 2,
-                fallback_radius,
-                null_alpha,
-                null_color,
-                0u32,
-            ),
+        match best_geom {
+            None => None,
             Some((cx, cy, r)) => {
-                let (chosen_alpha, chosen) = alpha_sweep(&best_climb_sums, &alpha_levels, pal_ref);
-                (cx, cy, r, chosen_alpha, chosen.color, chosen.pidx)
+                let (chosen_alpha, chosen) = alpha_sweep(&best_climb_sums, alpha_levels, pal_ref);
+                Some((
+                    Circle {
+                        cx,
+                        cy,
+                        r,
+                        alpha: chosen_alpha,
+                        color: chosen.color,
+                        pidx: chosen.pidx,
+                    },
+                    chosen.delta_sse,
+                ))
             }
-        };
-
-        apply_circle(&mut canvas, h as i32, w as i32, cx, cy, r, alpha, &color);
-        let (ymin, ymax) = circle_row_range(cy, r, h);
-        integral.update_canvas_rows(target, &canvas, ymin, ymax);
-        residual.rebuild_from(target, &canvas, ymin as usize * w as usize);
-        circles.push(Circle { cx, cy, r, alpha, color, pidx });
+        }
     }
-    (bg, circles)
 }
 
 fn fit_topk_uniform(

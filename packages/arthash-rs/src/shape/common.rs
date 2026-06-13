@@ -66,3 +66,86 @@ pub(crate) fn alpha_sweep(
     }
     (best_alpha, best)
 }
+
+/// Exact total SSE between `target` and `canvas` (row-major linear-RGB f32 of
+/// equal length), accumulated in f64 for a drift-free refinement accept test.
+pub(crate) fn sse_total(target: &[f32], canvas: &[f32]) -> f64 {
+    target
+        .iter()
+        .zip(canvas)
+        .map(|(t, c)| {
+            let d = (*t - *c) as f64;
+            d * d
+        })
+        .sum()
+}
+
+/// Joint refinement (backfitting) shared by every primitive shape mode.
+///
+/// After the greedy fit, revisit each shape once per pass: render the canvas
+/// without it, re-search a fresh shape against that canvas, and keep the
+/// replacement only when it lowers the *exact total SSE* of the full picture.
+/// Accepted shapes migrate to the end of the paint order. Because only strict
+/// improvements are accepted, repeated passes converge; `break` on the first
+/// fully-rejected pass.
+///
+/// Quantization-aware by construction: `apply_quantized` is expected to wire-
+/// quantize the shape before rasterizing, so both the baseline canvas and the
+/// candidate test reflect exactly what the decoder will render — a continuous-
+/// domain win that evaporates under quantization is never accepted. `search`
+/// likewise returns an already-quantized candidate, so the stored shape equals
+/// the tested one.
+///
+/// `passes == 0` (the default) returns immediately without touching `shapes`
+/// or drawing from any RNG the caller threaded into `search`, preserving the
+/// historical greedy output bit-for-bit.
+pub(crate) fn refine_shapes<S>(
+    target: &[f32],
+    bg: [f32; 3],
+    h: u32,
+    w: u32,
+    shapes: &mut Vec<S>,
+    passes: u32,
+    apply_quantized: impl Fn(&mut [f32], &S),
+    mut search: impl FnMut(&[f32]) -> Option<S>,
+) {
+    if passes == 0 || shapes.len() < 2 {
+        return;
+    }
+    let render = |shapes: &[S], skip: usize| -> Vec<f32> {
+        let mut cv = filled_canvas(bg, h, w);
+        for (k, s) in shapes.iter().enumerate() {
+            if k != skip {
+                apply_quantized(&mut cv, s);
+            }
+        }
+        cv
+    };
+    for _ in 0..passes {
+        let mut any_accepted = false;
+        let n = shapes.len();
+        let mut j = 0usize;
+        for _ in 0..n {
+            let old_total = sse_total(target, &render(shapes, usize::MAX));
+            let canvas_wo = render(shapes, j);
+            let mut accepted = false;
+            if let Some(cand) = search(&canvas_wo) {
+                let mut cv = canvas_wo;
+                apply_quantized(&mut cv, &cand);
+                if sse_total(target, &cv) + 1e-9 < old_total {
+                    shapes.remove(j);
+                    shapes.push(cand);
+                    accepted = true;
+                }
+            }
+            if accepted {
+                any_accepted = true;
+            } else {
+                j += 1;
+            }
+        }
+        if !any_accepted {
+            break;
+        }
+    }
+}
