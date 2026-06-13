@@ -260,6 +260,29 @@ docs/
 └── benchmarks/          RESULTS.md, CROSS_IMPL.md, NDJSON
 ```
 
+## Citation
+
+If you use arthash or the sub-300-byte placeholder rate-distortion study, please cite:
+
+```bibtex
+@software{arthash,
+  author = {Pan, Jianqi},
+  title  = {arthash: a compact placeholder-image hash with geometric primitives},
+  url    = {https://github.com/Jannchie/arthash},
+  year   = {2026}
+}
+
+@inproceedings{pan2026placeholders,
+  author    = {Pan, Jianqi},
+  title     = {Geometric Primitives Dominate the Perceptual Frontier of
+               Sub-300-Byte Image Placeholders},
+  booktitle = {preprint, under review},
+  year      = {2026}
+}
+```
+
+The study (geometric primitives Pareto-dominate blurhash / thumbhash and a faithful Marwood ICIP'18 reimplementation on LPIPS/DISTS, while encoding ~189× faster than SQIP) is written up in [`docs/RD_STUDY.md`](./docs/RD_STUDY.md), reproduced by [`scripts/paper/`](./scripts/paper/), and drafted in [`paper/`](./paper/). GitHub's *Cite this repository* button reads [`CITATION.cff`](./CITATION.cff).
+
 ## License
 
 MIT.

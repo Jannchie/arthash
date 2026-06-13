@@ -260,6 +260,29 @@ docs/
 └── benchmarks/          RESULTS.md, CROSS_IMPL.md, NDJSON
 ```
 
+## 引用
+
+如果你在研究中用到 arthash 或这项 sub-300-byte 占位图率失真研究，请引用：
+
+```bibtex
+@software{arthash,
+  author = {Pan, Jianqi},
+  title  = {arthash: a compact placeholder-image hash with geometric primitives},
+  url    = {https://github.com/Jannchie/arthash},
+  year   = {2026}
+}
+
+@inproceedings{pan2026placeholders,
+  author    = {Pan, Jianqi},
+  title     = {Geometric Primitives Dominate the Perceptual Frontier of
+               Sub-300-Byte Image Placeholders},
+  booktitle = {preprint, under review},
+  year      = {2026}
+}
+```
+
+研究内容（几何图元在 LPIPS/DISTS 上帕累托压倒 blurhash / thumbhash 和忠实复现的 Marwood ICIP'18 基线，编码比 SQIP 快约 189×）见 [`docs/RD_STUDY.md`](./docs/RD_STUDY.md)，可由 [`scripts/paper/`](./scripts/paper/) 复现，论文初稿在 [`paper/`](./paper/)。GitHub 的 *Cite this repository* 按钮读取 [`CITATION.cff`](./CITATION.cff)。
+
 ## License
 
 MIT.

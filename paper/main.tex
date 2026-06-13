@@ -275,6 +275,16 @@ holding PSNR. The actionable corollary for future work is to enrich the
 primitive vocabulary (mixed-primitive selection, soft or differentiable edges),
 not to refine the loss.
 
+\textbf{Limitations.} The study uses one open-source primitive codec; the
+expressiveness argument should transfer, but other fitters may differ in
+constants. We report two corpora (Kodak, CLIC); DIV2K is pending. The Marwood
+comparison is our faithful reimplementation, not released code, though validated
+to the paper's reported magnitude. SQIP appears only on the latency axis (its
+rasterizer dependency was unavailable locally), so its perceptual point is
+inferred from its $\sim$1\,kB SVG / $+3$\,dB-PSNR envelope rather than measured.
+Finally, LPIPS and DISTS are learned proxies; a subjective study would further
+harden the perceptual ranking.
+
 \section{Conclusion}
 We presented the first perceptual rate--distortion study of sub-300-byte image
 placeholders. Geometric-primitive hashing Pareto-dominates industrial formats
