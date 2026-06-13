@@ -162,6 +162,7 @@ fn parse_search(js: JsValue) -> Result<Option<SearchOptions>, JsValue> {
         hill_climb_steps: get_u32(&js, "hill_climb_steps").unwrap_or(defaults.hill_climb_steps),
         hill_climb_max_age: get_u32(&js, "hill_climb_max_age").or(defaults.hill_climb_max_age),
         n_attempts: get_u32(&js, "n_attempts").unwrap_or(defaults.n_attempts),
+        refine_passes: get_u32(&js, "refine_passes").unwrap_or(defaults.refine_passes),
     }))
 }
 
