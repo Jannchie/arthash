@@ -36,6 +36,8 @@ LANCZOS ground truth. Metrics: bytes, PSNR, SSIM, LPIPS(alex), DISTS.
 | `rd_benchmark.py [kodak\|clic ...]` | Full R-D sweep across all methods → `bench/rd_results_<ds>.csv` + `bench/rd_curves_<ds>.png` (PSNR / LPIPS / DISTS vs bytes). |
 | `refine_ablation.py [ds] [--passes N]` | Greedy vs quantization-aware joint refinement, full metric suite → `bench/refine_ablation_<ds>.csv`. |
 | `entropy_eval.py [--train ds] [--test ds]` | Entropy-coding headroom: static per-field model cross-entropy vs the fixed-width wire size. |
+| `speed_benchmark.py` | Encode-latency vs LPIPS Pareto (joins `rd_results_kodak.csv`) → `bench/speed_quality_kodak.png`. Run `rd_benchmark.py kodak` first. |
+| `perceptual_poc.py` | Weighted-objective ablation (edge / center / saliency) — the negative result behind RD_STUDY §2.2. |
 
 ```bash
 uv run python scripts/paper/rd_benchmark.py kodak clic

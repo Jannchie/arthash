@@ -53,6 +53,31 @@ A secondary, paper-worthy observation: blurhash scales terribly in this regime
 (22→166 B buys only LPIPS 0.881→0.867), i.e. *more DCT coefficients is the
 wrong way to spend bytes here* — geometric structure is the better target.
 
+### 1.1 The second axis: encode latency
+
+Quality is not the only frontier — placeholders are generated at upload time, so
+encode latency matters. Pure encode latency (no decode), median over Kodak
+thumbnails, against each method's mean LPIPS:
+
+| method | encode | LPIPS↓ | note |
+| --- | ---: | ---: | --- |
+| thumbhash (Rust binding) | 0.13 ms | 0.905 | fast, perceptually weak |
+| arthash DCT | 0.24 ms | 0.905 | fast, perceptually weak |
+| **arthash circle-12** | **0.91 ms** | **0.632** | Pareto-optimal |
+| **arthash triangle-12** | **1.51 ms** | **0.626** | Pareto-optimal |
+| **arthash triangle-48** | 4.5 ms | **0.517** | best quality |
+| blurhash 9×9 (pure-Python) | 147 ms | 0.867 | impl-limited |
+| **sqip triangle-12 (node)** | **284 ms** | — | ~1 kB SVG; +3 dB PSNR over circle-12 |
+
+The shape modes own the lower-left (fast *and* perceptually strong). The honest
+comparison is **arthash vs SQIP** — the only other primitive-fitting method, and
+one built for quality not speed: arthash triangle-12 is **189× faster**
+(1.5 ms vs 284 ms) at ~20× smaller output, and the integral-image hill-climb is
+what buys that. (blurhash's 147 ms is its pure-Python reference impl, not an
+optimized one, so we do not lean on it; thumbhash uses its Rust binding and is a
+fair fast-but-weak point.) Spending ~1 ms more than a DCT hash to drop LPIPS by
+~0.28 is the trade the shape modes offer.
+
 ---
 
 ## 2. Contribution: quantization-aware joint refinement
