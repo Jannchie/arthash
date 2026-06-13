@@ -29,6 +29,7 @@ class SearchOptions:
     hill_climb_steps: int = 40
     hill_climb_max_age: int | None = 30
     n_attempts: int = 4
+    refine_passes: int = 0
 
     def to_native_dict(self) -> dict:
         # Note: PyO3 handles Option<u32> via None ⇒ None on the Python side.

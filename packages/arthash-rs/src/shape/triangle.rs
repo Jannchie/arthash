@@ -10,7 +10,7 @@ use super::options::{SearchOptions, Strategy};
 use super::quant::{
     alpha_to_q, aspect_code, dequant_xy, q_to_alpha, quant_xy, read_color, write_color,
 };
-use super::common::{alpha_sweep, filled_canvas, mean_rgb, FIXED_HILL_CLIMB_ALPHA};
+use super::common::{alpha_sweep, filled_canvas, mean_rgb, refine_shapes, FIXED_HILL_CLIMB_ALPHA};
 use super::raster::{apply_triangle, ShapeSums};
 use super::rng::Rng;
 use crate::bitio::{BitReader, BitWriter};
@@ -177,64 +177,127 @@ fn fit_primitive(
     let palette = super::palette::from_codec(codec);
     let pal_ref = palette.as_ref();
 
-    let sigma = (2.0f64).max(w.max(h) as f64 * 6.0 / 100.0);
-    let use_max_age = search.hill_climb_max_age.is_some();
-    let hard_cap = if use_max_age { 10_000 } else { search.hill_climb_steps };
-
+    let params = TriangleSearchParams {
+        sigma: (2.0f64).max(w.max(h) as f64 * 6.0 / 100.0),
+        hard_cap: if search.hill_climb_max_age.is_some() { 10_000 } else { search.hill_climb_steps },
+    };
     let null_alpha = alpha_levels[0];
     let fallback_verts: [(i32, i32); 3] = [(0, 0), (1, 0), (0, 1)];
 
     let mut triangles: Vec<Triangle> = Vec::with_capacity(codec.n_shapes as usize);
 
     for _ in 0..codec.n_shapes {
-        let mut best_delta_climb: f32 = -1e-3;
-        let mut best_verts: Option<[(i32, i32); 3]> = None;
-        let mut best_climb_sums = ShapeSums::new();
+        let t = search_triangle(&integral, h, w, &mut rng, search, pal_ref, &alpha_levels, &params)
+            .unwrap_or(Triangle { verts: fallback_verts, alpha: null_alpha, color: bg, pidx: 0 });
+        apply_triangle(&mut canvas, h as i32, w as i32, t.verts, t.alpha, &t.color);
+        let (ymin, ymax) = triangle_row_range(t.verts, h);
+        integral.update_canvas_rows(target, &canvas, ymin, ymax);
+        triangles.push(t);
+    }
 
-        for _attempt in 0..search.n_attempts {
-            // Stage 1: best of n_random tiny-cluster random.
-            let mut best_d = f32::INFINITY;
-            let mut best_init: Option<[(i32, i32); 3]> = None;
-            for _ in 0..search.n_random {
-                let v = random_triangle_small(&mut rng, h, w);
-                let res = eval_triangle_integral(
-                    &integral, h, w,
-                    v[0].0, v[0].1, v[1].0, v[1].1, v[2].0, v[2].1,
-                    FIXED_HILL_CLIMB_ALPHA, pal_ref,
-                );
-                if res.delta_sse < best_d {
-                    best_d = res.delta_sse;
-                    best_init = Some(v);
-                }
-            }
-            let Some(v0) = best_init else { continue };
+    // Joint refinement (backfitting) — see `common::refine_shapes`. Triangle's
+    // 1D integral is rebuilt whole against the shape-removed canvas each step.
+    let apply_quantized = |cv: &mut [f32], t: &Triangle| {
+        let q = quantize_triangle(t, w, h, codec, &alpha_levels);
+        apply_triangle(cv, h as i32, w as i32, q.verts, q.alpha, &q.color);
+    };
+    let do_search = |canvas_wo: &[f32]| -> Option<Triangle> {
+        let integral_wo = Integral::build(target, canvas_wo, h, w);
+        search_triangle(&integral_wo, h, w, &mut rng, search, pal_ref, &alpha_levels, &params)
+            .map(|t| quantize_triangle(&t, w, h, codec, &alpha_levels))
+    };
+    refine_shapes(target, bg, h, w, &mut triangles, search.refine_passes, apply_quantized, do_search);
+    (bg, triangles)
+}
 
-            // Stage 2: Gaussian hill climb.
-            let (v, d, _c, _p, sums) = hill_climb_gaussian(
-                &integral, h, w, v0,
+/// Canvas-derived constants for the primitive-style triangle search.
+struct TriangleSearchParams {
+    sigma: f64,
+    hard_cap: u32,
+}
+
+/// Stages 1–3 of the primitive fit for a single triangle against `integral`.
+/// Returns the swept-α triangle or None. Extracted verbatim from the greedy
+/// loop — the RNG draw order must not change, or default outputs stop being
+/// byte-identical.
+#[allow(clippy::too_many_arguments)]
+fn search_triangle(
+    integral: &Integral,
+    h: u32,
+    w: u32,
+    rng: &mut Rng,
+    search: &SearchOptions,
+    pal_ref: Option<&super::palette::PaletteIndex>,
+    alpha_levels: &[f32],
+    params: &TriangleSearchParams,
+) -> Option<Triangle> {
+    let TriangleSearchParams { sigma, hard_cap } = *params;
+    let mut best_delta_climb: f32 = -1e-3;
+    let mut best_verts: Option<[(i32, i32); 3]> = None;
+    let mut best_climb_sums = ShapeSums::new();
+
+    for _attempt in 0..search.n_attempts {
+        // Stage 1: best of n_random tiny-cluster random.
+        let mut best_d = f32::INFINITY;
+        let mut best_init: Option<[(i32, i32); 3]> = None;
+        for _ in 0..search.n_random {
+            let v = random_triangle_small(rng, h, w);
+            let res = eval_triangle_integral(
+                integral, h, w,
+                v[0].0, v[0].1, v[1].0, v[1].1, v[2].0, v[2].1,
                 FIXED_HILL_CLIMB_ALPHA, pal_ref,
-                hard_cap, &mut rng, sigma, search.hill_climb_max_age,
             );
-            if d < best_delta_climb {
-                best_delta_climb = d;
-                best_verts = Some(v);
-                best_climb_sums = sums;
+            if res.delta_sse < best_d {
+                best_d = res.delta_sse;
+                best_init = Some(v);
             }
         }
+        let Some(v0) = best_init else { continue };
 
-        let (verts, alpha, color, pidx) = match best_verts {
-            None => (fallback_verts, null_alpha, bg, 0u32),
-            Some(v) => {
-                let (a, eval) = alpha_sweep(&best_climb_sums, &alpha_levels, pal_ref);
-                (v, a, eval.color, eval.pidx)
-            }
-        };
-        apply_triangle(&mut canvas, h as i32, w as i32, verts, alpha, &color);
-        let (ymin, ymax) = triangle_row_range(verts, h);
-        integral.update_canvas_rows(target, &canvas, ymin, ymax);
-        triangles.push(Triangle { verts, alpha, color, pidx });
+        // Stage 2: Gaussian hill climb.
+        let (v, d, _c, _p, sums) = hill_climb_gaussian(
+            integral, h, w, v0,
+            FIXED_HILL_CLIMB_ALPHA, pal_ref,
+            hard_cap, rng, sigma, search.hill_climb_max_age,
+        );
+        if d < best_delta_climb {
+            best_delta_climb = d;
+            best_verts = Some(v);
+            best_climb_sums = sums;
+        }
     }
-    (bg, triangles)
+
+    best_verts.map(|v| {
+        let (a, eval) = alpha_sweep(&best_climb_sums, alpha_levels, pal_ref);
+        Triangle { verts: v, alpha: a, color: eval.color, pidx: eval.pidx }
+    })
+}
+
+/// Round-trip a triangle through the wire bit layout so refinement judges the
+/// shape the decoder will actually render, not its continuous-domain ideal.
+fn quantize_triangle(t: &Triangle, w: u32, h: u32, codec: &Codec, alpha_levels: &[f32]) -> Triangle {
+    let mut bw = BitWriter::new();
+    for vi in 0..3 {
+        let (vx, vy) = t.verts[vi];
+        let (x_q, y_q) = quant_xy(vx as f32, vy as f32, w, h, codec.cx_bits, codec.cy_bits);
+        bw.write(x_q, codec.cx_bits);
+        bw.write(y_q, codec.cy_bits);
+    }
+    write_color(&mut bw, &t.color, t.pidx, codec);
+    bw.write(alpha_to_q(t.alpha, alpha_levels), codec.alpha_bits);
+    let bytes = bw.finish();
+    let mut br = BitReader::new(&bytes);
+    let mut verts = [(0i32, 0i32); 3];
+    for vert in verts.iter_mut() {
+        let x_q = br.read(codec.cx_bits);
+        let y_q = br.read(codec.cy_bits);
+        let (vx, vy) = dequant_xy(x_q, y_q, w, h, codec.cx_bits, codec.cy_bits);
+        vert.0 = vx;
+        vert.1 = vy;
+    }
+    let color = read_color(&mut br, codec);
+    let alpha = q_to_alpha(br.read(codec.alpha_bits), alpha_levels);
+    Triangle { verts, alpha, color, pidx: t.pidx }
 }
 
 fn fit_topk_uniform(

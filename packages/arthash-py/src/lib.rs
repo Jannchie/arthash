@@ -128,6 +128,9 @@ fn search_from_dict(d: Option<&Bound<'_, PyDict>>) -> PyResult<Option<SearchOpti
     if let Some(v) = d.get_item("n_attempts")? {
         s.n_attempts = v.extract()?;
     }
+    if let Some(v) = d.get_item("refine_passes")? {
+        s.refine_passes = v.extract()?;
+    }
     Ok(Some(s))
 }
 

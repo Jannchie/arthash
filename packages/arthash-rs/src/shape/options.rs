@@ -33,6 +33,11 @@ pub struct SearchOptions {
     pub hill_climb_max_age: Option<u32>,
     /// Repeat (random + climb) pipeline this many times per shape.
     pub n_attempts: u32,
+    /// Joint-refinement (backfitting) passes after the greedy fit: each pass
+    /// revisits every shape once — remove, re-search against the remaining
+    /// canvas, keep the better of old/new by exact total SSE. 0 (default)
+    /// preserves the historical greedy output bit-for-bit.
+    pub refine_passes: u32,
 }
 
 impl Default for SearchOptions {
@@ -47,6 +52,7 @@ impl Default for SearchOptions {
             hill_climb_steps: 40,
             hill_climb_max_age: Some(30),
             n_attempts: 4,
+            refine_passes: 0,
         }
     }
 }
@@ -62,6 +68,7 @@ impl SearchOptions {
             hill_climb_steps: 40,
             hill_climb_max_age: Some(50),
             n_attempts: 3,
+            refine_passes: 0,
         }
     }
 }
