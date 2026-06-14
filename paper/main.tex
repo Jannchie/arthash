@@ -1,7 +1,8 @@
-%% ICIP-style draft. Compile with: pdflatex main && bibtex main && pdflatex main x2
+%% Standalone article draft (no venue). Compile with: pdflatex main && pdflatex main
 %% Figures live in paper/figures/ (copy the git-ignored bench/*.png there, or
 %% regenerate with scripts/paper/). See paper/README.md.
-\documentclass[conference]{IEEEtran}
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
 \usepackage{cite}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
@@ -14,143 +15,143 @@
 \title{Geometric Primitives Dominate the Perceptual Frontier\\
 of Sub-300-Byte Image Placeholders}
 
-\author{\IEEEauthorblockN{Jianqi Pan}
-\IEEEauthorblockA{\textit{Independent Researcher}\\
-jannchie@gmail.com}}
+\author{Jianqi Pan \\
+\textit{Independent Researcher} \\
+\texttt{jannchie@gmail.com}}
+\date{}
 
 \maketitle
 
 \begin{abstract}
-Image placeholders---the low-fidelity previews shown while a full image
-loads---are ubiquitous in production systems (BlurHash, ThumbHash, SQIP) yet
-have never been evaluated in the academic literature, and the sub-300-byte
-regime they occupy lies below where standard codecs operate. This is a
-\emph{measurement} paper: we present the first perceptual rate--distortion study
-of that regime, putting industrial placeholder formats, a faithful
-reimplementation of the closest academic prior (Marwood \textit{et al.}, ICIP
-2018), and the smallest attainable JPEG/WebP on common ground across Kodak and
-CLIC under PSNR, SSIM, LPIPS, and DISTS. The measurement yields one
-counter-intuitive finding. Geometric primitives Pareto-dominate the perceptual
-frontier---a 20-byte circle hash beats a 166-byte BlurHash on LPIPS---while every
-frequency/smoothing representation collapses on it, including the MSE-optimal
-Marwood mesh, which \emph{wins} PSNR yet \emph{loses} LPIPS $2.4\times$. In this
-regime PSNR is anti-correlated with perceptual quality. Three controls (a
+Image placeholders are the low-fidelity previews shown while a full image
+loads. Production systems lean on them heavily---BlurHash, ThumbHash, and SQIP
+serve billions a day---but no peer-reviewed study has measured how good they
+actually are, and the sub-300-byte budget they target sits below the range
+where standard codecs will even operate. We treat this as a measurement
+problem. We put industrial placeholder formats, a faithful reimplementation of
+the closest academic prior (Marwood \textit{et al.}, ICIP 2018), and the
+smallest JPEG and WebP the encoders will emit onto common ground across Kodak
+and CLIC, scored on bytes against PSNR, SSIM, LPIPS, and DISTS. One result
+stands out, and it is counter-intuitive. Representations built from geometric
+primitives dominate the perceptual frontier: a 20-byte circle hash beats a
+166-byte BlurHash on LPIPS. Frequency and smoothing representations do not, and
+neither does the MSE-optimal Marwood mesh, which wins on PSNR yet trails on
+LPIPS by $2.4\times$. Across this regime PSNR runs opposite to perceptual
+quality. We then ask whether anything else can shift the frontier---a
 quantization-aware search refinement, perceptual objective weighting, and
-entropy coding) each fail to move the perceptual frontier, ruling out the search
-objective and the serialization and localizing the binding constraint to
-primitive \emph{expressiveness}.
+entropy coding---and none of the three does, which leaves primitive
+expressiveness, rather than the search objective or the serialization, as the
+binding constraint.
 \end{abstract}
 
-\begin{IEEEkeywords}
-image placeholders, ultra-low bitrate, rate--distortion, perceptual quality,
-geometric primitives, LPIPS
-\end{IEEEkeywords}
+\medskip
+\noindent\textbf{Keywords:} image placeholders, ultra-low bitrate,
+rate--distortion, perceptual quality, geometric primitives, LPIPS.
 
 \section{Introduction}
 A modern web or mobile client almost never shows a blank box while an image
-loads. Instead it renders a \emph{placeholder}: a tiny, instantly-decodable
-preview embedded directly in the page payload or the API response. The dominant
+loads. It renders a placeholder instead: a tiny, instantly-decodable preview
+embedded directly in the page payload or the API response. The common
 production techniques---BlurHash~\cite{blurhash}, ThumbHash~\cite{thumbhash},
-and SQIP~\cite{sqip}---compress a thumbnail to \emph{tens of bytes}, small
-enough to inline thousands of them in a single response without a second network
+and SQIP~\cite{sqip}---squeeze a thumbnail down to tens of bytes, small enough
+that a single response can inline thousands of them without a second network
 round trip.
 
-Two facts make this a measurement gap worth closing. First, despite serving
-billions of placeholders daily, \emph{none} of these formats has been evaluated
-in the peer-reviewed literature; their only documentation is source repositories
-and engineering blogs, with no datasets, no metrics, and no baselines. Second,
-the byte budget they target---roughly $20$ to $300$ bytes, i.e.\ well under
-$0.01$ bits per pixel for a $256$-pixel preview---is a regime where conventional
-codecs simply do not operate: the smallest valid WebP we could emit lands near
-$85$--$150$ bytes and the smallest JPEG near $320$, both with header overhead
-that dwarfs the payload. Nobody has characterized what the rate--distortion
-frontier even looks like here, let alone under metrics that track human
-perception.
+Two things make the gap worth closing. The first is evaluation. These formats
+serve billions of placeholders daily, yet not one of them has been measured in
+the peer-reviewed literature; the only documentation is source repositories and
+engineering blogs, with no datasets, no metrics, and no baselines. The second
+is the byte budget itself. At roughly $20$ to $300$ bytes, well under $0.01$
+bits per pixel for a $256$-pixel preview, conventional codecs barely function:
+the smallest valid WebP we could emit lands near $85$--$150$ bytes and the
+smallest JPEG near $320$, both carrying header overhead that dwarfs the payload.
+What the rate--distortion frontier looks like in this range has never been
+charted, let alone under metrics that track human perception.
 
-This paper is a measurement study that closes the gap, and the measurement turns
-up a result that runs against the default intuition of low-bitrate coding. The
-reflex in this setting is to minimize distortion (MSE) and to spend any spare
-bits on a better entropy coder. We find that in the sub-300-byte regime that
-reflex is wrong on both counts: representations built from \emph{geometric
-primitives}---a handful of translucent circles, triangles, or rectangles fitted
-to a thumbnail, in the lineage of Primitive~\cite{primitive} and
-SQIP~\cite{sqip}---Pareto-dominate the perceptual frontier, while every
-frequency-domain or smoothing representation collapses on it even as it holds or
-improves PSNR---an ultra-low-bitrate instance of the perception--distortion
-tradeoff~\cite{blau2018perception,rdp} that, to our knowledge, has not been
-measured at this scale before. Our contributions are three, in the shape of a
-measurement paper:
+The study closes that gap, and what it turns up runs against the default
+intuition of low-bitrate coding. The usual instinct here is to minimize
+distortion (MSE) and to spend any spare bits on a better entropy coder. In the
+sub-300-byte regime that instinct is wrong on both counts. Representations built
+from geometric primitives---a handful of translucent circles, triangles, or
+rectangles fitted to a thumbnail, following Primitive~\cite{primitive} and
+SQIP~\cite{sqip}---dominate the perceptual frontier, while every
+frequency-domain or smoothing representation falls apart on it even as it holds
+or improves PSNR. This is an ultra-low-bitrate instance of the
+perception--distortion tradeoff~\cite{blau2018perception,rdp}, one that to our
+knowledge has not been measured at this scale. Our three contributions are:
 
 \begin{itemize}
-  \item \textbf{A benchmark.} The first academic perceptual R--D evaluation of
-  the sub-300-byte regime, placing industrial placeholder formats, a faithful
-  reimplementation of the closest academic prior (Marwood~\cite{marwood}), and
-  codec extremes on common ground under both fidelity (PSNR, SSIM) and
-  perceptual (LPIPS~\cite{lpips}, DISTS~\cite{dists}) metrics, with a second,
-  encode-latency axis (\S\ref{sec:method}, \S\ref{sec:rd}, \S\ref{sec:speed}).
-  \item \textbf{A finding.} Geometric primitives Pareto-dominate the perceptual
-  frontier while every frequency/smoothing representation collapses on it. We
-  show this within a single codec (its own DCT mode, a controlled comparison
-  that varies only the representation) and against the MSE-optimal
-  Marwood~\cite{marwood} mesh, which \emph{wins} PSNR yet \emph{loses} LPIPS
-  $2.4\times$: in this regime PSNR is anti-correlated with perceptual quality
+  \item \textbf{A benchmark.} We give the first academic perceptual R--D
+  evaluation of the sub-300-byte regime, placing industrial placeholder formats,
+  a faithful reimplementation of the closest academic prior
+  (Marwood~\cite{marwood}), and the codec extremes on common ground under
+  fidelity (PSNR, SSIM) and perceptual (LPIPS~\cite{lpips}, DISTS~\cite{dists})
+  metrics, plus a second axis for encode latency (\S\ref{sec:method},
+  \S\ref{sec:rd}, \S\ref{sec:speed}).
+  \item \textbf{The main finding.} Geometric primitives Pareto-dominate the
+  perceptual frontier, and every frequency/smoothing representation collapses on
+  it. We see this within a single codec---its own DCT mode, a controlled
+  comparison that varies only the representation---and against the MSE-optimal
+  Marwood~\cite{marwood} mesh, which wins PSNR but loses LPIPS by $2.4\times$.
+  In this regime PSNR is anti-correlated with perceptual quality
   (\S\ref{sec:rd}, \S\ref{sec:marwood}).
-  \item \textbf{A localization.} Three controls---a quantization-aware search
-  refinement, perceptual objective weighting, and entropy coding---each fail to
-  move the perceptual frontier, ruling out the search objective and the
-  serialization and localizing the binding constraint to primitive
-  \emph{expressiveness} (\S\ref{sec:ablation}).
+  \item \textbf{Where the limit sits.} Three controls---a quantization-aware
+  search refinement, perceptual objective weighting, and entropy coding---each
+  fail to move the perceptual frontier. With the search objective and the
+  serialization ruled out, what remains is primitive expressiveness
+  (\S\ref{sec:ablation}).
 \end{itemize}
 
 \section{Related Work}
 \textbf{Placeholders.} BlurHash~\cite{blurhash} stores a few DCT coefficients in
-a base-83 string; ThumbHash~\cite{thumbhash} is a tighter DCT variant with
-alpha and aspect; SQIP~\cite{sqip} traces a Primitive~\cite{primitive} fit to an
-SVG. All are engineering artifacts without published evaluation---precisely the
-gap this measurement study fills.
+a base-83 string. ThumbHash~\cite{thumbhash} is a tighter DCT variant that adds
+alpha and aspect, and SQIP~\cite{sqip} traces a Primitive~\cite{primitive} fit
+into an SVG. All three are engineering artifacts with no published evaluation,
+which is the gap we set out to fill.
 
 \textbf{Primitive fitting, vectorization, and triangulation coding.}
-Hill-climbing or annealing fits of geometric primitives to images originate with
-Primitive~\cite{primitive} and Geometrize; the differentiable-rendering line
-(diffvg~\cite{diffvg}, LIVE~\cite{live}) optimizes vector parameters by gradient
-descent but yields SVGs far larger than a placeholder and takes seconds to
-minutes per image. Triangulation-based coding is an older parallel
-lineage---linear splines over adaptive triangulations~\cite{demaret2006linearsplines},
-data-dependent triangulations~\cite{lehner2007ddt}, and recently differentiable
-curved-triangle meshes~\cite{wang2024curvedtri}---all optimizing fidelity
-(MSE/PSNR) at ordinary rates; that geometry-adaptive representations can beat
-fixed frequency bases is itself a long-standing idea
-(bandelets~\cite{lepennec2005bandelets}). Compact \emph{learned} representations
-such as COIN~\cite{dupont2021coin} reach tens-of-bytes scale by overfitting a
+Hill-climbing or annealing fits of geometric primitives to images go back to
+Primitive~\cite{primitive} and Geometrize. The differentiable-rendering line
+(diffvg~\cite{diffvg}, LIVE~\cite{live}) instead optimizes vector parameters by
+gradient descent, but it yields SVGs far larger than a placeholder and takes
+seconds to minutes per image. Triangulation-based coding is an older parallel
+lineage: linear splines over adaptive triangulations~\cite{demaret2006linearsplines},
+data-dependent triangulations~\cite{lehner2007ddt}, and more recently
+differentiable curved-triangle meshes~\cite{wang2024curvedtri}, all optimizing
+fidelity (MSE/PSNR) at ordinary rates. The broader point that geometry-adaptive
+representations can beat fixed frequency bases is itself long-standing
+(bandelets~\cite{lepennec2005bandelets}). Compact learned representations such
+as COIN~\cite{dupont2021coin} reach tens-of-bytes scale by overfitting a
 per-image MLP, and 2D Gaussian splatting (after~\cite{kerbl2023gaussian})
-underlies GaussianImage below; both pay a per-image decoder, unlike a
+underlies GaussianImage below; both pay for a per-image decoder, unlike a
 byte-addressable primitive hash.
 
 \textbf{Ultra-low-bitrate and perceptual coding.} Marwood \textit{et al.}~\cite{marwood}
-represent images in $\sim$200 bytes via a Delaunay triangulation with palette
-vertex colors and ANS coding---the closest prior to our regime, which we
-reimplement and contrast in \S\ref{sec:marwood}. GaussianImage~\cite{gaussianimage}
-fits 2D Gaussians with quantization-aware fine-tuning, but operates at $0.1$--$1$
-bpp, an order of magnitude above us. On the learned side, perceptual codecs
-establish that at low rate, optimizing for realism beats minimizing
-distortion---HiFiC~\cite{hific} with a GAN decoder, extreme GAN compression that
-synthesizes content from semantic maps~\cite{agustsson2019extreme}, and
-generative coders (PerCo~\cite{perco}) reaching $<0.01$ bpp---but all require
-large generative decoders, the opposite of a model-free byte-addressable
-placeholder. The rate--distortion-primitive lineage traces to matching-pursuit
-coding with anisotropic atoms~\cite{mp}.
+represent images in roughly $200$ bytes with a Delaunay triangulation, palette
+vertex colors, and ANS coding. It is the closest prior to our regime, and we
+reimplement and contrast it in \S\ref{sec:marwood}.
+GaussianImage~\cite{gaussianimage} fits 2D Gaussians with quantization-aware
+fine-tuning, but it runs at $0.1$--$1$ bpp, an order of magnitude above us. On
+the learned side, perceptual codecs have shown that at low rate, optimizing for
+realism beats minimizing distortion: HiFiC~\cite{hific} with a GAN decoder,
+extreme GAN compression that synthesizes content from semantic
+maps~\cite{agustsson2019extreme}, and generative coders (PerCo~\cite{perco})
+reaching $<0.01$ bpp. All of them need large generative decoders, the opposite
+of a model-free byte-addressable placeholder. The rate--distortion-primitive
+lineage itself traces back to matching-pursuit coding with anisotropic
+atoms~\cite{mp}.
 
-\textbf{Perceptual metrics and the distortion--perception gap.} We adopt
-LPIPS~\cite{lpips} and DISTS~\cite{dists} as primary metrics; both are learned
-full-reference measures that correlate with human judgment far better than
-PSNR/SSIM at low fidelity~\cite{wang2009mse}. That a representation can lower
-distortion yet look worse is not anecdotal: the perception--distortion
-tradeoff~\cite{blau2018perception} proves the two are in tension, and its
-rate-constrained form, the rate--distortion--perception tradeoff~\cite{rdp},
-predicts exactly the split we measure. Our study is, to our knowledge, the first
-empirical instantiation of that tradeoff at the sub-300-byte, real-image
-placeholder scale; the PSNR--perception divergence is here not noise but the
-central finding.
+\textbf{Perceptual metrics and the distortion--perception gap.} We use
+LPIPS~\cite{lpips} and DISTS~\cite{dists} as primary metrics. Both are learned
+full-reference measures, and at low fidelity they track human judgment far
+better than PSNR or SSIM~\cite{wang2009mse}. The idea that a representation can
+lower distortion and still look worse is not anecdotal: the
+perception--distortion tradeoff~\cite{blau2018perception} proves the two are in
+tension, and its rate-constrained form, the rate--distortion--perception
+tradeoff~\cite{rdp}, predicts exactly the split we measure. As far as we know,
+ours is the first empirical instantiation of that tradeoff at the sub-300-byte,
+real-image placeholder scale, where the PSNR--perception divergence is not noise
+but the result itself.
 
 \section{Measurement Methodology}\label{sec:method}
 \textbf{Protocol.} Every method encodes from a $100$-pixel long-edge LANCZOS
@@ -160,15 +161,15 @@ CLIC2020 professional-valid ($41$). Metrics: bytes, PSNR, SSIM, LPIPS (AlexNet),
 DISTS.
 
 \textbf{Methods under test.} We span three representational families. (i)
-\emph{Frequency/smoothing}: BlurHash (component sweep), ThumbHash, and the
-smallest JPEG/WebP the encoders emit. (ii) \emph{Geometric primitives}: an open
-primitive-hashing codec, \texttt{arthash}, in its circle / triangle / rect /
+Frequency/smoothing: BlurHash (component sweep), ThumbHash, and the smallest
+JPEG/WebP the encoders emit. (ii) Geometric primitives: an open
+primitive-hashing codec, \texttt{arthash}, in its circle, triangle, rect, and
 square modes (shape-count sweep). (iii) The academic prior, Marwood
-(\S\ref{sec:marwood}). Crucially, \texttt{arthash} also ships a \emph{DCT} mode
-that shares the same codec, quantizer, and evaluation harness as its geometric
-modes and differs only in what it represents; we include it as a
-\emph{within-codec control} that isolates the representational paradigm from
-implementation details.
+(\S\ref{sec:marwood}). One detail matters for the comparison: \texttt{arthash}
+also ships a DCT mode that shares the same codec, quantizer, and evaluation
+harness as its geometric modes and differs only in what it represents. We use
+that mode as a within-codec control, which isolates the representational
+paradigm from implementation details.
 
 \textbf{The geometric codec.} Given an image, \texttt{arthash} builds a
 thumbnail and a mean-color background, then greedily fits $N$ primitives. Each
@@ -181,29 +182,30 @@ shapes) or $O(\text{bbox height})$ (circle/triangle) via integral images, so a
 full $12$-shape fit costs $\sim$1\,ms. After the geometry is fixed, a sweep over
 quantized $\alpha$ levels picks the best blend, and the chosen color and geometry
 are quantized to a fixed-width bitstream (e.g.\ a circle is $5{+}5$ position, $4$
-radius, $16$ color, $3$ alpha bits). This greedy, MSE-driven fit---the natural
-baseline objective---is exactly what \S\ref{sec:ablation} probes for slack.
+radius, $16$ color, $3$ alpha bits). This greedy, MSE-driven fit is the natural
+baseline objective, and it is exactly what \S\ref{sec:ablation} probes for slack.
 
 \section{Results}
 
 \subsection{Primitives dominate the perceptual frontier}\label{sec:rd}
 Table~\ref{tab:kodak} and Fig.~\ref{fig:rd} report the Kodak R--D frontier,
 grouped by representational family. The geometric modes Pareto-dominate every
-frequency/smoothing baseline on \emph{both} perceptual metrics across the entire
-$20$--$300$-byte regime, without trading away PSNR. The most striking point
-reproduces on CLIC: a $20$-byte circle hash (LPIPS $0.70$) beats a $166$-byte
-BlurHash (LPIPS $0.82$)---an $\sim$8$\times$ byte advantage at equal-or-better
-perceptual quality.
+frequency/smoothing baseline on both perceptual metrics across the entire
+$20$--$300$-byte regime, and they do so without trading away PSNR. The clearest
+single point reproduces on CLIC: a $20$-byte circle hash (LPIPS $0.70$) beats a
+$166$-byte BlurHash (LPIPS $0.82$), an $\sim$8$\times$ byte advantage at
+equal-or-better perceptual quality.
 
-Two reads of the table sharpen the finding. First, the \emph{within-codec
-control}: \texttt{arthash}'s own DCT mode (LPIPS $0.905$) lands squarely in
-BlurHash/ThumbHash territory, nowhere near its geometric siblings (LPIPS
-$0.63$--$0.70$) despite sharing every line of codec and quantizer. The gap is the
-representation, not the implementation. Second, frequency representations
-\emph{scale} poorly here: BlurHash spends $22{\to}166$\,B to buy only LPIPS
-$0.881{\to}0.867$---more DCT coefficients is the wrong use of bytes. SSIM is the
-lone metric that fails to separate methods (all in $0.32$--$0.46$); LPIPS and
-DISTS agree on the ordering and carry the argument.
+Two columns of the table are worth reading closely. The first is the
+within-codec control. \texttt{arthash}'s own DCT mode (LPIPS $0.905$) lands
+squarely in BlurHash and ThumbHash territory, nowhere near its geometric
+siblings (LPIPS $0.63$--$0.70$), even though it shares every line of codec and
+quantizer with them. The gap therefore comes from the representation, not the
+implementation. The second is scaling, where frequency representations do badly:
+BlurHash spends $22{\to}166$\,B to buy only LPIPS $0.881{\to}0.867$, so spending
+bytes on more DCT coefficients is the wrong move. SSIM is the one metric that
+fails to separate the methods (all fall in $0.32$--$0.46$); LPIPS and DISTS agree
+on the ordering, and they are what the argument rests on.
 
 \begin{table}[t]
 \caption{Kodak-24 mean, grouped by representational family. Lower LPIPS/DISTS is
@@ -236,39 +238,38 @@ WebP (48px, q1)            & 137 & 20.35 & 0.816 & 0.445 \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/rd_curves_kodak.png}
+\includegraphics[width=0.72\linewidth]{figures/rd_curves_kodak.png}
 \caption{Rate--distortion on Kodak (PSNR, LPIPS, DISTS vs.\ bytes, log axis).
 Shape modes occupy the lower-left of the perceptual panels.}
 \label{fig:rd}
 \end{figure}
 
 \subsection{The PSNR--perception split: versus Marwood (ICIP'18)}\label{sec:marwood}
-The within-codec control shows frequency representations collapse perceptually;
-the academic prior shows the collapse is about \emph{smoothing}, not about being
-a weak method. Marwood~\cite{marwood} is the strongest MSE-driven baseline in our
-regime and was never released, so we reimplement it faithfully: vertices on a
-$g{\times}g$ grid with Delaunay connectivity recomputed at decode (hence free), a
-$K$-color palette of vertex indices, Gouraud-interpolated fill, error-driven
-greedy placement with palette coordinate descent, and an \emph{ideal-entropy}
-byte model (a perfect arithmetic coder---deliberately generous to the baseline).
-On the paper's own setting ($221$\,px, $\sim$200\,B) our reimplementation reaches
-the reported magnitude ($\sim$24\,dB on simple content, $16$--$20$\,dB on hard;
-the paper's ImageNet mean is $\sim$25\,dB and Kodak is harder), so it is not a
-strawman.
+The within-codec control shows that frequency representations collapse
+perceptually. The academic prior shows that the collapse is about smoothing, not
+about being a weak method. Marwood~\cite{marwood} is the strongest MSE-driven
+baseline in our regime, and it was never released, so we reimplement it
+faithfully: vertices on a $g{\times}g$ grid with Delaunay connectivity
+recomputed at decode (hence free), a $K$-color palette of vertex indices,
+Gouraud-interpolated fill, error-driven greedy placement with palette coordinate
+descent, and an ideal-entropy byte model (a perfect arithmetic coder, which is
+deliberately generous to the baseline). On the paper's own setting ($221$\,px,
+$\sim$200\,B) our reimplementation reaches the reported magnitude ($\sim$24\,dB
+on simple content, $16$--$20$\,dB on hard; the paper's ImageNet mean is
+$\sim$25\,dB and Kodak is harder), so it is not a strawman.
 
-Fig.~\ref{fig:marwood} is the study's sharpest result. Marwood \emph{wins PSNR}
+Fig.~\ref{fig:marwood} is the sharpest result in the study. Marwood wins PSNR
 (its Gouraud mesh is MSE-optimal, $0.5$--$1$\,dB higher at equal bytes) but
-\emph{loses LPIPS decisively}: \texttt{arthash} triangle-12 matches Marwood's
-\emph{187-byte} LPIPS at \emph{77 bytes} ($2.4\times$ smaller) and is better at
-every rate. A method engineered and entropy-coded to minimize distortion is
-beaten, perceptually, by coarse hard-edged primitives---because Gouraud
-interpolation smooths away precisely the structure LPIPS rewards, the same
-failure mode as BlurHash. In this regime, optimizing PSNR optimizes the wrong
-metric.
+loses LPIPS by a wide margin: \texttt{arthash} triangle-12 matches the LPIPS of
+Marwood's $187$-byte point at $77$ bytes ($2.4\times$ smaller), and it is better
+at every rate. A method engineered and entropy-coded to minimize distortion is
+beaten perceptually by coarse hard-edged primitives. The reason is that Gouraud
+interpolation smooths away exactly the structure LPIPS rewards, the same failure
+mode we saw in BlurHash. Optimizing PSNR here optimizes the wrong metric.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/marwood_vs_arthash.png}
+\includegraphics[width=0.72\linewidth]{figures/marwood_vs_arthash.png}
 \caption{\texttt{arthash} vs.\ a faithful Marwood~\cite{marwood}
 reimplementation on Kodak. Marwood wins PSNR (left) but loses LPIPS (right);
 triangle-12 at 77\,B matches Marwood at 187\,B perceptually.}
@@ -277,93 +278,96 @@ triangle-12 at 77\,B matches Marwood at 187\,B perceptually.}
 
 \subsection{The second frontier: encode latency}\label{sec:speed}
 Placeholders are produced at upload time, so encode latency is a second
-measurement axis. Pure encode latency (median over Kodak thumbnails) against
-mean LPIPS (Fig.~\ref{fig:speed}): the shape modes own the fast-and-perceptual
-lower-left. The honest comparison is against SQIP---the only other
-primitive-fitting method, built for quality not speed: \texttt{arthash}
-triangle-12 encodes in $1.5$\,ms versus SQIP's $284$\,ms, \textbf{$189\times$
-faster}, at $\sim$20$\times$ smaller output; the integral-image hill-climb is
-what buys it. (ThumbHash's Rust binding is a fair $0.13$\,ms fast-but-weak point;
-we do not lean on BlurHash's $147$\,ms, which is its unoptimized pure-Python
-reference.)
+measurement axis. Fig.~\ref{fig:speed} plots pure encode latency (median over
+Kodak thumbnails) against mean LPIPS, and the shape modes again take the
+fast-and-perceptual lower-left. The fair head-to-head is against SQIP, the only
+other primitive-fitting method, which was built for quality rather than speed:
+\texttt{arthash} triangle-12 encodes in $1.5$\,ms against SQIP's $284$\,ms, so
+\textbf{$189\times$ faster}, at output $\sim$20$\times$ smaller. The
+integral-image hill-climb is what makes this possible. (ThumbHash's Rust binding
+is a fair $0.13$\,ms fast-but-weak point; we do not lean on BlurHash's
+$147$\,ms, which comes from its unoptimized pure-Python reference.)
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/speed_quality_kodak.png}
+\includegraphics[width=0.72\linewidth]{figures/speed_quality_kodak.png}
 \caption{Encode latency (log) vs.\ LPIPS on Kodak. Shape modes are Pareto-optimal
 (lower-left); the dotted line marks SQIP at 284\,ms.}
 \label{fig:speed}
 \end{figure}
 
 \subsection{Localizing the bottleneck: three controls}\label{sec:ablation}
-The finding is that primitives win and smoothing loses. The natural next
-question is \emph{what the remaining lever is}---a better search objective, or a
-better serialization. We run three controls; all three come back negative, and
-their convergence is what pins the cause to expressiveness.
+The finding so far is that primitives win and smoothing loses. The natural next
+question is what the remaining lever might be: a better search objective, or a
+better serialization. We run three controls. All three come back negative, and
+it is their agreement that points to expressiveness as the cause.
 
 \textbf{Control 1: a better search objective (quantization-aware refinement).}
 The greedy fit never revisits a placed primitive, so we add a backfitting pass:
-each primitive is removed, the canvas re-rendered, a fresh primitive re-searched,
-and the replacement kept only if it lowers the \emph{exact total} SSE. The accept
-test renders \emph{wire-quantized} parameters, so it judges what the decoder will
-actually produce (a continuous-domain win can otherwise flip sign under
-quantization); it is byte-format-preserving and off by default. Run as an SSE
-optimizer it does exactly its job---PSNR rises everywhere ($+0.02$ to
-$+0.20$\,dB)---but perception does not follow: on Kodak LPIPS is mixed (triangle
-$-1.2\%$, circle/rect $+0.4$--$0.8\%$). Minimizing SSE shrinks or merges
-primitives in flat regions to shave error while giving up the edge structure
-LPIPS rewards. A better MSE search does not buy perceptual quality.
+each primitive is removed, the canvas re-rendered, a fresh primitive
+re-searched, and the replacement kept only if it lowers the exact total SSE. The
+accept test renders wire-quantized parameters, so it judges what the decoder
+will actually produce, since a continuous-domain win can otherwise flip sign
+under quantization; the pass is byte-format-preserving and off by default. Run
+as an SSE optimizer it does its job, and PSNR rises everywhere ($+0.02$ to
+$+0.20$\,dB), but perception does not follow: on Kodak the LPIPS change is mixed
+(triangle $-1.2\%$, circle and rect $+0.4$--$0.8\%$). Minimizing SSE shrinks or
+merges primitives in flat regions to shave error, which gives up the edge
+structure LPIPS rewards. A better MSE search does not buy perceptual quality.
 
-\textbf{Control 2: a perceptual objective (weighting).} The obvious fix---minimize
-$\sum w\,(t{-}c)^2$ with $w$ emphasizing edges or saliency, which stays
-compatible with the fast integral-image evaluation---also fails. With identical
-RNG (so only the weight map varies), edge and center weighting make LPIPS
-\emph{worse}, and the best (strong saliency) buys $-0.5\%$ LPIPS for $-0.65$\,dB
-PSNR, unstable per image. Twelve solid circles cannot represent edges, so
-steering toward them sacrifices the flat-region coverage LPIPS also rewards.
+\textbf{Control 2: a perceptual objective (weighting).} The obvious fix is to
+minimize $\sum w\,(t{-}c)^2$ with $w$ emphasizing edges or saliency, which stays
+compatible with the fast integral-image evaluation. It also fails. With
+identical RNG, so that only the weight map varies, edge and center weighting
+both make LPIPS worse, and the best variant (strong saliency) buys $-0.5\%$
+LPIPS for $-0.65$\,dB PSNR and is unstable per image. Twelve solid circles
+cannot represent edges, so steering toward them sacrifices the flat-region
+coverage that LPIPS also rewards.
 
 \textbf{Control 3: the serialization (entropy coding).} A static corpus-trained
-model over the fixed-width fields saves only $3$--$5\%$ cross-dataset ($<10\%$
-even in-corpus); the residual-driven fitter already spreads positions
-near-uniformly and uses the full color gamut, so the fields are near-maximum
-entropy. There is no slack in the bitstream to recover.
+model over the fixed-width fields saves only $3$--$5\%$ cross-dataset, and under
+$10\%$ even in-corpus. The residual-driven fitter already spreads positions
+near-uniformly and uses the full color gamut, so the fields sit near maximum
+entropy, and there is no slack left in the bitstream to recover.
 
 \section{Discussion}
-The three controls converge: neither a better MSE search, nor a perceptual
-objective, nor entropy coding moves the perceptual frontier, and the Marwood
-comparison shows an MSE-optimal mesh is perceptually \emph{worse} than coarse
-hard-edged primitives. With the objective and the serialization ruled out, the
-binding constraint in this regime is what the primitives can \emph{represent at
-all}---their expressiveness. This unifies the paper's measurements: it is why
-triangles, which carry oriented edges, beat circles perceptually throughout; why
-the within-codec DCT control collapses to BlurHash territory; and why every
-smoothing method (BlurHash, Gouraud meshes) holds PSNR while failing LPIPS. Through the rate--distortion--perception
-lens~\cite{rdp}, this is the expected outcome: near the distortion floor
-reachable at a few hundred bytes, further MSE optimization only trades perception
-away. The actionable corollary for future work is to enrich the primitive vocabulary
-(mixed-primitive selection, soft or differentiable edges), not to refine the
-loss or the coder.
+The three controls point the same way. A better MSE search does not move the
+perceptual frontier, a perceptual objective does not, and entropy coding does
+not, while the Marwood comparison shows that an MSE-optimal mesh is perceptually
+worse than coarse hard-edged primitives. Once the objective and the
+serialization are ruled out, what is left is the question of what the primitives
+can represent at all, that is, their expressiveness. This ties the paper's
+measurements together. It explains why triangles, which carry oriented edges,
+beat circles perceptually throughout; why the within-codec DCT control collapses
+to BlurHash territory; and why every smoothing method, whether BlurHash or a
+Gouraud mesh, holds PSNR while failing LPIPS. Seen through the
+rate--distortion--perception lens~\cite{rdp}, this is the expected outcome: near
+the distortion floor that a few hundred bytes can reach, further MSE
+optimization only trades perception away. The practical takeaway for future work
+is to enrich the primitive vocabulary (mixed-primitive selection, soft or
+differentiable edges) rather than to refine the loss or the coder.
 
-\textbf{Limitations.} The study instruments one open-source primitive codec; the
-expressiveness argument should transfer, but other fitters may differ in
-constants. We report two corpora (Kodak, CLIC); DIV2K is pending. The Marwood
-comparison is our faithful reimplementation, not released code, though validated
-to the paper's reported magnitude. SQIP appears only on the latency axis (its
-rasterizer dependency was unavailable locally), so its perceptual point is
-inferred from its $\sim$1\,kB SVG / $+3$\,dB-PSNR envelope rather than measured.
-Finally, LPIPS and DISTS are learned proxies; a subjective study would further
-harden the perceptual ranking.
+\textbf{Limitations.} The study instruments a single open-source primitive
+codec. We expect the expressiveness argument to transfer, but other fitters may
+differ in the constants. We report two corpora (Kodak and CLIC); DIV2K is still
+pending. The Marwood comparison is our own faithful reimplementation rather than
+released code, though we validated it against the paper's reported magnitude.
+SQIP appears only on the latency axis, because its rasterizer dependency was
+unavailable locally, so its perceptual point is inferred from its $\sim$1\,kB
+SVG and $+3$\,dB-PSNR envelope rather than measured. Finally, LPIPS and DISTS are
+learned proxies, and a subjective study would further harden the perceptual
+ranking.
 
 \section{Conclusion}
 We presented the first perceptual rate--distortion study of sub-300-byte image
-placeholders, and used it to establish one counter-intuitive finding:
-geometric-primitive hashing Pareto-dominates industrial formats and a faithful
-Marwood~\cite{marwood} reimplementation on LPIPS and DISTS---by up to
-$2.4$--$8\times$ in bytes---while a faithful, MSE-optimal, entropy-coded mesh
-\emph{wins} PSNR yet loses perceptually. Three controls localize the regime's
-bottleneck to primitive expressiveness, not the objective or the serialization.
-We hope this establishes placeholders as a measurable research target rather than
-folklore, and PSNR as the wrong yardstick for it.
+placeholders. It establishes one counter-intuitive finding: geometric-primitive
+hashing Pareto-dominates industrial formats and a faithful
+Marwood~\cite{marwood} reimplementation on LPIPS and DISTS, by up to
+$2.4$--$8\times$ in bytes, while a faithful, MSE-optimal, entropy-coded mesh wins
+PSNR yet loses perceptually. Three controls trace the bottleneck in this regime
+to primitive expressiveness rather than the objective or the serialization. We
+hope this turns placeholders into a measurable research target instead of
+folklore, and retires PSNR as the yardstick for them.
 
 \begin{thebibliography}{00}
 \bibitem{blurhash} Wolt, ``BlurHash,'' \url{https://github.com/woltapp/blurhash}, 2019.

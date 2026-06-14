@@ -1,6 +1,6 @@
 # Paper draft — *Geometric Primitives Dominate the Perceptual Frontier of Sub-300-Byte Image Placeholders*
 
-ICIP-style draft (IEEEtran, conference). Sourced entirely from the experiments
+Standalone article draft (LaTeX `article` class, no target venue). Sourced entirely from the experiments
 in [`docs/RD_STUDY.md`](../docs/RD_STUDY.md) and the tooling in
 [`scripts/paper/`](../scripts/paper/).
 
@@ -27,11 +27,8 @@ is the versioned artifact; the numbers in the prose are frozen and match
 
 ## Status
 
-Complete first draft, all sections written from real results. Open items before
-submission:
+Complete first draft, all sections written from real results. Open items:
 
-- Author/affiliation (currently withheld).
 - Optional corpus widening (DIV2K-valid) for variance reporting — RD_STUDY §4.
 - SQIP's LPIPS point on the Marwood/quality axes (its `sharp` dep is broken
   locally; only its latency is currently plotted) — RD_STUDY §4.
-- Convert `\begin{thebibliography}` to a `.bib` if the venue prefers BibTeX.
