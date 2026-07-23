@@ -41,6 +41,9 @@ const blur = ref(0);
 // Default cornerRadius=4 — visible softening at preview size, ignored for
 // non-rect shapes via the wasm core's silent-ignore path.
 const cornerRadius = ref(4);
+const dither = ref(false);
+// Dot pitch in output px; 0 = auto (baseSize/128).
+const ditherScale = ref(0);
 const useSvg = ref(true);
 const fps = ref(12);
 const playing = ref(true);
@@ -58,6 +61,7 @@ const nShapesD = refDebounced(nShapes, DEBOUNCE_MS);
 const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
+const ditherScaleD = refDebounced(ditherScale, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
 
@@ -193,6 +197,8 @@ function renderOnce() {
       baseSize: baseSizeD.value,
       blur: blurD.value,
       cornerRadius: cornerRadiusD.value,
+      dither: dither.value,
+      ditherScale: ditherScaleD.value,
       seed: seed.value,
       alphaBits: advancedD.value.alphaBits,
       colorId: colorId.value,
@@ -241,6 +247,8 @@ watch(
     baseSizeD,
     blurD,
     cornerRadiusD,
+    dither,
+    ditherScaleD,
     renderSvg,
     colorId,
     advancedD,
@@ -330,6 +338,14 @@ const previewStyle = computed(() => {
       <label class="ctl" v-if="cornerRadiusVisible">
         <span>corner_r</span>
         <input type="number" min="0" max="32" step="0.5" v-model.number="cornerRadius" />
+      </label>
+      <label class="ctl toggle" v-if="shape === 'dct' || blur > 0">
+        <input type="checkbox" v-model="dither" />
+        <span>dither</span>
+      </label>
+      <label class="ctl" v-if="dither && shape === 'dct'" title="dot pitch in px; 0 = auto (base/128)">
+        <span>dot_px</span>
+        <input type="number" min="0" max="32" step="1" v-model.number="ditherScale" />
       </label>
       <label class="ctl toggle" v-if="svgPossible">
         <input type="checkbox" v-model="useSvg" />

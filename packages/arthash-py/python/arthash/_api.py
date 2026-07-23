@@ -202,6 +202,8 @@ def decode(
     pixel_smooth: str = "nearest",
     aa: int = 1,
     style: RenderStyle | None = None,
+    dither: bool = False,
+    dither_scale: int = 0,
 ) -> Tuple[int, int, np.ndarray]:
     """Decode hash bytes to an RGBA preview at `base_size` long-edge.
 
@@ -210,7 +212,14 @@ def decode(
 
     `aa` (shape-mode supersample factor, 1 = off). `pixel_smooth` is
     `"nearest"` (default) or `"bilinear"` — PIXEL only. `style` provides
-    Gaussian blur and corner-rounding (rect-family only).
+    Gaussian blur and corner-rounding (rect-family only). `dither` enables
+    ordered (Bayer 8x8) dithering at 8-bit quantization — breaks up banding
+    in smooth gradients (DCT mode, blurred output); default off keeps
+    byte-stable output. On a DCT codec carrying a render-time palette
+    (`Codec(shape=ShapeType.DCT, palette=...)`), `dither` switches the
+    palette quantization from hard posterize to the classic ordered-dither
+    look; `dither_scale` sets the dot pitch in output pixels (0 = auto,
+    `base_size / 128`, so the pattern stays chunky at large sizes).
     """
     if not isinstance(codec, Codec):
         raise TypeError(f"codec must be a Codec instance; got {type(codec).__name__}")
@@ -233,6 +242,8 @@ def decode(
         int(aa),
         blur_val,
         radius_val,
+        bool(dither),
+        int(dither_scale),
     )
     return w, h, flat.reshape(h, w, 4)
 

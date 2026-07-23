@@ -43,6 +43,152 @@ impl RenderStyle {
     }
 }
 
+/// 8×8 Bayer matrix for ordered dithering, values 0..63 (standard recursive
+/// construction). Tiled over the output; deterministic, so dithered decodes
+/// stay reproducible across calls, platforms, and bindings.
+const BAYER8: [[u8; 8]; 8] = [
+    [0, 32, 8, 40, 2, 34, 10, 42],
+    [48, 16, 56, 24, 50, 18, 58, 26],
+    [12, 44, 4, 36, 14, 46, 6, 38],
+    [60, 28, 52, 20, 62, 30, 54, 22],
+    [3, 35, 11, 43, 1, 33, 9, 41],
+    [51, 19, 59, 27, 49, 17, 57, 25],
+    [15, 47, 7, 39, 13, 45, 5, 37],
+    [63, 31, 55, 23, 61, 29, 53, 21],
+];
+
+/// Ordered-dither quantization threshold for output pixel `(x, y)`, in
+/// `(0, 1)` with mean exactly 0.5 — so `floor(v·255 + t)` is an unbiased
+/// replacement for `floor(v·255 + 0.5)` (plain rounding) that trades ±½ LSB
+/// of spatial noise for the banding steps in smooth gradients.
+#[inline]
+pub(crate) fn bayer_threshold(x: usize, y: usize) -> f32 {
+    (BAYER8[y & 7][x & 7] as f32 + 0.5) / 64.0
+}
+
+/// Quantize `v` (already scaled to the 0..255 range) to u8: plain rounding,
+/// or ordered dithering with the Bayer threshold at `(x, y)`. With
+/// `dither = false` this is `floor(v + 0.5)` — byte-identical to the
+/// historical rounding for the non-negative values all callers produce.
+/// Every f32→u8 quantization that supports dithering goes through here so
+/// the threshold convention cannot drift between call sites.
+#[inline]
+pub(crate) fn quant_u8(v: f32, x: usize, y: usize, dither: bool) -> u8 {
+    let t = if dither { bayer_threshold(x, y) } else { 0.5 };
+    (v + t).floor().clamp(0.0, 255.0) as u8
+}
+
+/// Quantize an RGBA buffer to a fixed sRGB palette (flat `[r,g,b]·K` bytes),
+/// nearest-color by squared sRGB distance. With `dither`, each pixel is
+/// offset by the Bayer threshold — scaled to the palette's average
+/// nearest-neighbor spacing — before the nearest lookup, producing the
+/// classic ordered-dither look; without it, hard posterized regions.
+///
+/// `scale` is the dither dot pitch in output pixels: the Bayer matrix is
+/// sampled at `(x/scale, y/scale)`, so one threshold cell covers a
+/// `scale×scale` block. `0` = auto — `max(w, h) / 128`, min 1 — because at
+/// high output resolutions a 1-px pattern reads as fine noise; a coarser
+/// pitch restores the chunky retro halftone look.
+///
+/// This is a render-time effect (like blur / corner rounding): DCT hashes
+/// carry no palette in their bytes, so a palette on a DCT codec is purely
+/// consensus display knowledge. Alpha is untouched.
+pub(crate) fn palette_dither_rgba8(
+    rgba: &mut [u8],
+    w: u32,
+    h: u32,
+    palette: &[u8],
+    dither: bool,
+    scale: u32,
+) {
+    let k = palette.len() / 3;
+    if k == 0 {
+        return;
+    }
+    let scale = if scale == 0 {
+        (w.max(h) / 128).max(1) as usize
+    } else {
+        scale as usize
+    };
+    // Dither amplitude: mean distance from each entry to its nearest other
+    // entry. This approximates the local quantization step of the palette, so
+    // the threshold offset spans roughly one "color step" — enough to blend
+    // adjacent entries, not enough to jump across the whole gamut.
+    let spread = if !dither || k < 2 {
+        0.0
+    } else {
+        let mut sum = 0.0f32;
+        for i in 0..k {
+            let mut best = f32::MAX;
+            for j in 0..k {
+                if i == j {
+                    continue;
+                }
+                let dr = palette[i * 3] as f32 - palette[j * 3] as f32;
+                let dg = palette[i * 3 + 1] as f32 - palette[j * 3 + 1] as f32;
+                let db = palette[i * 3 + 2] as f32 - palette[j * 3 + 2] as f32;
+                best = best.min(dr * dr + dg * dg + db * db);
+            }
+            sum += best.sqrt();
+        }
+        sum / (k as f32)
+    };
+    let w = w as usize;
+    let pal_f: Vec<[f32; 3]> = palette
+        .chunks_exact(3)
+        .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32])
+        .collect();
+    // The threshold offset is constant within a `scale`-row band, so build
+    // one row of offsets per band instead of dividing per pixel. Stays all
+    // zeros when dithering is off.
+    let mut off_row = vec![0.0f32; w];
+    let mut prev_band = usize::MAX;
+    // 1-entry memo: smooth DCT/blur input means long runs of identical
+    // (rgb, offset), which skip the O(K) nearest scan entirely.
+    let mut memo: Option<([u8; 3], f32, usize)> = None;
+    for y in 0..h as usize {
+        if dither {
+            let band = y / scale;
+            if band != prev_band {
+                prev_band = band;
+                for (x, off) in off_row.iter_mut().enumerate() {
+                    *off = (bayer_threshold(x / scale, band) - 0.5) * spread;
+                }
+            }
+        }
+        for x in 0..w {
+            let p = (y * w + x) * 4;
+            let off = off_row[x];
+            let rgb = [rgba[p], rgba[p + 1], rgba[p + 2]];
+            let best = match memo {
+                Some((m_rgb, m_off, m_best)) if m_rgb == rgb && m_off == off => m_best,
+                _ => {
+                    let r = rgb[0] as f32 + off;
+                    let g = rgb[1] as f32 + off;
+                    let b = rgb[2] as f32 + off;
+                    let mut best = 0usize;
+                    let mut best_d = f32::MAX;
+                    for (i, c) in pal_f.iter().enumerate() {
+                        let dr = r - c[0];
+                        let dg = g - c[1];
+                        let db = b - c[2];
+                        let d = dr * dr + dg * dg + db * db;
+                        if d < best_d {
+                            best_d = d;
+                            best = i;
+                        }
+                    }
+                    memo = Some((rgb, off, best));
+                    best
+                }
+            };
+            rgba[p] = palette[best * 3];
+            rgba[p + 1] = palette[best * 3 + 1];
+            rgba[p + 2] = palette[best * 3 + 2];
+        }
+    }
+}
+
 /// Build a normalized 1D Gaussian kernel of radius `ceil(3σ)`. The kernel
 /// sums to 1.0; values outside the radius contribute < 0.012 of the peak.
 fn build_gaussian_kernel(sigma: f32) -> (Vec<f32>, i32) {
@@ -75,6 +221,15 @@ fn build_gaussian_kernel(sigma: f32) -> (Vec<f32>, i32) {
 ///    blurring alpha would create halo bleed at hash edges (visually wrong
 ///    for placeholder use).
 pub fn gaussian_blur_rgba8(rgba: &mut [u8], w: u32, h: u32, sigma: f32) {
+    gaussian_blur_rgba8_dither(rgba, w, h, sigma, false);
+}
+
+/// [`gaussian_blur_rgba8`] with optional ordered dithering at the final
+/// f32→u8 write-back. Blurring re-creates smooth gradients from quantized
+/// input; rounding them back to 8-bit re-introduces banding, which the
+/// Bayer threshold breaks up. `dither = false` is byte-identical to
+/// [`gaussian_blur_rgba8`].
+pub(crate) fn gaussian_blur_rgba8_dither(rgba: &mut [u8], w: u32, h: u32, sigma: f32, dither: bool) {
     if sigma <= 0.0 {
         return;
     }
@@ -136,10 +291,13 @@ pub fn gaussian_blur_rgba8(rgba: &mut [u8], w: u32, h: u32, sigma: f32) {
     }
 
     // Write back to RGBA u8. Alpha channel is preserved.
-    for i in 0..n {
-        rgba[i * 4] = src[i * 3].round().clamp(0.0, 255.0) as u8;
-        rgba[i * 4 + 1] = src[i * 3 + 1].round().clamp(0.0, 255.0) as u8;
-        rgba[i * 4 + 2] = src[i * 3 + 2].round().clamp(0.0, 255.0) as u8;
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let i = y * w as usize + x;
+            rgba[i * 4] = quant_u8(src[i * 3], x, y, dither);
+            rgba[i * 4 + 1] = quant_u8(src[i * 3 + 1], x, y, dither);
+            rgba[i * 4 + 2] = quant_u8(src[i * 3 + 2], x, y, dither);
+        }
     }
 }
 

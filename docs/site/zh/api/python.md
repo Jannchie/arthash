@@ -25,9 +25,11 @@ from arthash import palettes
 
 `codec` 为 `None` 时默认 `Codec.dct()`。
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None, dither=False)`
 
-返回 `(width, height, rgba)`，其中 `rgba` 是 `(h, w, 4)` 形状、`uint8` 类型的 `numpy.ndarray`。`codec` 为 `None` 时默认 `Codec.dct()`。`style` 传 `RenderStyle` 控制模糊和圆角（见下）。
+返回 `(width, height, rgba)`，其中 `rgba` 是 `(h, w, 4)` 形状、`uint8` 类型的 `numpy.ndarray`。`codec` 为 `None` 时默认 `Codec.dct()`。`style` 传 `RenderStyle` 控制模糊和圆角（见下）。`dither=True` 在 8-bit 量化时应用有序抖动（Bayer 8×8），消除平滑渐变（DCT 模式、模糊输出）的色带，每个通道最多偏移 1 LSB；锐利的 shape/PIXEL 输出不受影响。默认 `False`，保持字节级稳定输出。
+
+带调色板的 DCT codec（`Codec(shape=ShapeType.DCT, palette=...)`）会在渲染期把解码结果量化到这组颜色——默认硬色块（posterize），`dither=True` 时呈现经典有序抖动效果。调色板不进入 hash 字节，与 `style` 一样属于显示端约定。
 
 ### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 

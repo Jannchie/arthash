@@ -77,6 +77,13 @@ pub struct DecodeOptions {
     pub aa: u32,                         // shape supersample (1 / 2 / 4)
     pub pixel_smooth: PixelSmooth,
     pub style: RenderStyle,              // visual styling (see below)
+    pub dither: bool,                    // Bayer 8×8 dither at 8-bit quantization
+                                         // (DCT / blurred output); on a DCT codec
+                                         // with a render-time palette (Codec::Raw),
+                                         // dithers the palette quantization.
+                                         // Default false
+    pub dither_scale: u32,               // palette-dither dot pitch in output px;
+                                         // 0 (default) = auto (base_size/128)
 }
 
 pub struct SvgOptions {

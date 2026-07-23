@@ -30,6 +30,9 @@ const blur = ref(0);
 // rotrect; other shapes silently ignore.
 const cornerRadius = ref(4);
 const seed = ref(0);
+const dither = ref(false);
+// Dot pitch in output px; 0 = auto (baseSize/128).
+const ditherScale = ref(0);
 const useSvg = ref(true);
 const cols = ref(8);
 const colorId = ref<string>("rgb-565");
@@ -43,6 +46,7 @@ const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
+const ditherScaleD = refDebounced(ditherScale, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
 
@@ -81,7 +85,7 @@ function onTileMetrics(i: number, v: { encodeMs: number; decodeMs: number; hashB
 }
 
 watch(
-  [shape, nShapesD, baseSizeD, blurD, cornerRadiusD, seedD, useSvg, advancedD, colorId, searchD],
+  [shape, nShapesD, baseSizeD, blurD, cornerRadiusD, seedD, dither, ditherScaleD, useSvg, advancedD, colorId, searchD],
   () => {
     tileMetrics.value = new Map();
     tileSettled.value = new Set();
@@ -133,6 +137,16 @@ function fmtMs(ms: number) {
       <label class="ctl" v-if="cornerRadiusVisible">
         <span>corner_r</span>
         <input type="number" min="0" max="32" step="0.5" v-model.number="cornerRadius" />
+      </label>
+      <!-- Dither only bites where 8-bit quantization bands: DCT gradients and
+           blurred raster output. Hidden elsewhere (it would be a no-op). -->
+      <label class="ctl toggle" v-if="shape === 'dct' || blur > 0">
+        <input type="checkbox" v-model="dither" />
+        <span>dither</span>
+      </label>
+      <label class="ctl" v-if="dither && shape === 'dct'" title="dot pitch in px; 0 = auto (base/128)">
+        <span>dot_px</span>
+        <input type="number" min="0" max="32" step="1" v-model.number="ditherScale" />
       </label>
       <label class="ctl toggle" v-if="svgPossible">
         <input type="checkbox" v-model="useSvg" />
@@ -209,6 +223,8 @@ function fmtMs(ms: number) {
           :base-size="baseSizeD"
           :blur="blurD"
           :corner-radius="cornerRadiusD"
+          :dither="dither"
+          :dither-scale="ditherScaleD"
           :seed="seedD"
           :use-svg="renderSvg"
           :ready="ready"

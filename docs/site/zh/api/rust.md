@@ -75,6 +75,12 @@ pub struct DecodeOptions {
     pub aa: u32,                         // shape 超采样（1 / 2 / 4）
     pub pixel_smooth: PixelSmooth,
     pub style: RenderStyle,              // 视觉样式（见下）
+    pub dither: bool,                    // 8-bit 量化时的 Bayer 8×8 有序抖动
+                                         //（DCT / 模糊输出）；带渲染期调色板的
+                                         // DCT codec（Codec::Raw）会对调色板量化
+                                         // 做抖动。默认 false
+    pub dither_scale: u32,               // 调色板抖动网点间距（输出像素）；
+                                         // 0（默认）= 自动（base_size/128）
 }
 
 pub struct SvgOptions {

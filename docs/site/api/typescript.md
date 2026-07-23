@@ -118,6 +118,12 @@ interface DecodeOptions {
   aa?: number;                          // shape supersample (1 / 2 / 4)
   pixelSmooth?: "nearest" | "bilinear"; // PIXEL only; default "nearest"
   style?: RenderStyle;                  // visual styling (see below)
+  dither?: boolean;                     // Bayer 8×8 dither at 8-bit quantization
+                                        // (DCT / blurred output); on a DCT codec
+                                        // with a palette (codec.raw), dithers the
+                                        // palette quantization. Default false
+  ditherScale?: number;                 // palette-dither dot pitch in output px;
+                                        // 0 (default) = auto (baseSize/128)
 }
 
 interface DecodeResult {

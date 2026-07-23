@@ -109,6 +109,12 @@ interface DecodeOptions {
   aa?: number;                          // shape スーパーサンプル（1 / 2 / 4）
   pixelSmooth?: "nearest" | "bilinear"; // PIXEL のみ、デフォルト "nearest"
   style?: RenderStyle;                  // 視覚スタイル（後述）
+  dither?: boolean;                     // 8-bit 量子化時の Bayer 8×8 ディザ
+                                        //（DCT / ぼかし出力）。パレット付き DCT
+                                        // codec（codec.raw）ではパレット量子化を
+                                        // ディザ。デフォルト false
+  ditherScale?: number;                 // パレットディザのドットピッチ（出力 px）、
+                                        // 0（デフォルト）= 自動（baseSize/128）
 }
 
 interface DecodeResult {

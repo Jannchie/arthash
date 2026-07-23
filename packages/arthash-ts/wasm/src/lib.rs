@@ -233,6 +233,8 @@ pub fn decode(
     pixel_smooth: Option<String>,
     corner_radius: Option<f32>,
     blur: Option<f32>,
+    dither: Option<bool>,
+    dither_scale: Option<u32>,
 ) -> Result<DecodeResult, JsValue> {
     let c = parse_codec(codec)?;
     let ps = match pixel_smooth.as_deref() {
@@ -252,6 +254,8 @@ pub fn decode(
                 blur: blur.unwrap_or(0.0),
                 corner_radius: corner_radius.unwrap_or(0.0),
             },
+            dither: dither.unwrap_or(false),
+            dither_scale: dither_scale.unwrap_or(0),
         },
     );
     Ok(DecodeResult {

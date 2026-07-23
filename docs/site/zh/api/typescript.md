@@ -109,6 +109,12 @@ interface DecodeOptions {
   aa?: number;                          // shape 模式超采样（1 / 2 / 4）
   pixelSmooth?: "nearest" | "bilinear"; // 仅 PIXEL；默认 "nearest"
   style?: RenderStyle;                  // 视觉样式（见下）
+  dither?: boolean;                     // 8-bit 量化时的 Bayer 8×8 有序抖动
+                                        //（DCT / 模糊输出）；带调色板的 DCT codec
+                                        //（codec.raw）会对调色板量化做抖动。
+                                        // 默认 false
+  ditherScale?: number;                 // 调色板抖动网点间距（输出像素）；
+                                        // 0（默认）= 自动（baseSize/128）
 }
 
 interface DecodeResult {

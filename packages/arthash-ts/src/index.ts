@@ -398,6 +398,18 @@ export interface DecodeOptions {
   pixelSmooth?: "nearest" | "bilinear";
   /** Visual styling — blur and (for rect/square/rotrect) cornerRadius. */
   style?: RenderStyle;
+  /** Ordered (Bayer 8×8) dithering at 8-bit quantization — breaks up
+   *  banding in smooth gradients. Applies to DCT decode and to blurred
+   *  output (`style.blur`); no effect on sharp shape/PIXEL output. On a
+   *  DCT codec carrying a render-time palette (`codec.raw`), switches the
+   *  palette quantization from hard posterize to ordered dither.
+   *  Default `false` (byte-stable output). */
+  dither?: boolean;
+  /** Dither dot pitch for the palette quantization, in output pixels —
+   *  one Bayer cell covers a `ditherScale × ditherScale` block. `0`
+   *  (default) = auto (`baseSize / 128`, min 1), keeping the pattern
+   *  chunky-retro at large output sizes. */
+  ditherScale?: number;
 }
 
 export interface SvgRenderOptions {
@@ -652,6 +664,8 @@ export function decodeSync<C extends Codec>(
     opts.pixelSmooth,
     (style as { cornerRadius?: number } | undefined)?.cornerRadius,
     style?.blur,
+    opts.dither,
+    opts.ditherScale,
   );
   // Read w/h first, then `intoRgba()` moves the buffer out AND frees the
   // wasm-side result (no separate `free()`, no clone of the RGBA bytes).

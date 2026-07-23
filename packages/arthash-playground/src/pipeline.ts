@@ -414,6 +414,12 @@ export interface RunOpts {
   /** Corner radius for rect / square / rotrect (viewBox units). Silently
    *  ignored for other shapes. */
   cornerRadius?: number;
+  /** Ordered (Bayer 8×8) dithering at 8-bit quantization — breaks up
+   *  banding in smooth gradients. Affects DCT decode and blurred output;
+   *  sharp shape/PIXEL output and the SVG path are untouched. */
+  dither?: boolean;
+  /** Palette-dither dot pitch in output px; 0 = auto (baseSize/128). */
+  ditherScale?: number;
   /** Override (rare) — advanced panel knob. */
   alphaBits?: number;
   /** ID of an entry in COLOR_OPTIONS. */
@@ -497,7 +503,12 @@ export function runPipeline(img: HTMLImageElement, opts: RunOpts): RunResult {
     blur: opts.blur,
     cornerRadius: opts.cornerRadius ?? 0,
   };
-  const decodeArgs: DecodeOptions = { baseSize: opts.baseSize, style };
+  const decodeArgs: DecodeOptions = {
+    baseSize: opts.baseSize,
+    style,
+    dither: opts.dither,
+    ditherScale: opts.ditherScale,
+  };
 
   const wantsSvg = opts.useSvg === true && supportsSvg(opts.shape);
 

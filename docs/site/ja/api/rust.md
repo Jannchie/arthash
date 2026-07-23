@@ -75,6 +75,12 @@ pub struct DecodeOptions {
     pub aa: u32,                         // shape スーパーサンプル（1 / 2 / 4）
     pub pixel_smooth: PixelSmooth,
     pub style: RenderStyle,              // 視覚スタイル（後述）
+    pub dither: bool,                    // 8-bit 量子化時の Bayer 8×8 ディザ
+                                         //（DCT / ぼかし出力）。レンダリング時
+                                         // パレット付き DCT codec（Codec::Raw）では
+                                         // パレット量子化をディザ。デフォルト false
+    pub dither_scale: u32,               // パレットディザのドットピッチ（出力 px）、
+                                         // 0（デフォルト）= 自動（base_size/128）
 }
 
 pub struct SvgOptions {

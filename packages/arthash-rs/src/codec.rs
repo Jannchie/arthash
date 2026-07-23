@@ -611,7 +611,7 @@ impl Codec {
     }
 }
 
-fn palette_active_bytes(cfg: &CodecConfig) -> Option<&[u8]> {
+pub(crate) fn palette_active_bytes(cfg: &CodecConfig) -> Option<&[u8]> {
     let pal = cfg.palette.as_ref()?;
     let k = cfg.effective_palette_k().unwrap_or(pal.len() / 3);
     Some(&pal[..k * 3])

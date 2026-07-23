@@ -25,9 +25,11 @@ from arthash import palettes
 
 `codec` が `None` のときデフォルトは `Codec.dct()`。
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None, dither=False)`
 
-`(width, height, rgba)` を返します。`rgba` は形状 `(h, w, 4)`、dtype `uint8` の `numpy.ndarray`。`codec` が `None` のときデフォルトは `Codec.dct()`。`style` は `RenderStyle` でぼかしと角丸を制御します（後述）。
+`(width, height, rgba)` を返します。`rgba` は形状 `(h, w, 4)`、dtype `uint8` の `numpy.ndarray`。`codec` が `None` のときデフォルトは `Codec.dct()`。`style` は `RenderStyle` でぼかしと角丸を制御します（後述）。`dither=True` は 8-bit 量子化時に順序ディザ（Bayer 8×8）を適用し、滑らかなグラデーション（DCT モード、ぼかし出力）のバンディングを解消します。各チャンネルの変化は最大 1 LSB。シャープな shape/PIXEL 出力には影響しません。デフォルト `False` はバイト単位で安定した出力を保ちます。
+
+パレット付き DCT codec（`Codec(shape=ShapeType.DCT, palette=...)`）は、デコード結果をレンダリング時にそのパレットへ量子化します——デフォルトはハードなポスタリゼーション、`dither=True` でクラシックな順序ディザ表現になります。パレットはハッシュのバイトには入らず、`style` と同じく表示側の取り決めです。
 
 ### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 

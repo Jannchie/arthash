@@ -96,10 +96,15 @@ fn idct(w_out: usize, h_out: usize, nx: usize, ny: usize, coeffs: &[f32]) -> Vec
 }
 
 /// Decode DCT hash bytes to (w, h, RGBA u8).
+///
+/// `dither` enables ordered (Bayer 8×8) dithering at the f32→u8
+/// quantization, breaking up the banding that plain rounding produces in
+/// DCT's smooth gradients. `false` keeps the historical byte-exact output.
 pub fn decode_dct(
     hash: &[u8],
     base_size: u32,
     override_aspect: Option<f32>,
+    dither: bool,
 ) -> (u32, u32, Vec<u8>) {
     // Truncated / empty hashes degrade gracefully (missing bytes read as 0)
     // instead of panicking, matching the zero-fill policy that `BitReader`
@@ -261,7 +266,7 @@ pub fn decode_dct(
     let p_plane = idct(w_out, h_out, 3, 3, &pack_coeffs(3, 3, p_dc, &p_ac));
     let q_plane = idct(w_out, h_out, 3, 3, &pack_coeffs(3, 3, q_dc, &q_ac));
 
-    let rgb_u8 = oklab_channels_to_rgb_u8(&l_plane, &p_plane, &q_plane);
+    let rgb_u8 = oklab_channels_to_rgb_u8(&l_plane, &p_plane, &q_plane, w_out, dither);
 
     let mut rgba = vec![0u8; w_out * h_out * 4];
     for i in 0..(w_out * h_out) {
@@ -272,8 +277,11 @@ pub fn decode_dct(
     }
     if has_alpha {
         let a_plane = idct(w_out, h_out, 5, 5, &pack_coeffs(5, 5, a_dc, &a_ac));
-        for i in 0..(w_out * h_out) {
-            rgba[i * 4 + 3] = (a_plane[i] * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+        for y in 0..h_out {
+            for x in 0..w_out {
+                let i = y * w_out + x;
+                rgba[i * 4 + 3] = crate::render::quant_u8(a_plane[i] * 255.0, x, y, dither);
+            }
         }
     }
 

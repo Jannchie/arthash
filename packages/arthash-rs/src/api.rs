@@ -11,7 +11,7 @@
 use crate::bitio::BitReader;
 use crate::codec::{Codec, CodecConfig, ShapeType};
 use crate::colorspace::{linear_to_srgb_u8, srgb_u8_to_linear};
-use crate::render::{gaussian_blur_rgba8, RenderStyle};
+use crate::render::{gaussian_blur_rgba8_dither, palette_dither_rgba8, RenderStyle};
 use crate::shape::circle::{decode_render as circle_decode, encode_circle};
 use crate::shape::pixel::{decode_render as pixel_decode, encode_pixel, PixelSmooth};
 use crate::shape::quant::{aspect_from_code, read_color};
@@ -90,6 +90,21 @@ pub struct DecodeOptions {
     /// Gaussian blur. Both fields in output-pixel units. `Default` = sharp,
     /// zero-cost (matches pre-0.3.0 output byte-for-byte).
     pub style: RenderStyle,
+    /// Ordered (Bayer 8×8) dithering at the f32→u8 quantization step —
+    /// breaks up banding in smooth gradients. Applies to DCT decode and to
+    /// the Gaussian-blur write-back (`style.blur`); shape/PIXEL output
+    /// without blur is piecewise-flat, so it is left untouched. On a DCT
+    /// codec that carries a render-time palette (via [`Codec::Raw`]) this
+    /// switches the palette quantization from hard posterize to the classic
+    /// ordered-dither look. Default `false` (byte-stable output).
+    pub dither: bool,
+    /// Dither dot pitch for the palette quantization, in output pixels: one
+    /// Bayer threshold cell covers a `dither_scale × dither_scale` block.
+    /// `0` (default) = auto — `base_size / 128`, min 1 — so the pattern
+    /// stays chunky-retro instead of collapsing into fine noise at large
+    /// output sizes. Ignored by the ±1 LSB anti-banding dither, which is
+    /// only correct at 1-px pitch.
+    pub dither_scale: u32,
 }
 
 impl Default for DecodeOptions {
@@ -100,6 +115,8 @@ impl Default for DecodeOptions {
             pixel_smooth: PixelSmooth::Nearest,
             aa: 1,
             style: RenderStyle::default(),
+            dither: false,
+            dither_scale: 0,
         }
     }
 }
@@ -264,7 +281,19 @@ pub fn try_decode(
 
 fn decode_cfg(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u32, Vec<u8>) {
     match cfg.shape {
-        ShapeType::Dct => crate::dct::decode_dct(hash, opts.base_size, opts.override_aspect),
+        ShapeType::Dct => {
+            let (w, h, mut rgba) =
+                crate::dct::decode_dct(hash, opts.base_size, opts.override_aspect, opts.dither);
+            // DCT bytes carry no palette — but a palette on a DCT codec (via
+            // `Codec::Raw`) is a render-time display request: quantize the
+            // smooth decode to those colors (ordered-dithered when
+            // `opts.dither`). Shape modes never hit this: their palettes are
+            // part of the byte format and already rendered directly.
+            if let Some(active) = crate::codec::palette_active_bytes(cfg) {
+                palette_dither_rgba8(&mut rgba, w, h, active, opts.dither, opts.dither_scale);
+            }
+            (w, h, rgba)
+        }
         _ => decode_shape(hash, cfg, opts),
     }
 }
@@ -290,7 +319,7 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
         let rgb = pixel_decode(&mut br, cfg, w, h, quant_aspect, opts.pixel_smooth);
         let mut rgba = rgb_to_rgba(&rgb, w, h);
         if opts.style.blur > 0.0 {
-            gaussian_blur_rgba8(&mut rgba, w, h, opts.style.blur);
+            gaussian_blur_rgba8_dither(&mut rgba, w, h, opts.style.blur, opts.dither);
         }
         return (w, h, rgba);
     }
@@ -349,7 +378,7 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
         rgba[i * 4 + 3] = 255;
     }
     if opts.style.blur > 0.0 {
-        gaussian_blur_rgba8(&mut rgba, w, h, opts.style.blur);
+        gaussian_blur_rgba8_dither(&mut rgba, w, h, opts.style.blur, opts.dither);
     }
     (w, h, rgba)
 }

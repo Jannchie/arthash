@@ -13,6 +13,10 @@ interface Props {
   /** Corner radius (viewBox units). Silently ignored for non-rect-family
    *  shapes. Default `0`. */
   cornerRadius?: number;
+  /** Bayer dithering at 8-bit quantization (DCT / blurred output only). */
+  dither?: boolean;
+  /** Palette-dither dot pitch in output px; 0 = auto (baseSize/128). */
+  ditherScale?: number;
   seed: number;
   useSvg: boolean;
   ready: boolean;
@@ -83,6 +87,8 @@ async function run() {
       baseSize: props.baseSize,
       blur: props.blur,
       cornerRadius: props.cornerRadius,
+      dither: props.dither,
+      ditherScale: props.ditherScale,
       seed: props.seed,
       alphaBits: props.alphaBits,
       colorId: props.colorId,
@@ -124,6 +130,8 @@ watch(
     props.baseSize,
     props.blur,
     props.cornerRadius,
+    props.dither,
+    props.ditherScale,
     props.seed,
     props.useSvg,
     props.alphaBits,

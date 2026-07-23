@@ -126,11 +126,23 @@ pub fn rgb_to_oklab_channels(
     (l_out, a_out, b_out)
 }
 
-/// Oklab planes (L, a*AB_SCALE, b*AB_SCALE) → packed RGB u8 (length 3*n).
-pub fn oklab_channels_to_rgb_u8(l_ok: &[f32], a_x2: &[f32], b_x2: &[f32]) -> Vec<u8> {
+/// Oklab planes (L, a*AB_SCALE, b*AB_SCALE) → packed RGB u8 (length 3*n),
+/// with optional ordered dithering at the sRGB f32→u8 quantization.
+/// `width` is the row length used to tile the Bayer matrix; `dither = false`
+/// is byte-identical to plain rounding. The same threshold is applied to
+/// all three channels of a pixel so the noise is luminance-only — no
+/// per-channel color speckle.
+pub fn oklab_channels_to_rgb_u8(
+    l_ok: &[f32],
+    a_x2: &[f32],
+    b_x2: &[f32],
+    width: usize,
+    dither: bool,
+) -> Vec<u8> {
     let n = l_ok.len();
     let inv_ab = 1.0 / AB_SCALE;
     let mut out = Vec::with_capacity(n * 3);
+    let (mut x, mut y) = (0usize, 0usize);
     for i in 0..n {
         let ll = l_ok[i];
         let aa = a_x2[i] * inv_ab;
@@ -150,9 +162,14 @@ pub fn oklab_channels_to_rgb_u8(l_ok: &[f32], a_x2: &[f32], b_x2: &[f32]) -> Vec
         let rs = linear_to_srgb_f(rl);
         let gs = linear_to_srgb_f(gl);
         let bs = linear_to_srgb_f(bl);
-        out.push((rs * 255.0 + 0.5).clamp(0.0, 255.0) as u8);
-        out.push((gs * 255.0 + 0.5).clamp(0.0, 255.0) as u8);
-        out.push((bs * 255.0 + 0.5).clamp(0.0, 255.0) as u8);
+        out.push(crate::render::quant_u8(rs * 255.0, x, y, dither));
+        out.push(crate::render::quant_u8(gs * 255.0, x, y, dither));
+        out.push(crate::render::quant_u8(bs * 255.0, x, y, dither));
+        x += 1;
+        if x == width {
+            x = 0;
+            y += 1;
+        }
     }
     out
 }

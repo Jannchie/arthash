@@ -731,6 +731,8 @@ caller-specified `base_size` (long-edge pixels). Several decisions are
 | Working color space | linear RGB | Compositing MUST happen in linear; final output converted back to sRGB. |
 | Output dtype | 8-bit RGBA, premultiplied | Alpha = 1 throughout — arthash placeholders are fully opaque. |
 | Background fill | exact color from header | No dithering. |
+| Output dithering | implementation-defined, opt-in | A renderer MAY offer ordered dithering at the final f32→u8 quantization (the reference implementation exposes `dither` on decode: Bayer 8×8, ≤1 LSB per channel, default OFF). The default output MUST remain the plain-rounding result. |
+| DCT render palette | implementation-defined, opt-in | DCT bytes never store a palette; a palette attached to a DCT codec (raw codec spec) is consensus display knowledge only. A renderer MAY quantize the decoded raster to it (ordered-dithered when dithering is on). A palette-free DCT codec MUST render the plain continuous output. |
 
 Renderers MAY make any rendering decision NOT listed above — but the
 resulting output must be visually consistent with the input image (i.e. the

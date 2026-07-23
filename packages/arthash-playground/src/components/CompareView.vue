@@ -49,6 +49,9 @@ const blur = ref(0);
 // Applies only to rect / square / rotrect variants; other shapes ignore it.
 const cornerRadius = ref(4);
 const seed = ref(0);
+const dither = ref(false);
+// Dot pitch in output px; 0 = auto (baseSize/128).
+const ditherScale = ref(0);
 const colorId = ref<string>("rgb-565");
 
 const advanced = ref<AdvancedConfig>({ alphaBits: 3 });
@@ -59,10 +62,11 @@ const baseSizeD = refDebounced(baseSize, DEBOUNCE_MS);
 const blurD = refDebounced(blur, DEBOUNCE_MS);
 const cornerRadiusD = refDebounced(cornerRadius, DEBOUNCE_MS);
 const seedD = refDebounced(seed, DEBOUNCE_MS);
+const ditherScaleD = refDebounced(ditherScale, DEBOUNCE_MS);
 const advancedD = refDebounced(advanced, DEBOUNCE_MS);
 const searchD = refDebounced(search, DEBOUNCE_MS);
 
-watch([baseSizeD, blurD, cornerRadiusD, seedD, advancedD, colorId, searchD], () => {
+watch([baseSizeD, blurD, cornerRadiusD, seedD, dither, ditherScaleD, advancedD, colorId, searchD], () => {
   tileMetrics.value = new Map();
 }, { deep: true });
 
@@ -168,6 +172,14 @@ const gridStyle = computed(() => ({
         <span>seed</span>
         <input type="number" min="0" max="999999" step="1" v-model.number="seed" />
       </label>
+      <label class="ctl toggle" title="Bayer dithering at 8-bit quantization — affects DCT and blurred raster output">
+        <input type="checkbox" v-model="dither" />
+        <span>dither</span>
+      </label>
+      <label class="ctl" v-if="dither" title="dot pitch in px; 0 = auto (base/128)">
+        <span>dot_px</span>
+        <input type="number" min="0" max="32" step="1" v-model.number="ditherScale" />
+      </label>
       <label class="ctl">
         <span>color</span>
         <select v-model="colorId">
@@ -238,6 +250,8 @@ const gridStyle = computed(() => ({
         :base-size="baseSizeD"
         :blur="blurD"
         :corner-radius="cornerRadiusD"
+        :dither="dither"
+        :dither-scale="ditherScaleD"
         :seed="seedD"
         :use-svg="v.useSvg"
         :ready="ready"

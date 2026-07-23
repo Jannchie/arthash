@@ -26,11 +26,20 @@ Encode an image into a hash. `image` accepts:
 
 When `codec` is `None`, defaults to `Codec.dct()`.
 
-### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None)`
+### `decode(hash_bytes, codec=None, *, base_size=256, override_aspect=None, aa=1, pixel_smooth="nearest", style=None, dither=False)`
 
 Returns `(width, height, rgba)` where `rgba` is a `numpy.ndarray` of shape
 `(h, w, 4)` and dtype `uint8`. When `codec` is `None`, defaults to `Codec.dct()`.
 `style` is a `RenderStyle` for blur and corner-rounding (see below).
+`dither=True` applies ordered (Bayer 8×8) dithering at the 8-bit quantization
+step — it breaks up banding in smooth gradients (DCT mode, blurred output)
+and shifts each channel by at most 1 LSB; sharp shape/PIXEL output is
+untouched. Default `False` keeps byte-stable output.
+
+A DCT codec constructed with a palette (`Codec(shape=ShapeType.DCT,
+palette=...)`) is quantized to those colors at render time — hard posterize
+by default, the classic ordered-dither look with `dither=True`. The palette
+never enters the hash bytes; it is display-side consensus, like `style`.
 
 ### `to_svg(hash_bytes, codec, *, base_size=256, override_aspect=None, style=None, blur=None) -> str`
 

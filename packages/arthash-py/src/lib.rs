@@ -170,8 +170,33 @@ fn encode_rgba<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// Shared `DecodeOptions` assembly for `decode` / `decode_to_numpy` — pyo3
+/// requires each function to repeat its signature, but the option mapping
+/// lives once here.
+#[allow(clippy::too_many_arguments)]
+fn build_decode_opts(
+    base_size: u32,
+    override_aspect: Option<f32>,
+    pixel_smooth: &str,
+    aa: u32,
+    blur: f32,
+    corner_radius: f32,
+    dither: bool,
+    dither_scale: u32,
+) -> PyResult<DecodeOptions> {
+    Ok(DecodeOptions {
+        base_size,
+        override_aspect,
+        pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
+        aa: aa.max(1),
+        style: RenderStyle { blur, corner_radius },
+        dither,
+        dither_scale,
+    })
+}
+
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0, dither=false, dither_scale=0))]
 fn decode<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -182,15 +207,13 @@ fn decode<'py>(
     aa: u32,
     blur: f32,
     corner_radius: f32,
+    dither: bool,
+    dither_scale: u32,
 ) -> PyResult<(u32, u32, Bound<'py, PyBytes>)> {
     let codec = codec_from_dict(codec)?;
-    let opts = DecodeOptions {
-        base_size,
-        override_aspect,
-        pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
-        aa: aa.max(1),
-        style: RenderStyle { blur, corner_radius },
-    };
+    let opts = build_decode_opts(
+        base_size, override_aspect, pixel_smooth, aa, blur, corner_radius, dither, dither_scale,
+    )?;
     let out = py.detach(|| rs_decode(hash, &codec, opts));
     Ok((out.width, out.height, PyBytes::new(py, &out.rgba)))
 }
@@ -198,7 +221,7 @@ fn decode<'py>(
 /// Same as `decode` but returns the RGBA as a numpy ndarray to spare a copy
 /// when callers will reshape immediately.
 #[pyfunction]
-#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0))]
+#[pyo3(signature = (hash, codec=None, base_size=256, override_aspect=None, pixel_smooth="nearest", aa=1, blur=0.0, corner_radius=0.0, dither=false, dither_scale=0))]
 fn decode_to_numpy<'py>(
     py: Python<'py>,
     hash: &[u8],
@@ -209,15 +232,13 @@ fn decode_to_numpy<'py>(
     aa: u32,
     blur: f32,
     corner_radius: f32,
+    dither: bool,
+    dither_scale: u32,
 ) -> PyResult<(u32, u32, Bound<'py, PyArray1<u8>>)> {
     let codec = codec_from_dict(codec)?;
-    let opts = DecodeOptions {
-        base_size,
-        override_aspect,
-        pixel_smooth: parse_pixel_smooth(pixel_smooth)?,
-        aa: aa.max(1),
-        style: RenderStyle { blur, corner_radius },
-    };
+    let opts = build_decode_opts(
+        base_size, override_aspect, pixel_smooth, aa, blur, corner_radius, dither, dither_scale,
+    )?;
     let out = py.detach(|| rs_decode(hash, &codec, opts));
     Ok((out.width, out.height, PyArray1::from_vec(py, out.rgba)))
 }
