@@ -156,9 +156,8 @@ pub(crate) fn palette_dither_rgba8(
                 }
             }
         }
-        for x in 0..w {
+        for (x, &off) in off_row.iter().enumerate() {
             let p = (y * w + x) * 4;
-            let off = off_row[x];
             let rgb = [rgba[p], rgba[p + 1], rgba[p + 2]];
             let best = match memo {
                 Some((m_rgb, m_off, m_best)) if m_rgb == rgb && m_off == off => m_best,
