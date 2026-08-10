@@ -130,12 +130,21 @@ jobs:
   # `always() && (success || skipped)` is the standard pattern for
   # "soft" upstream deps in GitHub Actions — a plain `needs:` would
   # propagate the skip and cancel this job too.
+  #
+  # The event guard is load-bearing, NOT redundant with `needs:`. This
+  # workflow also runs on pull_request, where wheels/sdist/test all pass
+  # and version-check is skipped — i.e. the soft-dep condition alone is
+  # satisfied and a PR would publish to PyPI. Without the guard, a PR
+  # that bumps the version really does ship a release; one that doesn't
+  # merely fails with "400 File already exists". Keep the trigger list
+  # above and this condition in sync.
   # ------------------------------------------------------------------
   release:
     name: publish to PyPI
     needs: [version-check, wheels, sdist, test]
     if: |
       always() &&
+      (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') &&
       (needs.version-check.result == 'success' || needs.version-check.result == 'skipped') &&
       needs.wheels.result == 'success' &&
       needs.sdist.result == 'success' &&
