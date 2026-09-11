@@ -250,6 +250,10 @@ pub fn eval_circle_integral_with_sums(
     (res, sums)
 }
 
+/// Stack budget for the `dx(|dy|)` half-table in [`collect_circle_sums_integral`].
+/// Radii at or above this fall back to the per-row `isqrt_i64` path.
+const DX_TAB_LEN: usize = 128;
+
 /// Collect per-channel sums for a circle via the integral path — the
 /// expensive part of `eval_circle_integral`, without the α-dependent
 /// finalize. Used to amortize α-sweep cost on a fixed geometry.
@@ -271,13 +275,30 @@ pub fn collect_circle_sums_integral(
         return sums;
     }
     let r2 = (r as i64) * (r as i64);
+    // `dx(dy) = floor(sqrt(r² − dy²))` is even in `dy`, so the integer sqrt only
+    // has to be evaluated once per distinct `|dy|` — building a half-table up
+    // front halves the `isqrt_i64` calls in the row loop. The row loop still
+    // runs in ascending `y`, so the accumulation order into `sums` is byte-for-
+    // byte the same and the result stays bit-identical to the per-row version.
+    let r_us = r as usize;
+    let mut dx_tab = [0i32; DX_TAB_LEN];
+    let tabulated = r_us < DX_TAB_LEN;
+    if tabulated {
+        for d in 0..=r_us {
+            dx_tab[d] = isqrt_i64(r2 - (d as i64) * (d as i64)) as i32;
+        }
+    }
     for y in ymin..=ymax {
         let dy = (y - cy) as i64;
-        let lim = r2 - dy * dy;
-        if lim < 0 {
-            continue;
-        }
-        let dx = isqrt_i64(lim) as i32;
+        let dx = if tabulated {
+            dx_tab[dy.unsigned_abs() as usize]
+        } else {
+            let lim = r2 - dy * dy;
+            if lim < 0 {
+                continue;
+            }
+            isqrt_i64(lim) as i32
+        };
         let x_l = (cx - dx).max(0);
         let x_r = (cx + dx).min(w as i32 - 1);
         if x_l > x_r {
