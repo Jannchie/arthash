@@ -1,3 +1,40 @@
+## v0.6.0
+
+[v0.5.0...v0.6.0](https://github.com/Jannchie/arthash/compare/v0.5.0...v0.6.0)
+
+### :sparkles: Features
+
+- **decode**: add Bayer dithering and render-time DCT palette - By [Jianqi Pan](mailto:jannchie@gmail.com) in [aa98082](https://github.com/Jannchie/arthash/commit/aa98082)
+- **shape**: add quantization-aware joint refinement - By [Jianqi Pan](mailto:jannchie@gmail.com) in [683597d](https://github.com/Jannchie/arthash/commit/683597d)
+
+### :zap: Performance
+
+- **shape**: halve isqrt calls in circle integral eval - By [Jianqi Pan](mailto:jannchie@gmail.com) in [eab012c](https://github.com/Jannchie/arthash/commit/eab012c)
+
+### :adhesive_bandage: Fixes
+
+- **render**: iterate the dither offset row instead of indexing it - By [Jianqi Pan](mailto:jannchie@gmail.com) in [d9911e2](https://github.com/Jannchie/arthash/commit/d9911e2)
+- **wasm**: thread refine_passes through SearchOptions parse - By [Jianqi Pan](mailto:jannchie@gmail.com) in [f529288](https://github.com/Jannchie/arthash/commit/f529288)
+
+### :memo: Documentation
+
+- add citation metadata and a paper Limitations section - By [Jianqi Pan](mailto:jannchie@gmail.com) in [23a8ae7](https://github.com/Jannchie/arthash/commit/23a8ae7)
+- **research**: add sub-300-byte rate-distortion study - By [Jianqi Pan](mailto:jannchie@gmail.com) in [86a1d23](https://github.com/Jannchie/arthash/commit/86a1d23)
+- **research**: record that perceptual weighting fails too - By [Jianqi Pan](mailto:jannchie@gmail.com) in [55cdd09](https://github.com/Jannchie/arthash/commit/55cdd09)
+- **research**: add encode-latency vs quality Pareto - By [Jianqi Pan](mailto:jannchie@gmail.com) in [a890568](https://github.com/Jannchie/arthash/commit/a890568)
+- **research**: add faithful Marwood ICIP'18 baseline + comparison - By [Jianqi Pan](mailto:jannchie@gmail.com) in [b2875b0](https://github.com/Jannchie/arthash/commit/b2875b0)
+- **paper**: add ICIP draft of the placeholder R-D study - By [Jianqi Pan](mailto:jannchie@gmail.com) in [f288b62](https://github.com/Jannchie/arthash/commit/f288b62)
+- **paper**: reframe as measurement+insight study and expand bibliography - By [Jianqi Pan](mailto:jannchie@gmail.com) in [b444ce3](https://github.com/Jannchie/arthash/commit/b444ce3)
+- **paper**: de-AIGC prose and make the draft venue-neutral - By [Jianqi Pan](mailto:jannchie@gmail.com) in [e036031](https://github.com/Jannchie/arthash/commit/e036031)
+
+### :construction_worker: CI
+
+- **wheels**: gate the PyPI publish job on tag or manual dispatch - By [Jianqi Pan](mailto:jannchie@gmail.com) in [42762a7](https://github.com/Jannchie/arthash/commit/42762a7)
+
+### :wrench: Chores
+
+- **paper**: add arXiv abstract, keep submission checklist local - By [Jianqi Pan](mailto:jannchie@gmail.com) in [5e6c7ec](https://github.com/Jannchie/arthash/commit/5e6c7ec)
+
 ## v0.5.0
 
 [v0.4.0...v0.5.0](https://github.com/Jannchie/arthash/compare/v0.4.0...v0.5.0)
