@@ -105,9 +105,9 @@ fn dct_palette_codec() -> (Codec, Vec<u8>) {
 }
 
 fn assert_all_in_palette(rgba: &[u8], palette: &[u8], ctx: &str) {
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         assert!(
-            palette.chunks_exact(3).any(|c| c == &px[..3]),
+            palette.as_chunks::<3>().0.iter().any(|c| c == &px[..3]),
             "pixel {:?} ({ctx}) is not a palette color",
             &px[..3]
         );

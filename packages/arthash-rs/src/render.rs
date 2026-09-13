@@ -135,7 +135,9 @@ pub(crate) fn palette_dither_rgba8(
     };
     let w = w as usize;
     let pal_f: Vec<[f32; 3]> = palette
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32])
         .collect();
     // The threshold offset is constant within a `scale`-row band, so build

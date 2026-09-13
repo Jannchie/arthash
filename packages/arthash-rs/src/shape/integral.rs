@@ -284,8 +284,8 @@ pub fn collect_circle_sums_integral(
     let mut dx_tab = [0i32; DX_TAB_LEN];
     let tabulated = r_us < DX_TAB_LEN;
     if tabulated {
-        for d in 0..=r_us {
-            dx_tab[d] = isqrt_i64(r2 - (d as i64) * (d as i64)) as i32;
+        for (d, slot) in dx_tab[..=r_us].iter_mut().enumerate() {
+            *slot = isqrt_i64(r2 - (d as i64) * (d as i64)) as i32;
         }
     }
     for y in ymin..=ymax {
