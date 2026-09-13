@@ -1,3 +1,12 @@
+## v0.6.1
+
+[v0.6.0...v0.6.1](https://github.com/Jannchie/arthash/compare/v0.6.0...v0.6.1)
+
+### :adhesive_bandage: Fixes
+
+- **ts**: release owned ImageBitmaps after encodeImage (#2) - By [Lev Wu](mailto:3128006406@qq.com) in [d3ad315](https://github.com/Jannchie/arthash/commit/d3ad315)
+- **rust**: satisfy clippy 1.98 in render, integral and dither test - By [Jianqi Pan](mailto:jannchie@gmail.com) in [bcb899f](https://github.com/Jannchie/arthash/commit/bcb899f)
+
 ## v0.6.0
 
 [v0.5.0...v0.6.0](https://github.com/Jannchie/arthash/compare/v0.5.0...v0.6.0)

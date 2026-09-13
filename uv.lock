@@ -22,7 +22,7 @@ members = [
 
 [[package]]
 name = "arthash"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "packages/arthash-py" }
 dependencies = [
     { name = "numpy" },
