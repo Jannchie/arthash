@@ -371,11 +371,23 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
     }
     let canvas = canvas_lin;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
-    for i in 0..(w * h) as usize {
-        rgba[i * 4] = linear_to_srgb_u8(canvas[i * 3]);
-        rgba[i * 4 + 1] = linear_to_srgb_u8(canvas[i * 3 + 1]);
-        rgba[i * 4 + 2] = linear_to_srgb_u8(canvas[i * 3 + 2]);
-        rgba[i * 4 + 3] = 255;
+    // Shape output is piecewise-flat, so runs of identical pixels are the norm:
+    // reuse the previous pixel's conversion when the linear triple repeats.
+    // Compared by bit pattern, so the reuse is exact (and NaN-safe).
+    let mut prev_bits = [u32::MAX; 3];
+    let mut prev_px = [0u8; 4];
+    for (px, lin) in rgba.chunks_exact_mut(4).zip(canvas.chunks_exact(3)) {
+        let bits = [lin[0].to_bits(), lin[1].to_bits(), lin[2].to_bits()];
+        if bits != prev_bits {
+            prev_bits = bits;
+            prev_px = [
+                linear_to_srgb_u8(lin[0]),
+                linear_to_srgb_u8(lin[1]),
+                linear_to_srgb_u8(lin[2]),
+                255,
+            ];
+        }
+        px.copy_from_slice(&prev_px);
     }
     if opts.style.blur > 0.0 {
         gaussian_blur_rgba8_dither(&mut rgba, w, h, opts.style.blur, opts.dither);

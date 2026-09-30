@@ -5,6 +5,8 @@
 //!
 //! a/b pre-scaled by AB_SCALE = 5 so they fill the same DC/AC grid as L.
 
+use crate::colorspace::linear_to_srgb_u8;
+
 pub const AB_SCALE: f32 = 5.0;
 
 // Forward LMS-like matrix (linear-sRGB → cone responses).
@@ -159,12 +161,20 @@ pub fn oklab_channels_to_rgb_u8(
         let rl = M1_INV[0][0] * lm + M1_INV[0][1] * mm + M1_INV[0][2] * sm;
         let gl = M1_INV[1][0] * lm + M1_INV[1][1] * mm + M1_INV[1][2] * sm;
         let bl = M1_INV[2][0] * lm + M1_INV[2][1] * mm + M1_INV[2][2] * sm;
-        let rs = linear_to_srgb_f(rl);
-        let gs = linear_to_srgb_f(gl);
-        let bs = linear_to_srgb_f(bl);
-        out.push(crate::render::quant_u8(rs * 255.0, x, y, dither));
-        out.push(crate::render::quant_u8(gs * 255.0, x, y, dither));
-        out.push(crate::render::quant_u8(bs * 255.0, x, y, dither));
+        if dither {
+            let rs = linear_to_srgb_f(rl);
+            let gs = linear_to_srgb_f(gl);
+            let bs = linear_to_srgb_f(bl);
+            out.push(crate::render::quant_u8(rs * 255.0, x, y, true));
+            out.push(crate::render::quant_u8(gs * 255.0, x, y, true));
+            out.push(crate::render::quant_u8(bs * 255.0, x, y, true));
+        } else {
+            // Undithered, `quant_u8(linear_to_srgb_f(v) * 255, ..)` is exactly
+            // `colorspace::linear_to_srgb_u8_exact(v)`; take its table form.
+            out.push(linear_to_srgb_u8(rl));
+            out.push(linear_to_srgb_u8(gl));
+            out.push(linear_to_srgb_u8(bl));
+        }
         x += 1;
         if x == width {
             x = 0;
@@ -172,4 +182,29 @@ pub fn oklab_channels_to_rgb_u8(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::colorspace::linear_to_srgb_u8_exact;
+
+    /// The undithered fast path in `oklab_channels_to_rgb_u8` relies on this
+    /// identity. Swept here on a stride; verified exhaustively over every f32
+    /// in `[0, 1]` when the fast path was introduced.
+    #[test]
+    fn undithered_quant_equals_srgb_u8() {
+        let one = 1.0f32.to_bits();
+        let mut bits = 0u32;
+        while bits <= one {
+            let v = f32::from_bits(bits);
+            let q = crate::render::quant_u8(linear_to_srgb_f(v) * 255.0, 0, 0, false);
+            assert_eq!(q, linear_to_srgb_u8_exact(v), "v = {v:e}");
+            bits += 997;
+        }
+        for v in [-1.0f32, 1.5, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let q = crate::render::quant_u8(linear_to_srgb_f(v) * 255.0, 0, 0, false);
+            assert_eq!(q, linear_to_srgb_u8_exact(v), "v = {v:e}");
+        }
+    }
 }

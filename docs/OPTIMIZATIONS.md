@@ -469,6 +469,61 @@ dependency chain. Not shipped.
 
 ---
 
+## Opt 6 — Table-driven linear→sRGB in decode (all modes)
+
+**Status:** always on. No flag.
+**Bit-exact:** yes — see below; `decode_golden` (RGBA + SVG) passes
+unchanged.
+**Module:** `colorspace`, used by `api::decode_shape` and
+`dct::colorspace::oklab_channels_to_rgb_u8`.
+
+### What it does
+
+Decode ends with one `linear_to_srgb_u8` per output channel — three `powf`
+per pixel, ~197k calls at the default `base_size = 256`. That was
+**~1.45 ms of a 1.6–2.0 ms shape decode**, independent of shape count.
+
+`linear_to_srgb_u8` is a monotone staircase from `[0, 1]` onto `0..=255`,
+fully described by its 255 jump points. On first use the jump points are
+found by bisecting the reference formula (`linear_to_srgb_u8_exact`) over
+f32 bit patterns, plus a 4096-bucket start table; a lookup is one bucket
+read and two branch-free compares. Because the thresholds are derived
+from this platform's own `powf`, the table reproduces its output last bit
+included (MSVC CRT, glibc, wasm libm alike). One-time build ≈ 130 µs.
+
+Two follow-ons:
+
+* **Run reuse in shape decode.** Shape output is piecewise-flat, so the
+  conversion is skipped when a pixel's linear triple equals the previous
+  one (compared by bit pattern — exact and NaN-safe).
+* **DCT undithered path.** `quant_u8(linear_to_srgb_f(v) · 255, …, false)`
+  is the same expression as `linear_to_srgb_u8_exact(v)`, so it takes the
+  table too. The dithered path adds a per-pixel Bayer threshold and keeps
+  `powf`.
+
+### Verification
+
+Exhaustive over every f32 in `[0, 1]` (1 065 353 217 values) on
+Windows/MSVC: table == reference with zero mismatches, the reference is
+monotone, and the DCT identity holds. Unit tests keep a strided sweep, the
+jump-point neighbourhoods, and out-of-range / non-finite inputs.
+
+### Performance
+
+`examples/bench` median, `base_size = 256`, i9-12900K.
+
+| mode     | before (µs) | after (µs) |     Δ |
+| -------- | ----------: | ---------: | ----: |
+| circle   |        2042 |        421 | −79 % |
+| triangle |        1708 |        429 | −75 % |
+| square   |        1600 |        333 | −79 % |
+| rect     |        1649 |        328 | −80 % |
+| rotrect  |        1674 |        401 | −76 % |
+| dct      |        2063 |        992 | −52 % |
+| pixel    |          74 |         80 | noise |
+
+---
+
 ## Reproducing the data
 
 ```sh
@@ -526,3 +581,9 @@ Ranked by expected impact, not yet implemented:
 5. **Parallel random pool** — `n_random` is embarrassingly parallel.
    Native: trivial via Rayon. WASM: needs `wasm-bindgen-rayon` +
    COOP/COEP, deployment-heavy.
+6. **Cache `old_total` in `refine_shapes`** — each step re-renders the
+   full canvas and recomputes its SSE, but it only changes after an
+   accepted swap. Hash-preserving; only matters with `refine_passes > 0`.
+7. **Dithered DCT decode** — still one `powf` per channel (Opt 6 covers
+   only the undithered path). Needs a different exact formulation, since
+   the Bayer threshold varies per pixel.
