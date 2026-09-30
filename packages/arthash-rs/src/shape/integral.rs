@@ -34,21 +34,29 @@ use super::raster::{EvalResult, ShapeSums};
 #[cfg(feature = "bench-counters")]
 use super::raster::counters;
 
-/// All five row-wise prefix sums.
+/// Number of f64 lanes per prefix slot: 5 series × 3 channels.
+const SLOT: usize = 15;
+// Lane offsets inside a slot. The five series for one `(y, x)` are stored
+// adjacently so a span lookup reads two contiguous 120-byte runs instead of
+// ten scattered ones across five separate tables.
+const T: usize = 0;
+const T2: usize = 3;
+const C: usize = 6;
+const C2: usize = 9;
+const TC: usize = 12;
+
+/// All five row-wise prefix sums, interleaved.
 ///
-/// Layout: each `Vec<f64>` has length `h * row_stride` where
-/// `row_stride = (w + 1) * 3`. Indexed as `y * row_stride + x * 3 + c`.
+/// Layout: one `Vec<f64>` of length `h * row_stride` where
+/// `row_stride = (w + 1) * SLOT`. Indexed as
+/// `y * row_stride + x * SLOT + series + c` with `series ∈ {T, T2, C, C2, TC}`.
 /// The `x = 0` slot is always zero (empty prefix); valid lookups range
 /// over `x ∈ [0, w]`.
 pub struct Integral {
     pub h: usize,
     pub w: usize,
     row_stride: usize,
-    t: Vec<f64>,
-    t2: Vec<f64>,
-    c: Vec<f64>,
-    c2: Vec<f64>,
-    tc: Vec<f64>,
+    data: Vec<f64>,
 }
 
 impl Integral {
@@ -56,17 +64,12 @@ impl Integral {
     pub fn build(target: &[f32], canvas: &[f32], h: u32, w: u32) -> Self {
         let h_us = h as usize;
         let w_us = w as usize;
-        let row_stride = (w_us + 1) * 3;
-        let total = h_us * row_stride;
+        let row_stride = (w_us + 1) * SLOT;
         let mut me = Self {
             h: h_us,
             w: w_us,
             row_stride,
-            t: vec![0.0; total],
-            t2: vec![0.0; total],
-            c: vec![0.0; total],
-            c2: vec![0.0; total],
-            tc: vec![0.0; total],
+            data: vec![0.0; h_us * row_stride],
         };
         for y in 0..h_us {
             me.rebuild_row(target, canvas, y);
@@ -111,12 +114,12 @@ impl Integral {
                 acc_c2[ch] += cv * cv;
                 acc_tc[ch] += tv * cv;
             }
-            let slot = base + (x + 1) * 3;
-            self.t[slot..slot + 3].copy_from_slice(&acc_t);
-            self.t2[slot..slot + 3].copy_from_slice(&acc_t2);
-            self.c[slot..slot + 3].copy_from_slice(&acc_c);
-            self.c2[slot..slot + 3].copy_from_slice(&acc_c2);
-            self.tc[slot..slot + 3].copy_from_slice(&acc_tc);
+            let slot = &mut self.data[base + (x + 1) * SLOT..][..SLOT];
+            slot[T..T + 3].copy_from_slice(&acc_t);
+            slot[T2..T2 + 3].copy_from_slice(&acc_t2);
+            slot[C..C + 3].copy_from_slice(&acc_c);
+            slot[C2..C2 + 3].copy_from_slice(&acc_c2);
+            slot[TC..TC + 3].copy_from_slice(&acc_tc);
         }
     }
 
@@ -127,11 +130,7 @@ impl Integral {
         let mut acc_c2 = [0.0f64; 3];
         let mut acc_tc = [0.0f64; 3];
         // Reset x=0 slot (already zero from build) — defensive.
-        for ch in 0..3 {
-            self.c[base + ch] = 0.0;
-            self.c2[base + ch] = 0.0;
-            self.tc[base + ch] = 0.0;
-        }
+        self.data[base + C..base + SLOT].fill(0.0);
         for x in 0..self.w {
             let pix = (y * self.w + x) * 3;
             for ch in 0..3 {
@@ -141,36 +140,26 @@ impl Integral {
                 acc_c2[ch] += cv * cv;
                 acc_tc[ch] += tv * cv;
             }
-            let slot = base + (x + 1) * 3;
-            self.c[slot..slot + 3].copy_from_slice(&acc_c);
-            self.c2[slot..slot + 3].copy_from_slice(&acc_c2);
-            self.tc[slot..slot + 3].copy_from_slice(&acc_tc);
+            let slot = &mut self.data[base + (x + 1) * SLOT..][..SLOT];
+            slot[C..C + 3].copy_from_slice(&acc_c);
+            slot[C2..C2 + 3].copy_from_slice(&acc_c2);
+            slot[TC..TC + 3].copy_from_slice(&acc_tc);
         }
     }
 
-    /// Span-difference: add row `y`'s sums over columns `[xL, xR]` into the
-    /// supplied accumulators. Caller ensures `0 ≤ xL ≤ xR < w`.
+    /// Span-difference: add row `y`'s sums over columns `[xL, xR]` into
+    /// `sums`. Caller ensures `0 ≤ xL ≤ xR < w`.
     #[inline]
-    fn add_span(
-        &self,
-        y: usize,
-        x_l: usize,
-        x_r: usize,
-        s_t: &mut [f64; 3],
-        s_c: &mut [f64; 3],
-        s_t2: &mut [f64; 3],
-        s_c2: &mut [f64; 3],
-        s_tc: &mut [f64; 3],
-    ) {
+    fn add_span(&self, y: usize, x_l: usize, x_r: usize, sums: &mut ShapeSums) {
         let base = y * self.row_stride;
-        let lo = base + x_l * 3;
-        let hi = base + (x_r + 1) * 3;
+        let lo: &[f64; SLOT] = self.data[base + x_l * SLOT..][..SLOT].try_into().unwrap();
+        let hi: &[f64; SLOT] = self.data[base + (x_r + 1) * SLOT..][..SLOT].try_into().unwrap();
         for ch in 0..3 {
-            s_t[ch] += self.t[hi + ch] - self.t[lo + ch];
-            s_t2[ch] += self.t2[hi + ch] - self.t2[lo + ch];
-            s_c[ch] += self.c[hi + ch] - self.c[lo + ch];
-            s_c2[ch] += self.c2[hi + ch] - self.c2[lo + ch];
-            s_tc[ch] += self.tc[hi + ch] - self.tc[lo + ch];
+            sums.s_t[ch] += hi[T + ch] - lo[T + ch];
+            sums.s_t2[ch] += hi[T2 + ch] - lo[T2 + ch];
+            sums.s_c[ch] += hi[C + ch] - lo[C + ch];
+            sums.s_c2[ch] += hi[C2 + ch] - lo[C2 + ch];
+            sums.s_tc[ch] += hi[TC + ch] - lo[TC + ch];
         }
     }
 }
@@ -304,16 +293,7 @@ pub fn collect_circle_sums_integral(
         if x_l > x_r {
             continue;
         }
-        integral.add_span(
-            y as usize,
-            x_l as usize,
-            x_r as usize,
-            &mut sums.s_t,
-            &mut sums.s_c,
-            &mut sums.s_t2,
-            &mut sums.s_c2,
-            &mut sums.s_tc,
-        );
+        integral.add_span(y as usize, x_l as usize, x_r as usize, &mut sums);
         sums.count += (x_r - x_l + 1) as u32;
     }
     #[cfg(feature = "bench-counters")]
@@ -433,16 +413,7 @@ pub fn collect_triangle_sums_integral(
             let x_l = x_lo.max(0) as usize;
             let x_r = (x_hi as usize).min(integral.w - 1);
             if x_l <= x_r {
-                integral.add_span(
-                    y as usize,
-                    x_l,
-                    x_r,
-                    &mut sums.s_t,
-                    &mut sums.s_c,
-                    &mut sums.s_t2,
-                    &mut sums.s_c2,
-                    &mut sums.s_tc,
-                );
+                integral.add_span(y as usize, x_l, x_r, &mut sums);
                 sums.count += (x_r - x_l + 1) as u32;
             }
         }
@@ -534,11 +505,7 @@ pub fn collect_quad_sums_integral(
             let x_l = x_lo.max(0) as usize;
             let x_r = (x_hi as usize).min(integral.w - 1);
             if x_l <= x_r {
-                integral.add_span(
-                    y as usize, x_l, x_r,
-                    &mut sums.s_t, &mut sums.s_c,
-                    &mut sums.s_t2, &mut sums.s_c2, &mut sums.s_tc,
-                );
+                integral.add_span(y as usize, x_l, x_r, &mut sums);
                 sums.count += (x_r - x_l + 1) as u32;
             }
         }

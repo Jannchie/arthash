@@ -422,6 +422,53 @@ rect/square search automatically.
 
 ---
 
+## Opt 5 — Interleaved `Integral` layout (CIRCLE / TRIANGLE / ROTRECT)
+
+**Status:** always on. No flag.
+**Bit-exact:** yes — `hash_hex` byte-for-byte identical across all 15
+(image × shape) combinations below.
+**Module:** `shape::integral`.
+
+### What it does
+
+`Integral` used to keep its five prefix-sum series (`t`, `t²`, `c`, `c²`,
+`t·c`) in five separate `Vec<f64>`. Every `add_span` therefore read ten
+scattered 24-byte runs — two slots in each of five tables that sit ~56 KB
+apart at 48×48. The series for one `(y, x)` slot are now stored adjacently
+(15 f64 per slot, one `Vec`), so a span lookup is two contiguous 120-byte
+reads. The per-series subtract-and-accumulate is unchanged in values and
+order, so every `ShapeSums` is bit-identical.
+
+### Performance
+
+60-iter median, Windows 11 / i9-12900K, 48×48 inputs, `n_shapes=12`.
+SQUARE / RECT go through `Integral2D` and act as the control.
+
+| image / shape        | before (µs) | after (µs) |     Δ |
+| -------------------- | ----------: | ---------: | ----: |
+| gradient / circle    |        1505 |       1152 | −23 % |
+| gradient / triangle  |        3150 |       2335 | −26 % |
+| gradient / rotrect   |        3032 |       2457 | −19 % |
+| quadrants / circle   |        1129 |        842 | −25 % |
+| quadrants / triangle |        2983 |       2290 | −23 % |
+| quadrants / rotrect  |        2237 |       1770 | −21 % |
+| noise / circle       |         758 |        584 | −23 % |
+| noise / triangle     |         962 |        807 | −16 % |
+| noise / rotrect      |        1430 |       1144 | −20 % |
+| square / rect (ctrl) |           — |          — |  ±6 % |
+
+### Tried and rejected: division-free triangle/quad spans
+
+Each row's span bound is a floor division `⌊c(y) / |a|⌋` per edge, and
+`c(y)` is affine in `y`, so the quotient/remainder can be stepped row to
+row with one division per edge per call instead of per row. Exact, and
+hash-identical — but **17–29 % slower** on TRIANGLE (branchy or
+branchless carry alike). On this CPU the per-row `idiv`s are independent
+and pipeline well; the incremental form turns them into a loop-carried
+dependency chain. Not shipped.
+
+---
+
 ## Reproducing the data
 
 ```sh
