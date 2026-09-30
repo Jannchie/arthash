@@ -1,3 +1,12 @@
+## v0.6.2
+
+[v0.6.1...v0.6.2](https://github.com/Jannchie/arthash/compare/v0.6.1...v0.6.2)
+
+### :zap: Performance
+
+- **decode**: replace per-pixel powf with exact linear->sRGB table - By [Jianqi Pan](mailto:jannchie@gmail.com) in [b6cf1f5](https://github.com/Jannchie/arthash/commit/b6cf1f5)
+- **shape**: interleave Integral prefix-sum series per slot - By [Jianqi Pan](mailto:jannchie@gmail.com) in [cd7e60b](https://github.com/Jannchie/arthash/commit/cd7e60b)
+
 ## v0.6.1
 
 [v0.6.0...v0.6.1](https://github.com/Jannchie/arthash/compare/v0.6.0...v0.6.1)
