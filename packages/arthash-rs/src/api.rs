@@ -376,7 +376,7 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
     // Compared by bit pattern, so the reuse is exact (and NaN-safe).
     let mut prev_bits = [u32::MAX; 3];
     let mut prev_px = [0u8; 4];
-    for (px, lin) in rgba.chunks_exact_mut(4).zip(canvas.chunks_exact(3)) {
+    for (px, lin) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(canvas.as_chunks::<3>().0) {
         let bits = [lin[0].to_bits(), lin[1].to_bits(), lin[2].to_bits()];
         if bits != prev_bits {
             prev_bits = bits;
@@ -387,7 +387,7 @@ fn decode_shape(hash: &[u8], cfg: &CodecConfig, opts: DecodeOptions) -> (u32, u3
                 255,
             ];
         }
-        px.copy_from_slice(&prev_px);
+        *px = prev_px;
     }
     if opts.style.blur > 0.0 {
         gaussian_blur_rgba8_dither(&mut rgba, w, h, opts.style.blur, opts.dither);
